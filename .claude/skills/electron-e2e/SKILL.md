@@ -88,7 +88,12 @@ try {
 
 ## Grenzen
 
-- Alle Skripte laufen nacheinander in einem Prozess: Hängt eines, steht der Lauf. `ctx.close()`
-  beendet mit Zeitlimit (20 s) und danach hart; neue Wartestellen immer mit Zeitlimit.
+- Alle Skripte laufen nacheinander in einem Prozess. Jeder Schritt in `runSteps` hat ein
+  Zeitlimit (60 s, neu gegenüber der Mottulbox – dort hielt ein hängender Schritt den Lauf an);
+  `ctx.close()` beendet mit Zeitlimit (20 s) und danach hart; neue Wartestellen im Skript
+  außerhalb von `runSteps` immer mit Zeitlimit.
+- `page.evaluate` läuft über das DevTools-Protokoll und **umgeht die CSP** (`eval` geht dort
+  immer). CSP-Regeln deshalb mit Code prüfen, der später im Seitenkontext läuft (String-Timer,
+  `securitypolicyviolation`-Ereignis) – Muster in `e2e/security.mjs`.
 - Fehlschlag zuerst als Testproblem prüfen (Zeitfenster zu eng, Route nicht neu geladen), bevor
   die App geändert wird.

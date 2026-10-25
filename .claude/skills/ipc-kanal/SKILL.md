@@ -16,8 +16,10 @@ Vollständigkeit – `npm run typecheck` zeigt vergessene Stellen.
      `edit`) mit kurzem Kommentar zum Warum. Events als `onXyz(cb): () => void` (Rückgabe = Abmelden).
 3. **Preload** `src/preload/index.ts`: `ipcRenderer.invoke(Channels.x, …)`; Events über
    `subscribe(Channels.x, (v) => cb(v as never))` (räumt Listener auf).
-4. **Handler** in `src/main/ipc/<bereich>.handlers.ts`: `ipcMain.handle(Channels.x, (_e, arg) => …)`;
-   neue Datei → `registerXHandlers()` in `src/main/ipc/registry.ts`. Events per `broadcast`.
+4. **Handler** in `src/main/ipc/<bereich>.handlers.ts`: `handle(Channels.x, (_e, arg) => …)` bzw.
+   `on(…)` aus `src/main/ipc/handle.ts` – nie direkt `ipcMain`, die beiden prüfen den Absender
+   (App-Seite). Neue Datei → `registerXHandlers()` in `src/main/ipc/registry.ts`. Events per
+   `broadcast`. Vorbild: `src/main/ipc/settings.handlers.ts` mit `src/shared/settingsCheck.ts`.
 
 ## Regeln
 

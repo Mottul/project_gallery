@@ -1,0 +1,78 @@
+name: CI
+
+# Aus der Mottulbox übernommen (project_mega/.github/workflows/ci.yml) und angepasst.
+# Bei jedem Pull Request und auf main:
+# - Linux mit Node 22 und 24: Dateinamen, Verweise, Format, Lint, Typen (App und Tests),
+#   Unit-Tests, Build, npm audit für die Laufzeit-Abhängigkeiten (Schicht F).
+# - Windows (Zielsystem) und Linux: Build und alle E2E-Skripte in der echten App – Pfade,
+#   Prozesse und Fenster verhalten sich je Betriebssystem anders.
+# Push nur auf main: Arbeits-Branches laufen über ihren Pull Request, sonst liefe alles doppelt.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Die Läufe brauchen kein Schreibrecht am Repository
+permissions:
+  contents: read
+
+# Ein neuer Push auf denselben Pull Request bricht den veralteten Lauf ab
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Prüfungen · Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.x', '24.x']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # Zuerst und ohne Abhängigkeiten: Dateinamen, die sich unter Windows nicht sauber
+      # auschecken lassen (nur in der Schreibweise verschieden, reservierte Namen)
+      - run: npm run check:files
+      # Ohne Install-Skripte (.npmrc); Build und Tests brauchen die Electron-Binary nicht.
+      - run: npm ci
+      # Dateien, die Doku und Skills nennen, gibt es noch (geplante stehen in scripts/)
+      - run: npm run check:refs
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run typecheck:test
+      - run: npm test
+      - run: npm run build
+      # Laufzeit-Abhängigkeiten ohne bekannte Lücke (Schicht F, docs/SICHERHEIT.md)
+      - run: npm audit --omit=dev
+
+  e2e:
+    name: App · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+          cache: npm
+      - run: npm ci
+      # Electron-Binary für die E2E-Läufe (mit Prüfsumme; npm ci führt keine Skripte aus)
+      - run: npm run electron:bin
+      - run: npx electron-vite build
+      - name: E2E (virtuelles Display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node e2e/run.mjs
+      - name: E2E
+        if: runner.os != 'Linux'
+        run: node e2e/run.mjs

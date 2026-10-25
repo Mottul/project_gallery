@@ -1,0 +1,19 @@
+node_modules/
+out/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Gebündelte Programme werden per Skript geladen (scripts/download-*.mjs), nie eingecheckt
+resources/exiftool/
+resources/ffmpeg/
+
+# Nie echte Fotos oder Videos im Repository: Testbilder entstehen per Skript in Temp-Ordnern
+testbilder/
+
+# Logs / OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,7 +1,8 @@
 # Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026, noch keine Zeile
-Code. Dieser Plan ist die Grundlage für die Umsetzung: vor jeder Phase lesen, offene Fragen
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026: Phase 0 läuft,
+das Gerüst steht ([Phase 0](#phase-0--fundament-und-labor)). Dieser Plan ist die Grundlage für die
+Umsetzung: vor jeder Phase lesen, offene Fragen
 klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
 Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
 
@@ -91,7 +92,9 @@ Drei Anforderungen gelten für jede Funktion und entscheiden im Zweifel:
 ## Was aus der Mottulbox übernommen wird
 
 Kopiert (mit Herkunft im Kopfkommentar), nicht als gemeinsames Paket – das hält beide Projekte
-unabhängig. Pfade beziehen sich auf `Mottul/project_mega`.
+unabhängig. Galeria Beata ist eine eigenständige App: Die Mottulbox ist nur Kopiervorlage in
+Phase 0, zur Laufzeit und im Build gibt es keine Verbindung. Pfade beziehen sich auf
+`Mottul/project_mega`, Stand `origin/main` (lokale Kopie unter `..\project_mega`).
 
 | Baustein | Herkunft | Wofür hier |
 |---|---|---|
@@ -119,10 +122,12 @@ unabhängig. Pfade beziehen sich auf `Mottul/project_mega`.
 src/
 ├── main/
 │   ├── index.ts                  # Lebenszyklus, Netzsperre, Protokolle, Wächter
-│   ├── ipc/                      # library · meta · batch · edit · update · settings (*.handlers.ts), registry.ts
+│   ├── ipc/                      # library · meta · batch · edit · update · settings (*.handlers.ts), registry.ts,
+│   │                             # handle.ts (jeder Handler prüft den Absender)
 │   └── services/
 │       ├── store.ts · db.ts · log.ts · fsAtomic.ts · fileDialogs.ts · reachableDir.ts · broadcast.ts
 │       ├── netzsperre.ts          # alle Anfragen außer App-Seite und eigenen Protokollen abweisen
+│       ├── netzRegel.ts           # die Regel dazu, rein und getestet
 │       ├── windows/              # appWindows, windowGuards, windowPolicy (aus Mottulbox)
 │       ├── library/              # Ordner, Scan, Überwachen, Index schreiben, Abfragen
 │       ├── bilddienst/           # utilityProcess: Einstieg, Client mit Neustart und Zeitlimits
@@ -137,7 +142,7 @@ src/
 │       ├── update/               # App-Aktualisierung: einzige Stelle mit Netz (Allowlist, Signatur)
 │       └── jobs/                 # queue, jobList (aus Mottulbox)
 ├── shared/                       # rein und getestet, auch im Renderer nutzbar
-│   ├── types.ts · ipc-contracts.ts
+│   ├── types.ts · ipc-contracts.ts · settingsCheck.ts · settingsMerge.ts
 │   ├── metaFields.ts             # bearbeitbare Felder: Allowlist, Prüfung, Zuordnung zu Tags
 │   ├── sortFilter.ts             # Sortier-/Filter-/Gruppier-Beschreibung -> SQL-Bausteine
 │   ├── renamePattern.ts          # Namensmuster {datum:yyyy-MM-dd}_{zähler:3}
@@ -200,7 +205,8 @@ Indizes auf jede Sortierspalte (mit `folder_id`), `taken_at` mit Rückfall-Reihe
 | `bild://<id>` | Original, wenn Chromium es darstellen kann (JPEG, PNG, WebP, GIF, AVIF, BMP; Videos MP4/WebM …, mit **Range-Anfragen** fürs Spulen); sonst eine bildschirmgroße Umrechnung (TIFF, später HEIC/RAW) | Kennung muss im Index stehen, Pfad liegt (nach `realpath`) in einem Bibliotheksordner, Datei unverändert seit dem Index |
 
 CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `media-src bild:`, `connect-src 'self'`,
-kein `unsafe-eval`.
+kein `unsafe-eval`; im Build auch keine Inline-Skripte (umgesetzt in Phase 0, die Protokolle
+kommen mit Phase 1 dazu).
 
 ## Funktionen im Detail
 
@@ -455,18 +461,22 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 
 ### Phase 0 – Fundament und Labor
 
-- Gerüst aus der Mottulbox (Tabelle oben): Build, Lint, Format, Typen, Tests, E2E-Harness, CI
+- ✅ Gerüst aus der Mottulbox (Tabelle oben): Build, Lint, Format, Typen, Tests, E2E-Harness, CI
   (Windows + Linux), Dependabot, `CLAUDE.md`, Doku-Gerüst (`docs/ENTWICKLUNG.md`,
-  `docs/SICHERHEIT.md`, `docs/INSTALL.md`).
-- Erscheinungsbild von Anfang an: Tokens für Hell/Dunkel (Akzent Hellgrün), Umschalter
-  System/Hell/Dunkel.
-- Netzsperre (Schicht A) und Fenster-Härtung (C) von Anfang an, mit E2E `netz` und `security`.
+  `docs/SICHERHEIT.md`, `docs/INSTALL.md`). Der Installer-Workflow (`installer.yml`) kommt mit
+  dem Paket.
+- ✅ Erscheinungsbild von Anfang an: Tokens für Hell/Dunkel (Akzent Hellgrün), Umschalter
+  System/Hell/Dunkel (Standard: wie Windows, auch für Titelleiste und Dialoge).
+- ✅ Netzsperre (Schicht A) und Fenster-Härtung (C) von Anfang an, mit E2E `netz` und `security`.
+  Strenger als die Mottulbox: Wächter geben nichts an den Browser weiter, `file:` nur im Ordner der
+  App-Seite, IPC prüft den Absender, CSP im Build ohne Inline-Skripte, eine Instanz je Benutzer.
 - `scripts/download-exiftool.mjs` (`npm run exiftool:fetch`; offizielle Quelle, Version und
   SHA-256 fest im Skript), `scripts/download-ffmpeg.mjs` (aus der Mottulbox) und
   `scripts/testbilder.mjs` (synthetische Testbibliothek mit Bildern und kurzen Videos, nie echte
   Fotos).
 - **Labor** (Skill `bild-labor`), Ergebnisse in diesen Plan:
-  - sharp im Electron-Bilddienst: Vorschaubilder je Sekunde (24-MP-JPEG, 4-Kern-Laptop),
+  - sharp im Electron-Bilddienst: Vorschaubilder je Sekunde (24-MP-JPEG; Entwickler-Laptop
+    i7-8750H mit 6 Kernen/12 Threads und 16 GB, zusätzlich mit `concurrency` 4 für 4-Kern-Rechner),
     Spitzenspeicher, `concurrency`, sehr große Bilder (Panorama > 100 MP), kaputte Dateien.
   - ExifTool `-stay_open`: Lesen von 1.000 / Schreiben von 100 Dateien, Unicode-Pfade
     (`-charset filename=utf8`), Pfade > 260 Zeichen, Netzlaufwerk.
@@ -600,13 +610,13 @@ Dateizuordnung, portable Variante.
 - **Code-Signatur:** keine, der Installer bleibt unsigniert.
 - **Erscheinungsbild:** Hell-/Dunkelmodus (Standard: wie Windows), Akzent Hellgrün statt Gold.
 - **Umsetzung** lokal auf dem PC des Nutzers.
+- **Eigenständige App**, kein Werkzeug der Mottulbox; Bausteine werden in Phase 0 einmalig
+  kopiert, danach besteht keine Verbindung (siehe [Tabelle](#was-aus-der-mottulbox-übernommen-wird)).
+- **Logo:** vorerst einfaches Bild-Symbol in Hellgrün; ein eigenes Logo kann später folgen.
+- **Paket nur für Windows**; Linux läuft nur in der CI für E2E mit.
+- **Update-Prüfung ab Werk:** einmalige Frage beim ersten Start (siehe [App-Aktualisierung](#app-aktualisierung)).
 
-**Noch offen** (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
-
-1. **Logo** für Galeria Beata. (Annahme: einfaches Bild-Symbol in Hellgrün bis dahin.)
-2. **Eigenständige App** (Annahme) oder Werkzeug in der Mottulbox?
-3. Nur **Windows** oder auch macOS/Linux als Paket? (Annahme: nur Windows; Linux nur in der CI.)
-4. **Update-Prüfung ab Werk:** Frage beim ersten Start (Annahme) – oder lieber still aus, nur per Knopf?
+**Noch offen:** nichts. Neue Fragen hier eintragen.
 
 ## Skills
 

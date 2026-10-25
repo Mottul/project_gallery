@@ -6,21 +6,55 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 
 ## Stand
 
-**Planungsphase – noch kein Code.** Grundlage ist [`docs/PLAN.md`](docs/PLAN.md): vor jeder
-Arbeit lesen, offene Fragen dort klären, Erledigtes nach der Umsetzung in die Doku überführen.
-Gerüst, Kommandos und Konventionen kommen in Phase 0 aus der Mottulbox (`Mottul/project_mega`,
-dort `CLAUDE.md`) – Tabelle „Was aus der Mottulbox übernommen wird“ im Plan. Klickbare Entwürfe
-der Oberfläche: Abschnitt „Vorschau der Oberfläche“ im Plan.
+**Phase 0 läuft** (Fundament und Labor): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests
+und CI stehen; offen sind ExifTool/ffmpeg/Testbilder, das Labor und das Paket. Grundlage ist
+[`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
+der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
+Oberfläche“ im Plan.
 
-## Erste Schritte (lokale Session, Windows)
+Galeria Beata ist eigenständig. Die Mottulbox (`Mottul/project_mega`) ist nur Kopiervorlage und
+liegt lokal neben diesem Repo (`..\project_mega`, sonst dorthin klonen). Kopiert wird vom Stand
+`origin/main` (`git -C ../project_mega show origin/main:<pfad>`), nie aus deren Arbeitsordner – dort
+können andere Branches oder ungesicherte Dateien liegen; den Arbeitsordner nicht ändern. Kopierte
+Dateien tragen im Kopf ihre Herkunft. Was übernommen wird: Tabelle im Plan.
 
-1. Voraussetzungen: Git, Node.js ≥ 22.12 (wie die Mottulbox), kein C++-Compiler.
-2. Die Mottulbox neben dieses Repo klonen, damit Bausteine kopiert werden können:
-   `git clone https://github.com/Mottul/project_mega ..\project_mega`.
-3. Für Phase 0 einen eigenen Branch anlegen (z. B. `phase-0-geruest`) und den Plan Abschnitt
-   „Phase 0 – Fundament und Labor“ abarbeiten; beim Kopieren den Kopfkommentar mit Herkunft setzen.
-4. Danach füllt sich hier der Abschnitt „Kommandos“ (wie in der Mottulbox: `npm run dev`,
-   `lint`, `typecheck`, `test`, `e2e`, `package`).
+## Kommandos
+
+```bash
+npm run dev             # Entwicklung (Hot Reload; holt beim ersten Mal die Electron-Binary)
+npm run lint            # ESLint (--max-warnings 0), sperrt Netz-Module im main
+npm run format:check    # Prettier-Prüfung (format = schreiben, nur gezielt auf geänderte Dateien)
+npm run check:files     # Dateinamen, die unter Windows kollidieren
+npm run check:refs      # Dateiverweise in CLAUDE.md, docs/ und Skills existieren (geplante:
+                        # scripts/geplante-dateien.json)
+npm run typecheck       # tsc: node- + web-Projekt
+npm run typecheck:test  # tsc: Testdateien
+npm test                # Vitest
+npm run e2e             # App bauen + E2E (Playwright, e2e/; `-- smoke netz` wählt aus)
+npm run build           # typecheck + electron-vite build -> out/
+```
+
+Ein einzelner Test: `npx vitest run src/main/services/netzRegel.test.ts`. Voraussetzungen, Aufbau
+und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
+[`docs/SICHERHEIT.md`](docs/SICHERHEIT.md).
+
+## Architektur (Kurzform)
+
+`src/main` (Node: `index.ts`, IPC in `ipc/`, Dienste in `services/`), `src/preload` (nur die
+`GalerieApi`), `src/renderer` (React, Tailwind), `src/shared` (rein, getestet). Aliase `@shared`,
+`@renderer`.
+
+- **IPC:** `src/shared/ipc-contracts.ts` ist die einzige Quelle; Handler nur über `handle`/`on`
+  aus `src/main/ipc/handle.ts` (prüft den Absender); Eingaben prüfen (Muster `settingsCheck.ts`).
+  Neue Fläche: Skill `ipc-kanal`. Renderer nur über `api` (`@renderer/lib/api`).
+- **Netz:** Netzsperre (`services/netzsperre.ts`, Regel rein in `netzRegel.ts`) vor dem ersten
+  Fenster; neue eigene Protokolle dort UND in der CSP (`src/renderer/index.html`) eintragen.
+- **Fenster:** nur über `secureWebPreferences` (`services/windows/appWindows.ts`); Wächter in
+  `windowGuards.ts` geben nichts an den Browser weiter.
+- **Einstellungen:** `services/store.ts` (atomar), Renderer `useSettings`/`updateSettings` aus
+  `@renderer/lib/settings`; localStorage nur als Boot-Spiegel.
+- **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
+  Hell = `.light` am `<html>`, Standard „wie Windows“.
 
 ## Leitplanken (gelten für jede Änderung)
 
@@ -43,4 +77,5 @@ der Oberfläche: Abschnitt „Vorschau der Oberfläche“ im Plan.
 Projekt-Skills in `.claude/skills/`: `abschluss-check`, `review-checkliste`, `bildschutz`,
 `ipc-kanal`, `electron-e2e`, `abhaengigkeiten` (aus der Mottulbox angepasst) sowie `bild-labor`,
 `bibliothek-index`, `metadaten-schreiben`, `stapelverarbeitung`, `windows-paket` (neu). Pfade in
-den Skills beschreiben den geplanten Aufbau aus `docs/PLAN.md` („Architektur“).
+den Skills beschreiben teils den geplanten Aufbau aus `docs/PLAN.md` („Architektur“). Vor dem
+Abschluss einer Änderung: Skill `abschluss-check`.

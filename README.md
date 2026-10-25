@@ -1,6 +1,7 @@
 # Galeria Beata
 
-Bild- und Videobetrachter mit Bildbearbeitung für Windows (Arbeitstitel) – **in Planung**.
+Bild- und Videobetrachter mit Bildbearbeitung für Windows (Arbeitstitel) – **in Entwicklung**
+(Phase 0: Fundament steht, Labor und Installer folgen).
 
 - Ordner als Bibliothek, Galerie als Kacheln (stufenlos) oder Liste
 - Sortieren, Filtern und Gruppieren nach Aufnahmedatum, Ort (alphabetisch, offline aus GPS),
@@ -13,4 +14,5 @@ Bild- und Videobetrachter mit Bildbearbeitung für Windows (Arbeitstitel) – **
 - Läuft vollständig offline, schützt Originale und abgeleitete Daten, Installation mit einem
   Doppelklick; Updates in der App nur nach Zustimmung und mit eigener Signatur
 
-Plan, Entscheidungen und offene Fragen: [docs/PLAN.md](docs/PLAN.md).
+Plan, Entscheidungen und Phasen: [docs/PLAN.md](docs/PLAN.md). Entwickeln:
+[docs/ENTWICKLUNG.md](docs/ENTWICKLUNG.md). Sicherheit: [docs/SICHERHEIT.md](docs/SICHERHEIT.md).

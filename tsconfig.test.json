@@ -1,0 +1,19 @@
+// Typecheck NUR der Test-Dateien (braucht die devDependency vitest und ist daher
+// bewusst NICHT Teil von `npm run build`). Erbt die Renderer-Optionen (DOM-Lib, Aliase) und
+// prüft die Tests aus main, shared und renderer in einem Lauf. (Aus der Mottulbox übernommen.)
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/preload/index.d.ts"
+  ],
+  "exclude": []
+}
