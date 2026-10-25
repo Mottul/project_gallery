@@ -1,0 +1,16 @@
+# Build-Artefakte & generierte Dateien
+node_modules/
+out/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Packaging-Assets / gebündelte Programme (ExifTool, ffmpeg)
+build/
+resources/
+
+# Abhängigkeits-Lockfile (nicht formatieren)
+package-lock.json
+
+# Doku separat halten (kein Code-Stil)
+*.md

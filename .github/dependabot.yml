@@ -1,0 +1,58 @@
+# Abhängigkeiten aktuell halten (docs/SICHERHEIT.md, „Lieferkette“; aus der Mottulbox übernommen):
+# jeden Montag Pull Requests, aber nur mit Versionen, die schon eine Woche draußen sind –
+# kompromittierte Releases fallen meist in den ersten Tagen auf. Gemergt wird nach grüner CI
+# von Hand.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # Patch und Minor gesammelt in einem PR; Hauptversionen kommen einzeln.
+      kleine-updates:
+        update-types: [minor, patch]
+    ignore:
+      # Große Umstiege sind eigene Vorhaben (gemeinsam mit der Mottulbox, docs/PLAN.md
+      # „Entscheidungen“) und kommen nicht als PR. Electron-Hauptversionen dagegen schon:
+      # Electron pflegt nur die drei neuesten.
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react-dom'
+        update-types: [version-update:semver-major]
+      - dependency-name: tailwindcss
+        update-types: [version-update:semver-major]
+      - dependency-name: tailwind-merge
+        update-types: [version-update:semver-major]
+      - dependency-name: lucide-react
+        update-types: [version-update:semver-major]
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      - dependency-name: '@vitejs/plugin-react'
+        update-types: [version-update:semver-major]
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Typen bleiben auf der kleinsten unterstützten Node-Version (engines: >= 22.12).
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']

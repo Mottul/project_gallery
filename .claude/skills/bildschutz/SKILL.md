@@ -21,13 +21,14 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 - [ ] **ffmpeg/ffprobe** nur mit `-protocol_whitelist file` und Eingaben als `file:<absoluter
       Pfad>` – präparierte Dateien (Playlists, `concat:`) könnten ffmpeg sonst Netz-Adressen
       oder andere Dateien öffnen lassen (Muster Mottulbox: nur absolute Pfade ohne Protokolle).
-- [ ] Netzsperre in der Sitzung (`services/netzsperre.ts`) lässt nur App-Seite und eigene
-      Protokolle durch; neue Protokolle dort und in der CSP eintragen, sonst nichts.
+- [ ] Netzsperre in der Sitzung (`services/netzsperre.ts`, Regel in `netzRegel.ts`) lässt nur
+      App-Seite und eigene Protokolle durch; neue Protokolle dort und in der CSP eintragen, sonst
+      nichts. Die Fenster-Wächter geben Navigationen und `window.open` nie an den Browser weiter.
 - [ ] Inhalte aus Bildern laden nichts nach: SVG nur als `<img>` oder über sharp gerastert,
       nie als Dokument/`<object>`; XMP/IPTC-Texte nur als Text darstellen (escapen).
 - [ ] Keine externen Schriften, Skripte, Karten-Kacheln, Symbole – alles im Paket.
-- [ ] Links in Metadaten (z. B. Urheber-URL) öffnen nur auf Klick im Standardbrowser und nur
-      http(s) (Wächter aus der Mottulbox).
+- [ ] Links in Metadaten (z. B. Urheber-URL) öffnen nur auf ausdrücklichen Klick über eine eigene
+      API-Methode im Standardbrowser und nur http(s) – nie über Navigation oder `window.open`.
 - **Nachweis:** E2E `netz` (lokaler Spion-Server, Testdateien mit Fremd-URLs in SVG/XMP und
   Playlists; keine einzige Anfrage, solange die Update-Prüfung aus ist) und E2E `update` (nur
   die Allowlist-Adresse, falsch signierte Installer werden verworfen).

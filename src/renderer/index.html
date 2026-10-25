@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Content-Security-Policy (Schicht A und C, docs/SICHERHEIT.md): nichts von außen, kein eval,
+         keine Rahmen, keine Plugins. Neue eigene Protokolle (thumb:, bild:) hier UND in der
+         Netzsperre eintragen. 'unsafe-inline' bei script-src braucht nur der Vite-Dev-Server
+         (React-Refresh); der Build entfernt es (electron.vite.config.ts). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Galeria Beata</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
