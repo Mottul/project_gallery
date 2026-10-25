@@ -44,10 +44,14 @@ eintragen, `npm run exiftool:fetch -- --force`, Labortests und E2E `metadaten`.
 
 ## ffmpeg
 
-`scripts/download-ffmpeg.mjs` (aus der Mottulbox) lädt den neuesten Build, der **mindestens 7 Tage
-alt** ist, und prüft ihn gegen die `checksums.sha256` des Releases. Nach einem Wechsel: Labortest
-der Video-Standbilder (Bildzahl, Farben) und E2E `galerie` mit Videos. Zu den Anwendern kommt
-ein neues ffmpeg nur mit einem App-Release (kein Selbst-Update in der App).
+`scripts/download-ffmpeg.mjs` lädt einen **fest gepinnten** Build von BtbN/FFmpeg-Builds (LGPL,
+Windows „shared“, Linux statisch) und prüft ihn gegen die SHA-256 im Skript. Gepinnt wird ein
+**Monats-Build** (`autobuild-YYYY-MM-<letzter Tag>-…`): Die täglichen löscht BtbN nach rund zwei
+Wochen, die zum Monatsende bleiben. Neuer Pin: Monats-Build ≥ 7 Tage alt, Release-Zweig (`n9.0`
+…) statt `master`, Tag/Dateinamen/SHA-256 aus dessen `checksums.sha256` eintragen,
+`npm run ffmpeg:fetch -- --force`. Danach Labortests (`npm test`, Testbibliothek mit Videos) und
+E2E `galerie` mit Videos. Zu den Anwendern kommt ein neues ffmpeg nur mit einem App-Release (kein
+Selbst-Update in der App).
 
 ## Neue Electron-Hauptversion
 

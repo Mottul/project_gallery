@@ -6,8 +6,9 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 
 ## Stand
 
-**Phase 0 läuft** (Fundament und Labor): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests
-und CI stehen; offen sind ExifTool/ffmpeg/Testbilder, das Labor und das Paket. Grundlage ist
+**Phase 0 läuft** (Fundament und Labor): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests,
+CI, gepinntes ExifTool/ffmpeg und die Testbibliothek stehen; offen sind die Labor-Messungen und
+das Paket. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -32,7 +33,14 @@ npm run typecheck:test  # tsc: Testdateien
 npm test                # Vitest
 npm run e2e             # App bauen + E2E (Playwright, e2e/; `-- smoke netz` wählt aus)
 npm run build           # typecheck + electron-vite build -> out/
+npm run exiftool:fetch  # ExifTool nach resources/exiftool/<os>/ (gepinnt, SHA-256)
+npm run ffmpeg:fetch    # ffmpeg/ffprobe nach resources/ffmpeg/<os>/ (gepinnt, SHA-256)
+npm run testbilder -- <ordner>  # synthetische Testbibliothek + testbilder.json (nie echte Fotos)
 ```
+
+Labortests (`*.lab.test.*`) laufen mit `npm test`, sobald ExifTool und ffmpeg geladen sind, sonst
+werden sie übersprungen. sharp im Bilddienst und in Tests immer mit `sharp.cache({ files: 0 })`
+(sonst hält libvips Dateien offen, Windows sperrt sie).
 
 Ein einzelner Test: `npx vitest run src/main/services/netzRegel.test.ts`. Voraussetzungen, Aufbau
 und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
