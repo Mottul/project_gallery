@@ -1,6 +1,6 @@
 ---
 name: metadaten-schreiben
-description: Metadaten in Bilddateien der Galerie sicher schreiben – bearbeitbare Felder (Allowlist), Zuordnung zu EXIF/IPTC/XMP, ExifTool-Aufrufe ohne Argument-Injektion, Konfliktprüfung, Journal für Rückgängig, Sicherung, Nachprüfung, XMP-Sidecars für RAW. Verwenden, bevor an metaFields.ts, services/metadata/, services/exiftool/ oder einer Stapel-Aktion gearbeitet wird, die Metadaten ändert.
+description: Metadaten in Bild- und Videodateien mit Galeria Beata sicher schreiben – bearbeitbare Felder (Allowlist), Zuordnung zu EXIF/IPTC/XMP, ExifTool-Aufrufe ohne Argument-Injektion, Konfliktprüfung, Journal für Rückgängig, Sicherung, Nachprüfung, XMP-Sidecars für RAW. Verwenden, bevor an metaFields.ts, services/metadata/, services/exiftool/ oder einer Stapel-Aktion gearbeitet wird, die Metadaten ändert.
 ---
 
 # Metadaten schreiben

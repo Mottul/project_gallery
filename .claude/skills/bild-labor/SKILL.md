@@ -1,6 +1,6 @@
 ---
 name: bild-labor
-description: Bildverfahren der Galerie vor dem Einbau messen statt raten – sharp/libvips (Dekodieren, Vorschaubilder, Export, Farbraum, Ausrichtung), ExifTool (Lesen, Schreiben, Durchsatz), Formatunterstützung, Speicher und Zeit, mit synthetischen Testbildern. Verwenden bei neuen Formaten, Vorschaubild- oder Export-Einstellungen, Bearbeitungsschritten, ExifTool-Aufrufen oder wenn eine Leistungszahl im Plan steht.
+description: Bild- und Videoverfahren von Galeria Beata vor dem Einbau messen statt raten – sharp/libvips (Dekodieren, Vorschaubilder, Export, Farbraum, Ausrichtung), ExifTool (Lesen, Schreiben, Durchsatz), Formatunterstützung, Speicher und Zeit, mit synthetischen Testbildern. Verwenden bei neuen Formaten, Vorschaubild- oder Export-Einstellungen, Bearbeitungsschritten, ExifTool-Aufrufen oder wenn eine Leistungszahl im Plan steht.
 ---
 
 # Bild-Labor
@@ -57,6 +57,21 @@ Scratchpad oder im Temp-Ordner des Tests, nie im Repository. Absichtlich unbeque
 - **Feld-Zuordnung:** jedes Feld aus `shared/metaFields.ts` schreiben und in Windows-Explorer
   (Eigenschaften → Details), digiKam und – wenn vorhanden – Lightroom ablesen. Tabelle mit
   Ergebnis in den Plan (Skill `metadaten-schreiben`).
+
+## 3a. Videos (ffmpeg, Chromium)
+
+- **Testvideos per lavfi** (`testsrc2`, `sine`; Mottulbox-Skill `ffmpeg-labor`): H.264/AAC in MP4,
+  HEVC in MOV, VP9 in WebM, Hochkant mit Drehungs-Metadaten, 29,97 fps, ohne Ton, sehr kurz (< 1 s).
+- **Abspielbarkeit:** je Datei in der gebauten App prüfen, ob `<video>` startet
+  (`canPlayType` reicht nicht – HEVC hängt am Rechner und an der GPU); Ergebnis in die Formatmatrix.
+- **Standbild:** Zeitpunkt ~10 % der Dauer, nie das schwarze erste Bild; Drehung beachten
+  (Hochkant-Handyvideo); Dauer für 1 Standbild je Video messen.
+- **Datum und Ort:** QuickTime-`CreateDate` ist UTC, Apple-`CreationDate` trägt die Zone – mit
+  ExifTool an Handy- und Kamera-Testvideos vergleichen und die Rangfolge im Plan bestätigen.
+- **Metadaten schreiben:** danach Video- und Tonspuren unverändert (`ffmpeg -i x -map 0 -c copy
+  -f streamhash -` vorher/nachher gleich).
+- **Sicherheit:** immer `-protocol_whitelist file` und `file:`-Pfade; Gegenprobe mit einer
+  Playlist-Datei, die auf eine lokale Spion-Adresse zeigt – es darf keine Anfrage ankommen.
 
 ## 4. Zeit und Speicher
 

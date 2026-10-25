@@ -1,6 +1,6 @@
 ---
 name: electron-e2e
-description: E2E-Tests der gebauten Galerie mit Playwright schreiben, ausführen und Fehler daran suchen – Harness, Testbibliothek, Prüfsummen der Originale, Netz-Spion, Dialoge ersetzen, bewährte Muster und Grenzen aus der Mottulbox. Verwenden, wenn Oberfläche, IPC, Protokolle, Bilddienst, Dateischreiben oder das Paket geändert wurden oder ein Verhalten in der echten App geprüft werden soll. (Übernommen aus der Mottulbox und angepasst.)
+description: E2E-Tests der gebauten App Galeria Beata mit Playwright schreiben, ausführen und Fehler daran suchen – Harness, Testbibliothek, Prüfsummen der Originale, Netz-Spion, Dialoge ersetzen, bewährte Muster und Grenzen aus der Mottulbox. Verwenden, wenn Oberfläche, IPC, Protokolle, Bilddienst, Dateischreiben oder das Paket geändert wurden oder ein Verhalten in der echten App geprüft werden soll. (Übernommen aus der Mottulbox und angepasst.)
 ---
 
 # Electron-E2E
@@ -43,7 +43,7 @@ try {
 }
 ```
 
-## Galerie-spezifisch
+## Galeria-Beata-spezifisch
 
 - **Testbibliothek je Lauf** frisch aus `scripts/testbilder.mjs` in einen Temp-Ordner – nie
   echte Fotos, nie ein Ordner des Entwicklers. Inhalt (Namen, Daten, GPS, Ausrichtungen) ist

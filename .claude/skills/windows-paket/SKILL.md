@@ -1,6 +1,6 @@
 ---
 name: windows-paket
-description: Windows-Installer der Galerie bauen und prüfen – NSIS One-Click je Benutzer, alles im Paket (ExifTool, sharp/libvips, Ortsdaten), keine Downloads beim Start, Deinstallation ohne Reste, Dateizuordnung, portable Variante, Abnahme in der Windows-Sandbox ohne Netz. Verwenden bei Änderungen an electron-builder.yml, asarUnpack/extraResources, scripts/download-exiftool.mjs, dem Installer-Workflow oder vor einem Release.
+description: Windows-Installer von Galeria Beata bauen und prüfen – NSIS One-Click je Benutzer, alles im Paket (ExifTool, ffmpeg, sharp/libvips, Ortsdaten), keine Downloads beim Start, Deinstallation ohne Reste, Dateizuordnung, portable Variante, Abnahme in der Windows-Sandbox ohne Netz, App-Aktualisierung mit eigener Ed25519-Signatur. Verwenden bei Änderungen an electron-builder.yml, asarUnpack/extraResources, scripts/download-exiftool.mjs, scripts/download-ffmpeg.mjs, services/update/, dem Installer-Workflow oder vor einem Release.
 ---
 
 # Windows-Paket
@@ -9,7 +9,7 @@ Ziel aus `docs/PLAN.md`: **eine Datei, Doppelklick, ohne Administratorrechte, oh
 Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen – sie erklären
 `signAndEditExecutable: false`, Icons, `asarUnpack`).
 
-## electron-builder.yml – Galerie-spezifisch
+## electron-builder.yml – Galeria-Beata-spezifisch
 
 - `nsis`: `oneClick: true`, `perMachine: false` (je Benutzer → keine UAC-Abfrage),
   Startmenü- und Desktop-Verknüpfung, `runAfterFinish: true`.
@@ -18,9 +18,11 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
 - Nur die Binaries der Zielplattform ins Paket (Muster Mottulbox für better-sqlite3:
   `prebuilds/**` ausschließen, `${platform}-${arch}` einschließen; für `@img/sharp-*` prüfen,
   dass nur `win32-x64` mitkommt).
-- `extraResources`: `resources/exiftool/win` → `exiftool`, Ortsdaten → `geo`; Pfade zur Laufzeit
-  über `process.resourcesPath` (gepackt) bzw. `resources/` (Entwicklung) – nur an einer Stelle
-  (`exiftool/binPath.ts`).
+- `productName: Galeria Beata`, `artifactName: Galeria-Beata-${version}-setup.${ext}` (ohne
+  Leerzeichen im Dateinamen).
+- `extraResources`: `resources/exiftool/win` → `exiftool`, `resources/ffmpeg/win` → `ffmpeg`,
+  Ortsdaten → `geo`; Pfade zur Laufzeit über `process.resourcesPath` (gepackt) bzw. `resources/`
+  (Entwicklung) – je Programm nur an einer Stelle (`exiftool/binPath.ts`, `ffmpeg/ffmpegPath.ts`).
 - `win.signAndEditExecutable: false` – der Installer bleibt bewusst unsigniert (entschieden 25.10.2026; Grund für die Einstellung in der Mottulbox).
 - **Deinstallation:** Index und Cache (`%LOCALAPPDATA%\<App>`) enthalten Vorschaubilder privater
   Fotos und müssen weg. `deleteAppDataOnUninstall` greift nur bei One-Click und nur für den
@@ -44,8 +46,12 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
 - Die Windows-Ausgabe besteht aus einer exe und einem Ordner mit Perl-Laufzeit – beide
   mitnehmen; den Namen der exe so ablegen, dass sie ohne Tastendruck-Pause startet (Aufbau des
   Archivs beim Einrichten prüfen und im Skript kommentieren).
-- Lizenztexte (ExifTool, libvips LGPL, sharp Apache-2.0, GeoNames CC BY 4.0) in „Über“ und
-  als Datei im Paket.
+- **ffmpeg:** `scripts/download-ffmpeg.mjs` aus der Mottulbox (Prüfsumme gegen die
+  `checksums.sha256` des BtbN-Releases); HAP braucht Galeria Beata nicht – kleineren LGPL-Build
+  bevorzugen (Lizenz, Größe), im Labor bestätigen. Kein Selbst-Update von ffmpeg in der App: Es
+  kommt mit der App-Aktualisierung.
+- Lizenztexte (ExifTool, ffmpeg LGPL, libvips LGPL, sharp Apache-2.0, GeoNames CC BY 4.0) in
+  „Über“ und als Datei im Paket.
 
 ## Prüfen
 
@@ -68,5 +74,31 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
 ## Release
 
 Version in `package.json` erhöhen, Tag `v<version>` – der Installer-Workflow prüft, dass Tag
-und Version passen, baut und hängt den Installer an das GitHub Release. Ohne Auto-Update
-(offline): In den Release-Notes steht, dass man den neuen Installer einfach darüber installiert.
+und Version passen, baut und hängt den Installer an das GitHub Release (Entwurf). Dann lokal
+signieren und das Release veröffentlichen (unten). Release-Notes nennen, ob das Update
+**wichtig** ist und welche Komponenten es betrifft (Electron/Chromium, ExifTool, sharp/libvips,
+ffmpeg – mit Versionen).
+
+## App-Aktualisierung (ab Phase 5)
+
+Ablauf und Gründe: `docs/PLAN.md`, „App-Aktualisierung“. Regeln für Code und Release:
+
+- **Nur `services/update/` hat Netz** (Skill `bildschutz`, Schicht A). Reine Logik (Release-Liste
+  prüfen, Version vergleichen, „wichtig“ erkennen) in `shared/updatePlan.ts` mit Tests.
+- **Release-Beschreibung** `update.json` je Release: Version, Datum, `wichtig`, betroffene
+  Komponenten, Dateiname und SHA-256 des Installers; daneben `update.json.sig` (Ed25519).
+  Die App prüft die Signatur mit dem **fest eingebauten öffentlichen Schlüssel** (Node `crypto`,
+  `crypto.verify(null, daten, schlüssel, signatur)`), dann den SHA-256 des geladenen Installers.
+  Unbekannte Felder ignorieren, fehlende oder ungültige = Release verwerfen.
+- **Signieren lokal:** `npm run release:sign` liest den privaten Schlüssel aus einer Datei
+  außerhalb des Repos (Pfad per Umgebungsvariable), lädt den Installer aus dem Release-Entwurf,
+  rechnet SHA-256, schreibt `update.json` + `.sig` und hängt beides an. Der private Schlüssel
+  kommt nie ins Repo, nie in die CI, nie in ein Log; eine Sicherungskopie liegt offline.
+- **Nie automatisch installieren:** laden und starten nur nach Klick; laufende Aufträge vorher
+  abwarten oder nachfragen (Rückfrage „Wirklich beenden?“ wie in der Mottulbox).
+- **Herabstufen verhindern:** nur Versionen größer als die laufende annehmen.
+- **Prüfen:** E2E `update` gegen einen lokalen Schein-Release-Server (Adresse per
+  Umgebungsvariable nur im Test, Muster `e2e/ffmpeg-update.mjs` der Mottulbox): gültiges Update,
+  falsche Signatur, manipulierter Installer, ältere Version, kein Netz, Zustimmung „Nein“ =
+  keine Anfrage. In der Windows-Sandbox (dieses eine Mal mit Netz) von der Vorversion
+  aktualisieren; notieren, ob SmartScreen beim selbst geladenen Installer erscheint.

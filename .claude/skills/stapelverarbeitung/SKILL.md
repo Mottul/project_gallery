@@ -1,6 +1,6 @@
 ---
 name: stapelverarbeitung
-description: Stapel-Aktionen der Galerie bauen oder ändern – Umbenennen mit Namensmuster, Metadaten für viele Bilder, Zeit verschieben, Drehen, Konvertieren/Exportieren, in Ordner einsortieren. Regeln für Planen (rein), Konflikte unter Windows, Vorschau, zweistufiges Umbenennen, Ausführen in der Warteschlange, Abbrechen, Bericht und Rückgängig. Verwenden, bevor an batchPlan.ts, renamePattern.ts, services/batch/ oder dem Stapel-Assistenten gearbeitet wird.
+description: Stapel-Aktionen von Galeria Beata bauen oder ändern – Umbenennen mit Namensmuster, Metadaten für viele Bilder, Zeit verschieben, Drehen, Konvertieren/Exportieren, in Ordner einsortieren. Regeln für Planen (rein), Konflikte unter Windows, Vorschau, zweistufiges Umbenennen, Ausführen in der Warteschlange, Abbrechen, Bericht und Rückgängig. Verwenden, bevor an batchPlan.ts, renamePattern.ts, services/batch/ oder dem Stapel-Assistenten gearbeitet wird.
 ---
 
 # Stapelverarbeitung

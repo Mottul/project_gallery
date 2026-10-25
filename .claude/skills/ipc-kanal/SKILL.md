@@ -1,6 +1,6 @@
 ---
 name: ipc-kanal
-description: Neue IPC-Fläche in der Galerie anlegen (Channel + GalerieApi-Methode + Preload-Mapping + Handler, optional Event an den Renderer), mit Eingabeprüfung und ohne große Daten über IPC. Verwenden, sobald der Renderer etwas vom main braucht – Bibliothek, Metadaten, Stapel, Bearbeitung, Dialoge – oder main dem Renderer etwas melden soll. (Übernommen aus der Mottulbox und angepasst.)
+description: Neue IPC-Fläche in Galeria Beata anlegen (Channel + GalerieApi-Methode + Preload-Mapping + Handler, optional Event an den Renderer), mit Eingabeprüfung und ohne große Daten über IPC. Verwenden, sobald der Renderer etwas vom main braucht – Bibliothek, Metadaten, Stapel, Bearbeitung, Dialoge – oder main dem Renderer etwas melden soll. (Übernommen aus der Mottulbox und angepasst.)
 ---
 
 # Neue IPC-Fläche anlegen

@@ -1,6 +1,6 @@
 ---
 name: abschluss-check
-description: Prüfung vor dem Abschluss einer Änderung in der Galerie – Prettier, ESLint, Typecheck, Tests, Labortests, bei App-Änderungen E2E, Bildschutz-Prüfliste, Doku, ehrlicher Bericht. Verwenden, bevor etwas als fertig gemeldet oder committet wird. (Übernommen aus der Mottulbox und angepasst.)
+description: Prüfung vor dem Abschluss einer Änderung in Galeria Beata – Prettier, ESLint, Typecheck, Tests, Labortests, bei App-Änderungen E2E, Bildschutz-Prüfliste, Doku, ehrlicher Bericht. Verwenden, bevor etwas als fertig gemeldet oder committet wird. (Übernommen aus der Mottulbox und angepasst.)
 ---
 
 # Abschluss-Check

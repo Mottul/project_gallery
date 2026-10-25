@@ -1,11 +1,11 @@
 ---
 name: bildschutz
-description: Prüfliste für den Schutz der Bilddaten in der Galerie (Schichten A–F aus docs/PLAN.md) – kein Netz, Originale unantastbar, Renderer ohne Dateizugriff, verschlüsselter Cache und Index-Daten lokal, Export ohne Standort, Lieferkette. Verwenden bei jeder Änderung, die Dateien liest oder schreibt, ein Protokoll, IPC, Cache, Log, Export, Abhängigkeit oder eine Netzwerk-Funktion berührt – und vor jedem Abschluss solcher Änderungen.
+description: Prüfliste für den Schutz der Bilddaten in Galeria Beata (Schichten A–F aus docs/PLAN.md) – kein Netz, Originale unantastbar, Renderer ohne Dateizugriff, verschlüsselter Cache und Index-Daten lokal, Export ohne Standort, Lieferkette. Verwenden bei jeder Änderung, die Dateien liest oder schreibt, ein Protokoll, IPC, Cache, Log, Export, Abhängigkeit oder eine Netzwerk-Funktion berührt – und vor jedem Abschluss solcher Änderungen.
 ---
 
 # Bildschutz
 
-Die Galerie hat private Fotos (Gesichter, Wohnorte per GPS, Tagesabläufe per Datum) vor sich.
+Galeria Beata hat private Fotos und Videos (Gesichter, Wohnorte per GPS, Tagesabläufe per Datum) vor sich.
 Jede Schicht unten hat einen **Nachweis**; eine Änderung, die eine Schicht berührt, braucht ihn
 weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept für Bilddaten“.
 
@@ -13,7 +13,14 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 
 - [ ] Keine neue Netz-Funktion. `node:http`, `node:https`, `node:net`, `node:dgram`,
       `node:tls` und Electrons `net` sind im main per ESLint gesperrt – **Sperre nie lockern**,
-      auch nicht „nur zum Testen“.
+      auch nicht „nur zum Testen“. **Einzige Ausnahme:** `services/update/` (App-Aktualisierung,
+      `docs/PLAN.md`): nur nach Zustimmung des Nutzers bzw. auf Klick, eigene Sitzung mit
+      Host-Allowlist (Weiterleitungen nur innerhalb), nur GET ohne Kennung/Cookies/Bibliotheksdaten,
+      Installer erst nach SHA-256- und Ed25519-Prüfung ausführen. Die Ausnahme nie auf andere
+      Dateien ausweiten.
+- [ ] **ffmpeg/ffprobe** nur mit `-protocol_whitelist file` und Eingaben als `file:<absoluter
+      Pfad>` – präparierte Dateien (Playlists, `concat:`) könnten ffmpeg sonst Netz-Adressen
+      oder andere Dateien öffnen lassen (Muster Mottulbox: nur absolute Pfade ohne Protokolle).
 - [ ] Netzsperre in der Sitzung (`services/netzsperre.ts`) lässt nur App-Seite und eigene
       Protokolle durch; neue Protokolle dort und in der CSP eintragen, sonst nichts.
 - [ ] Inhalte aus Bildern laden nichts nach: SVG nur als `<img>` oder über sharp gerastert,
@@ -21,8 +28,9 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 - [ ] Keine externen Schriften, Skripte, Karten-Kacheln, Symbole – alles im Paket.
 - [ ] Links in Metadaten (z. B. Urheber-URL) öffnen nur auf Klick im Standardbrowser und nur
       http(s) (Wächter aus der Mottulbox).
-- **Nachweis:** E2E `netz` (lokaler Spion-Server, Testbilder mit Fremd-URLs in SVG/XMP; keine
-  einzige Anfrage).
+- **Nachweis:** E2E `netz` (lokaler Spion-Server, Testdateien mit Fremd-URLs in SVG/XMP und
+  Playlists; keine einzige Anfrage, solange die Update-Prüfung aus ist) und E2E `update` (nur
+  die Allowlist-Adresse, falsch signierte Installer werden verworfen).
 
 ## B – Originale unantastbar
 

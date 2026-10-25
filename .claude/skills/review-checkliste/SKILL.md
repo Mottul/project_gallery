@@ -1,9 +1,9 @@
 ---
 name: review-checkliste
-description: Projektspezifische Prüfliste für Änderungen an der Galerie – bestätigte Fehlerklassen aus den Reviews der Mottulbox (Zustand nach await, Dateisystem und Fehlercodes, atomares Schreiben, fremde Eingaben, Fenster, Tests, die nie scheitern) plus Bild-spezifische (Ausrichtung, Farbraum, Metadaten, große Bibliotheken). Verwenden zusätzlich zu /code-review, bevor eine Änderung als fertig gilt. (Übernommen aus der Mottulbox und angepasst.)
+description: Projektspezifische Prüfliste für Änderungen an Galeria Beata – bestätigte Fehlerklassen aus den Reviews der Mottulbox (Zustand nach await, Dateisystem und Fehlercodes, atomares Schreiben, fremde Eingaben, Fenster, Tests, die nie scheitern) plus Bild-spezifische (Ausrichtung, Farbraum, Metadaten, große Bibliotheken). Verwenden zusätzlich zu /code-review, bevor eine Änderung als fertig gilt. (Übernommen aus der Mottulbox und angepasst.)
 ---
 
-# Review-Checkliste Galerie
+# Review-Checkliste Galeria Beata
 
 Die Abschnitte „aus der Mottulbox“ sind dort tatsächlich vorgekommen (Reviews Oktober 2026).
 Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
@@ -57,7 +57,7 @@ Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
 - **Electron meldet `'closed'` asynchron** – `const self = win` im Handler, `if (win !== self) return`.
 - „Läuft gerade“-Anzeigen brauchen die Wahrheit aus dem main (Event), nicht den letzten Klick.
 
-## Bilder und Metadaten (Galerie)
+## Bilder, Videos und Metadaten (Galeria Beata)
 
 - **Ausrichtung:** Wird ein Bild irgendwo ohne EXIF-Ausrichtung angezeigt oder berechnet
   (Canvas, Zuschneide-Koordinaten, Seitenverhältnis im Raster)? Breite/Höhe im Index sind die

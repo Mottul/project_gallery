@@ -1,9 +1,9 @@
-# Plan: Galerie – Bildbetrachter und -bearbeiter für Windows
+# Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galerie“ (Name offen, siehe [Offene Fragen](#offene-fragen)). Stand 25. Oktober 2026,
-noch keine Zeile Code. Dieser Plan ist die Grundlage für die Umsetzung: vor jeder Phase lesen,
-offene Fragen klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf
-dem Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026, noch keine Zeile
+Code. Dieser Plan ist die Grundlage für die Umsetzung: vor jeder Phase lesen, offene Fragen
+klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
+Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
 
 - [Vorschau der Oberfläche](#vorschau-der-oberfläche)
 - [Ziele](#ziele)
@@ -13,27 +13,29 @@ dem Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
 - [Architektur](#architektur)
 - [Funktionen im Detail](#funktionen-im-detail)
 - [Schutzkonzept für Bilddaten](#schutzkonzept-für-bilddaten)
-- [Installation und Auslieferung](#installation-und-auslieferung)
+- [Installation und Auslieferung](#installation-und-auslieferung) – mit [App-Aktualisierung](#app-aktualisierung)
 - [Phasen](#phasen)
 - [Tests und Qualität](#tests-und-qualität)
 - [Risiken](#risiken)
-- [Offene Fragen](#offene-fragen)
+- [Entscheidungen und offene Fragen](#entscheidungen-und-offene-fragen)
 - [Skills](#skills)
 
 ## Vorschau der Oberfläche
 
 Klickbare Entwürfe (privat, nur für den Nutzer freigegeben):
-<https://claude.ai/artifact/4Q4Exe9RKDCRAgU9MGPXrK>. Bilder darin sind synthetische Platzhalter,
-Farben und Schrift wie in der Mottulbox (dunkel, Gold-Akzent, Segoe UI).
+<https://claude.ai/artifact/4Q4Exe9RKDCRAgU9MGPXrK>. Bilder darin sind synthetische Platzhalter;
+Akzent Hellgrün, Hell- und Dunkelmodus (Umschalter oben rechts in jedem Bildschirm), Schrift
+Segoe UI.
 
 | Bildschirm | Zeigt |
 |---|---|
-| Galerie – Kacheln | Ordnerbaum mit Ordner-Modi („nur lesen“, „privat“), Größenregler, Sortieren mit Gruppen (Ort A–Z, Datum, Name natürlich, Kamera, Bewertung, Größe), Auswahl, Marken für Standort/Bewertung/bearbeitet, Statusleiste „Offline · verschlüsselt“ |
+| Galerie – Kacheln | Ordnerbaum mit Ordner-Modi („nur lesen“, „privat“), Größenregler, Sortieren mit Gruppen (Ort A–Z, Datum, Name natürlich, Kamera, Bewertung, Größe), Auswahl, Marken für Standort/Bewertung/bearbeitet/Video, Statusleiste „Offline · verschlüsselt“ |
 | Galerie – Liste | Detailtabelle nach Ort (A–Z), wählbare Spalten, Auswahl per Kästchen |
 | Betrachter | Großansicht mit Filmstreifen, Zoom, verlustfreies Drehen, Schnellbewertung, Papierkorb, Info-Panel (Aufnahme mit Datumsquelle, Ort offline, Kamera, Histogramm, Beschreibung, Datei) |
 | Bildbearbeitung | Zuschnitt mit Seitenverhältnissen, Regler mit Live-Vorschau, Vorher/Nachher, Rezept, „Als Kopie speichern“ / „Original ersetzen“ |
 | Metadaten bearbeiten | Mehrfachauswahl mit ‹verschieden›, Stichwörter hinzufügen/entfernen, Bewertung, Farblabel, Standort entfernen, Schreiben nur geänderter Felder, Bericht mit Konflikt („inzwischen außerhalb geändert“) |
 | Stapelverarbeitung | Schritte, Aktionskette (Umbenennen, Zeit verschieben, Export mit Datenschutz-Profil), Vorschau mit Konflikten (Groß/Klein, Ziel existiert, Ordner nur lesen), Ausführen erst ohne Konflikte, Bericht, Rückgängig |
+| Farben | Design-Tokens für Hell und Dunkel (Akzent, Flächen, Schrift, Status) mit Kontrastwerten – Vorlage für die CSS-Variablen |
 
 ## Ziele
 
@@ -41,17 +43,20 @@ Aus der Anfrage:
 
 1. **Windows-Desktop-App** zum Betrachten und Bearbeiten von Bildern.
 2. **Ordner angeben**, deren Bilder in der Galerie erscheinen (Bibliotheksordner, rekursiv).
-3. **Sortieren** nach Aufnahme-/Erstelldatum, GPS (Orte alphabetisch), Name und weiteren Metadaten (Kamera, Objektiv,
-   Bewertung, Größe …).
+3. **Sortieren** nach Aufnahme-/Erstelldatum, GPS (Orte alphabetisch), Name und weiteren
+   Metadaten (Kamera, Objektiv, Bewertung, Größe …).
 4. **Anzeigegröße einstellbar:** Kacheln (stufenlos), Liste, weitere Ansichten.
 5. **Metadaten bearbeiten** (einzeln und für viele Bilder auf einmal).
 6. **Stapelverarbeitung** generell: Umbenennen, Metadaten, Drehen, Konvertieren, Exportieren …
 7. **Installation so einfach wie möglich.**
 8. **Alles funktioniert offline.**
 9. **Bilddaten gut geschützt.**
+10. **Videos** in der Galerie: anzeigen, abspielen, sortieren, Metadaten bearbeiten.
+11. **Updates in der App** für wichtige Komponenten.
+12. **Hell- und Dunkelmodus**, freundlicher hellgrüner Akzent.
 
 **Nicht-Ziele (vorerst):** Cloud, Konten, Synchronisation, RAW-Entwicklung, Ebenen/Retusche wie
-in einem Grafikprogramm, Gesichtserkennung, Video-Bearbeitung.
+in einem Grafikprogramm, Gesichtserkennung, Video-Schnitt und -Umwandlung.
 
 ## Leitplanken
 
@@ -59,7 +64,7 @@ Drei Anforderungen gelten für jede Funktion und entscheiden im Zweifel:
 
 | Leitplanke | Heißt konkret |
 |---|---|
-| **Offline** | Keine Funktion braucht Netz. Die App öffnet von sich aus **keine einzige** Verbindung – technisch erzwungen (Netzsperre in der Sitzung, Lint-Regel gegen Netz-Module im main, E2E mit Spion-Server). Alles Nötige liegt im Paket: ExifTool, Bildbibliothek, Ortsdaten, Schriften, Symbole. |
+| **Offline** | Keine Funktion braucht Netz. Die App öffnet von sich aus **keine** Verbindung – technisch erzwungen (Netzsperre in der Sitzung, Lint-Regel gegen Netz-Module im main, E2E mit Spion-Server). Alles Nötige liegt im Paket: ExifTool, ffmpeg, Bildbibliothek, Ortsdaten, Schriften, Symbole. **Einzige Ausnahme:** die [App-Aktualisierung](#app-aktualisierung) – nur nach Zustimmung, nur zu einer festen Adresse, nichts über den Nutzer. |
 | **Bilddaten geschützt** | Originale werden nur auf ausdrücklichen Befehl verändert, dann mit Sicherung, atomar und nachgeprüft. Löschen geht in den Papierkorb. Abgeleitete Daten (Vorschaubilder, Index mit GPS) bleiben lokal, verschlüsselt bzw. löschbar. Details: [Schutzkonzept](#schutzkonzept-für-bilddaten). |
 | **Einfache Installation** | Eine Datei, Doppelklick, ohne Administratorrechte, ohne Fragen, ohne Downloads beim ersten Start, ohne Laufzeitumgebung (.NET, Java, Python). |
 
@@ -67,16 +72,19 @@ Drei Anforderungen gelten für jede Funktion und entscheiden im Zweifel:
 
 | Thema | Entscheidung | Warum |
 |---|---|---|
-| Plattform | **Electron + React + TypeScript**, Build mit electron-vite | Wie die Mottulbox: Bausteine, Sicherheits-Härtung, E2E-Harness, CI und Skills lassen sich übernehmen. Tauri/.NET wären kleiner, aber alles neu – und das Bild-Ökosystem (sharp) ist Node. Die Paketgröße (~100–150 MB) ist zweitrangig. |
+| Plattform | **Electron + React + TypeScript**, Build mit electron-vite | Wie die Mottulbox: Bausteine, Sicherheits-Härtung, E2E-Harness, CI und Skills lassen sich übernehmen. Tauri/.NET wären kleiner, aber alles neu – und das Bild-Ökosystem (sharp) ist Node. Die Paketgröße (~150–250 MB mit ffmpeg) ist zweitrangig. |
 | Versionen | **Gleicher Stand wie die Mottulbox** beim Start (Electron 44, React 18, Tailwind 3, zustand 5, vitest 4) | UI-Bausteine und Konfigurationen 1:1 nutzbar; große Umstiege (React 19, Tailwind 4) später gemeinsam mit der Mottulbox. |
-| Bilder dekodieren, Vorschaubilder, Export | **sharp** (libvips) | Schnell (Verkleinern schon beim Dekodieren bei JPEG), liest JPEG, PNG, WebP, GIF, AVIF, TIFF, SVG; N-API-Binaries im Paket, in der aktuellen Version (0.35) **ohne Install-Skript** (passt zu `ignore-scripts=true`). HEIC (HEVC) ist in den fertigen Binaries **nicht** enthalten → eigene Phase. |
-| Metadaten lesen/schreiben | **ExifTool** (gebündelte Windows-Version, eigener dünner Wrapper im `-stay_open`-Modus) | Einziges Werkzeug, das EXIF, IPTC und XMP in allen Formaten (auch RAW, HEIC, Sidecars) zuverlässig schreibt. Wie ffmpeg in der Mottulbox: Download-Skript mit Prüfsumme, im Paket unter `resources/`, kein npm-Paket mit eigenen Abhängigkeiten. |
-| Bildarbeit im eigenen Prozess | **utilityProcess „Bilddienst“** (sharp + ExifTool-Steuerung) | Eine präparierte oder kaputte Datei kann einen Dekoder abstürzen lassen – dann stirbt nur der Dienst (Neustart, Datei als „nicht lesbar“ markiert), nicht die App. Der main bleibt für Fenster und IPC frei. |
-| Index | **SQLite** (better-sqlite3, wie Mottulbox) mit FTS5 für die Suche, Datenbank nur im main (ein Schreiber) | Sortieren/Filtern über Indizes in Millisekunden auch bei 100.000 Bildern; der Bilddienst liefert Ergebnisse in Stapeln, main schreibt sie in Transaktionen. |
+| Bilder dekodieren, Vorschaubilder, Export | **sharp** (libvips) | Schnell (Verkleinern schon beim Dekodieren bei JPEG), liest JPEG, PNG, WebP, GIF, AVIF, TIFF, SVG; N-API-Binaries im Paket, in der aktuellen Version (0.35) **ohne Install-Skript** (passt zu `ignore-scripts=true`). HEIC (HEVC) ist in den fertigen Binaries **nicht** enthalten → Phase 6. |
+| Metadaten lesen/schreiben | **ExifTool** (gebündelte Windows-Version, eigener dünner Wrapper im `-stay_open`-Modus) | Einziges Werkzeug, das EXIF, IPTC und XMP in allen Formaten (auch RAW, HEIC, MP4/MOV, Sidecars) zuverlässig schreibt. Wie ffmpeg in der Mottulbox: Download-Skript mit Prüfsumme, im Paket unter `resources/`, kein npm-Paket mit eigenen Abhängigkeiten. |
+| Videos | **Abspielen in Chromium** (`<video>`), **Vorschaubilder und Kennwerte per ffmpeg/ffprobe** (gebündelt wie in der Mottulbox, Prüfsumme, nur lokale Dateien), **Metadaten per ExifTool** | Chromium spielt die gängigen Formate ohne Zusatz; ffmpeg liefert Standbilder, Dauer und Codecs für alle Formate – und ist zugleich ein Kandidat für HEIC. Keine Umwandlung, kein Schnitt. |
+| Bildarbeit im eigenen Prozess | **utilityProcess „Bilddienst“** (sharp, ExifTool- und ffmpeg-Steuerung) | Eine präparierte oder kaputte Datei kann einen Dekoder abstürzen lassen – dann stirbt nur der Dienst (Neustart, Datei als „nicht lesbar“ markiert), nicht die App. Der main bleibt für Fenster und IPC frei. |
+| Index | **SQLite** (better-sqlite3, wie Mottulbox) mit FTS5 für die Suche, Datenbank nur im main (ein Schreiber) | Sortieren/Filtern über Indizes in Millisekunden auch bei 100.000 Dateien; der Bilddienst liefert Ergebnisse in Stapeln, main schreibt sie in Transaktionen. |
 | Galerie-Raster | Virtualisiert (`@tanstack/react-virtual`, wird ins Renderer-Bündel gebaut) | Nur sichtbare Kacheln im DOM; flüssig bei großen Bibliotheken. |
-| Bilder zum Renderer | **Eigene Protokolle** `thumb://` und `bild://` mit Bild-Kennung aus dem Index, nie `file://` | Der Renderer kennt keine Pfade und kann keine beliebige Datei lesen (Muster `foto://` der Mottulbox). |
+| Bilder zum Renderer | **Eigene Protokolle** `thumb://` und `bild://` mit Kennung aus dem Index, nie `file://` | Der Renderer kennt keine Pfade und kann keine beliebige Datei lesen (Muster `foto://` der Mottulbox). |
 | Bearbeitung | **Nicht-destruktiv:** Bearbeitungsrezept (reines, getestetes `editPlan`), Vorschau im Renderer, Ergebnis mit sharp aus dem Original | Original bleibt, bis ausdrücklich „Original ersetzen“ gewählt wird; Rezepte lassen sich auf viele Bilder übertragen (Stapel). |
 | Stapelverarbeitung | **Plan → Vorschau → Ausführen → Bericht → Rückgängig**, Warteschlange aus der Mottulbox (`JobQueue`/`JobList`) | Niemand startet blind eine Aktion auf 5.000 Dateien; Konflikte stehen vor dem Start in der Vorschau. |
+| App-Aktualisierung | **Eigener schlanker Updater** gegen die GitHub-Releases des Repos, Installer **mit eigenem Schlüssel signiert** (Ed25519), Prüfung nur nach Zustimmung | Wichtige Korrekturen (Chromium, Bild-Dekoder, ExifTool) erreichen den Nutzer ohne Handarbeit; die eigene Signatur schützt auch ohne Windows-Code-Signatur vor untergeschobenen Installern. Details: [App-Aktualisierung](#app-aktualisierung). |
+| Erscheinungsbild | **System / Hell / Dunkel** (Standard: folgt Windows), Akzent **Hellgrün**, Farben als CSS-Variablen | Wie die Mottulbox technisch (Variablen, Klasse am `<html>`), aber eigener, freundlicher Akzent statt Gold. Details: [Erscheinungsbild](#erscheinungsbild). |
 | Sprache | Deutsch für Oberfläche und Code-Kommentare (wie Mottulbox) | Einheitlich mit dem bestehenden Projekt. |
 | Zielsystem | **Windows 10/11 x64**; Linux läuft in der CI für E2E mit | Gewünscht ist Windows; Linux kostet in der CI nichts und fängt Pfadannahmen. macOS optional später. |
 
@@ -96,10 +104,12 @@ unabhängig. Pfade beziehen sich auf `Mottul/project_mega`.
 | Netzlaufwerke | `services/reachableDir.ts` | nie synchron auf Nutzerordner zugreifen, Zeitlimit |
 | Datenbank | `services/db.ts` (Muster) | WAL, Migrationen, Wiederherstellung einer defekten DB |
 | Warteschlange | `services/jobs/queue.ts`, `jobList.ts` | Vorschaubilder, Metadaten schreiben, Stapel, Export |
+| ffmpeg | `scripts/download-ffmpeg.mjs`, `services/ffmpeg/ffmpegPath.ts`, `ffmpeg/probe.ts`, `ffmpeg/mediaInfoParse.ts`, `convert/runFfmpeg.ts` | Video-Standbilder, Dauer, Codecs; Prüfsumme beim Download, Abbruch per `AbortSignal`. Kein HAP nötig → kleinerer LGPL-Build prüfen (Labor) |
 | EXIF-Ausrichtung | `services/fotos/fotoImage.ts` | Gegenprobe im Test (sharp dreht selbst) |
 | Eigenes Protokoll | `ipc/fotos.handlers.ts` (`foto://`) | Vorbild für `thumb://`/`bild://` |
 | IPC-Vertrag | `shared/ipc-contracts.ts`, `preload/index.ts` | Channels + typisierte API, Renderer nur über `api` |
-| UI-Bausteine | `renderer/src/components/ui/*`, `lib/settings`, `lib/persistStorage`, `lib/useDraft`, Theme/Akzent | Felder, Knöpfe, Auswahl, Hell/Dunkel |
+| UI-Bausteine | `renderer/src/components/ui/*`, `lib/settings`, `lib/persistStorage`, `lib/useDraft`, Theme-Mechanik (`assets/main.css`, `lib/accent`) | Felder, Knöpfe, Auswahl; Hell/Dunkel über Variablen – Farbwerte neu (Hellgrün) |
+| Update-Muster | `services/ffmpeg/ffmpegUpdate.ts`, `ffmpegUpdatePlan.ts`, `e2e/ffmpeg-update.mjs` | Vorbild für die App-Aktualisierung: feste Quelle, Prüfung vor Aktivierung, Test gegen Schein-Server |
 | E2E-Harness | `e2e/harness.mjs`, `e2e/run.mjs` | gebaute App mit Playwright starten, frischer Benutzerordner |
 | CI und Abhängigkeiten | `.github/workflows/ci.yml`, `installer.yml`, `dependabot.yml` (7 Tage Abstand) | Prüfungen, E2E auf Windows/Linux, Installer bei Tag `v*` |
 
@@ -109,7 +119,7 @@ unabhängig. Pfade beziehen sich auf `Mottul/project_mega`.
 src/
 ├── main/
 │   ├── index.ts                  # Lebenszyklus, Netzsperre, Protokolle, Wächter
-│   ├── ipc/                      # library · meta · batch · edit · settings (*.handlers.ts), registry.ts
+│   ├── ipc/                      # library · meta · batch · edit · update · settings (*.handlers.ts), registry.ts
 │   └── services/
 │       ├── store.ts · db.ts · log.ts · fsAtomic.ts · fileDialogs.ts · reachableDir.ts · broadcast.ts
 │       ├── netzsperre.ts          # alle Anfragen außer App-Seite und eigenen Protokollen abweisen
@@ -117,11 +127,14 @@ src/
 │       ├── library/              # Ordner, Scan, Überwachen, Index schreiben, Abfragen
 │       ├── bilddienst/           # utilityProcess: Einstieg, Client mit Neustart und Zeitlimits
 │       ├── images/               # Vorschaubilder, Rendern von Rezepten, Export (läuft im Bilddienst)
+│       ├── video/                # Standbild, Dauer, Codecs über ffmpeg/ffprobe (läuft im Bilddienst)
+│       ├── ffmpeg/               # Pfad zur Binary, Aufruf mit Zeitlimit (aus Mottulbox)
 │       ├── cache/                # Vorschaubild-Ablage (verschlüsselt), Schlüssel über safeStorage
 │       ├── exiftool/             # stay_open-Wrapper, Argumentdateien bauen, Pfad zur Binary
 │       ├── metadata/             # lesen, schreiben, Journal (Rückgängig), Sidecars
 │       ├── batch/                # Stapel-Aufträge (Umbenennen, Metadaten, Export …)
 │       ├── protocols/            # thumb:// und bild://
+│       ├── update/               # App-Aktualisierung: einzige Stelle mit Netz (Allowlist, Signatur)
 │       └── jobs/                 # queue, jobList (aus Mottulbox)
 ├── shared/                       # rein und getestet, auch im Renderer nutzbar
 │   ├── types.ts · ipc-contracts.ts
@@ -130,19 +143,21 @@ src/
 │   ├── renamePattern.ts          # Namensmuster {datum:yyyy-MM-dd}_{zähler:3}
 │   ├── batchPlan.ts              # Stapel planen: Ziele, Konflikte, Vorschau
 │   ├── editPlan.ts               # Bearbeitungsrezept -> Arbeitsschritte (Vorschau und Rendern)
+│   ├── updatePlan.ts             # Release-Liste prüfen, Version wählen, „wichtig“ erkennen
 │   └── dates.ts · geo.ts         # Aufnahmedatum ermitteln, Entfernungen, nächster Ort
 ├── preload/index.ts              # typisierte API über contextBridge
 └── renderer/src/
     ├── galerie/                  # Ordnerbaum, Raster, Liste, Filterleiste, Auswahl
-    ├── betrachter/               # Vollbild, Zoom, Filmstreifen, Diashow, Info-Panel
+    ├── betrachter/               # Vollbild, Zoom, Filmstreifen, Diashow, Video, Info-Panel
     ├── metadaten/                # Bearbeiten-Panel (einzeln und mehrfach)
     ├── stapel/                   # Assistent: Aktionen, Vorschau, Fortschritt, Bericht
     ├── editor/                   # Zuschneiden, Drehen, Regler, Vorher/Nachher
-    ├── einstellungen/            # Ordner, Cache, Datenschutz, Darstellung
+    ├── einstellungen/            # Ordner, Cache, Datenschutz, Darstellung, Aktualisierung
     └── components/ui/ · lib/     # aus Mottulbox
-e2e/                              # harness, smoke, netz, originale, galerie, metadaten, stapel …
-scripts/                          # fetch-electron-bin, download-exiftool, testbilder, check-*
+e2e/                              # harness, smoke, netz, originale, galerie, metadaten, stapel, update …
+scripts/                          # fetch-electron-bin, download-exiftool, download-ffmpeg, testbilder, release-sign, check-*
 resources/exiftool/win/           # gebündeltes ExifTool (nicht im Git, per Skript geladen)
+resources/ffmpeg/win/             # gebündeltes ffmpeg/ffprobe (nicht im Git, per Skript geladen)
 ```
 
 ### Datenfluss
@@ -151,20 +166,21 @@ resources/exiftool/win/           # gebündeltes ExifTool (nicht im Git, per Skr
 2. **Scan** (Bilddienst): Dateiliste rekursiv, Ausschlüsse (`$RECYCLE.BIN`, `System Volume
    Information`, versteckte Ordner, eigene Cache-Ordner) → main schreibt Grunddaten in Stapeln.
 3. **Metadaten** (Bilddienst, ExifTool stapelweise) → Spalten im Index + vollständige Liste als JSON.
-4. **Vorschaubilder** (Bilddienst, sharp): sichtbare Bilder zuerst, dann der Rest im Hintergrund;
-   verschlüsselt in den Cache.
+4. **Vorschaubilder** (Bilddienst, sharp; Videos: Standbild per ffmpeg, dann sharp): sichtbare
+   Dateien zuerst, dann der Rest im Hintergrund; verschlüsselt in den Cache.
 5. **Überwachen:** `fs.watch` rekursiv (lokal), Abgleich beim Start und bei Fokus; Netzlaufwerke
    periodisch mit Zeitlimit. Bei Überlauf der Ereignisse: Ordner neu abgleichen.
 6. **Renderer** fragt `library.query({ sortierung, filter, gruppierung })` → geordnete Liste der
-   Bild-Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://<id>/<stufe>`.
+   Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://<id>/<stufe>`.
 
 ### Index (Skizze)
 
 ```sql
 folders  (id, path UNIQUE, mode /* normal | nur-lesen | privat */, added_at, last_scan)
-images   (id, folder_id, rel_path, name, name_sort, ext, size, mtime, btime,
-          width, height, orientation, taken_at /* lokal, ISO */, taken_offset, taken_source,
-          gps_lat, gps_lon, gps_alt, place_id, camera_make, camera_model, lens,
+images   (id, folder_id, rel_path, name, name_sort, ext, kind /* bild | video | raw */, size, mtime, btime,
+          width, height, orientation, duration_ms, video_codec, playable,
+          taken_at /* lokal, ISO */, taken_offset, taken_source,
+          gps_lat, gps_lon, gps_alt, place_id, place_sort, camera_make, camera_model, lens,
           iso, aperture, exposure, focal, rating, color_label, title, description,
           thumb_state, meta_json, meta_read_at, status /* ok | fehlt | defekt */)
 keywords (image_id, keyword)          -- normalisiert, für Filter und Gruppen
@@ -173,17 +189,18 @@ recipes  (image_id, recipe_json, version, updated_at)                    -- Bear
 images_fts (name, title, description, keywords, place)                   -- FTS5
 ```
 
-Indizes auf jede Sortierspalte (mit `folder_id`), `taken_at` mit Rückfall-Reihenfolge, `rating`,
-`camera_model`. Schema mit Version und Migrationen wie `db.ts` der Mottulbox.
+Indizes auf jede Sortierspalte (mit `folder_id`), `taken_at` mit Rückfall-Reihenfolge,
+`place_sort`, `rating`, `camera_model`. Schema mit Version und Migrationen wie `db.ts` der Mottulbox.
 
 ### Protokolle
 
 | Protokoll | Liefert | Prüfung |
 |---|---|---|
 | `thumb://<id>/<stufe>` | Vorschaubild (Stufe 256 oder 768 px, entschlüsselt) | Kennung ganzzahlig, Stufe aus Allowlist, nur aus dem Cache |
-| `bild://<id>` | Original, wenn Chromium es darstellen kann (JPEG, PNG, WebP, GIF, AVIF, BMP); sonst eine bildschirmgroße Umrechnung (TIFF, später HEIC/RAW) | Kennung muss im Index stehen, Pfad liegt (nach `realpath`) in einem Bibliotheksordner, Datei unverändert seit dem Index |
+| `bild://<id>` | Original, wenn Chromium es darstellen kann (JPEG, PNG, WebP, GIF, AVIF, BMP; Videos MP4/WebM …, mit **Range-Anfragen** fürs Spulen); sonst eine bildschirmgroße Umrechnung (TIFF, später HEIC/RAW) | Kennung muss im Index stehen, Pfad liegt (nach `realpath`) in einem Bibliotheksordner, Datei unverändert seit dem Index |
 
-CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `connect-src 'self'`, kein `unsafe-eval`.
+CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `media-src bild:`, `connect-src 'self'`,
+kein `unsafe-eval`.
 
 ## Funktionen im Detail
 
@@ -192,9 +209,11 @@ CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `connect-src 'self'`, 
 - Ordner hinzufügen/entfernen (Dialog), rekursiv, Unterordner einzeln ausschließen.
 - **Ordner-Modus:** *normal*; *nur lesen* (die App schreibt dort nie, auch nicht im Stapel – fürs
   Archiv); *privat* (keine Vorschaubilder auf der Platte, nur im Arbeitsspeicher).
-- Ordnerbaum links mit Anzahl; „Alle Bilder“, „Zuletzt hinzugefügt“, „Ohne Datum“, „Ohne GPS“.
+- Ordnerbaum links mit Anzahl; „Alle Bilder“, „Videos“, „Zuletzt hinzugefügt“, „Ohne Datum“,
+  „Ohne Standort“.
 - Entfernen eines Ordners löscht seine Index-Zeilen und Vorschaubilder sofort (keine Reste).
 - Fehlende Dateien (USB-Platte ab) bleiben als „nicht erreichbar“ sichtbar statt zu verschwinden.
+- Ausgelegt auf **bis 100.000 Dateien** (entschieden), lokal und USB; Netzlaufwerke mit Zeitlimits.
 
 ### Galerie-Ansichten
 
@@ -202,29 +221,30 @@ CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `connect-src 'self'`, 
   beschnitten oder im Seitenverhältnis.
 - **Blocksatz** (Justified, Zeilen gleicher Höhe wie in Google Fotos/Lightroom) – Phase 2.
 - **Liste/Details:** Tabelle mit wählbaren, sortierbaren Spalten (Name, Datum, Kamera, Maße,
-  Größe, Bewertung, Ort …) und kleinem Vorschaubild.
+  Größe, Dauer, Bewertung, Ort …) und kleinem Vorschaubild.
 - **Gruppen-Überschriften** (Tag, Monat, Jahr, Ordner, Kamera, Ort) in allen Ansichten.
 - Auswahl wie im Explorer (Klick, Strg, Umschalt, Strg+A, Rahmen ziehen), Statusleiste mit
   Anzahl und Summe.
-- Ansicht, Größe und Sortierung je Ordner gemerkt (Bedienzustand, nicht im Bild).
+- Videos tragen eine Marke mit Abspielsymbol und Dauer.
+- Ansicht, Größe und Sortierung je Ordner gemerkt (Bedienzustand, nicht in der Datei).
 
 ### Sortieren, Filtern, Gruppieren, Suchen
 
 - **Aufnahmedatum** mit fester Rangfolge: EXIF `DateTimeOriginal` (+ `SubSecTimeOriginal`,
   `OffsetTimeOriginal`) → `CreateDate` → XMP `photoshop:DateCreated` → Dateierstellung →
   Änderungsdatum. Die Quelle wird gespeichert und im Info-Panel genannt („Datum aus Datei, nicht
-  aus der Kamera“).
+  aus der Kamera“). Videos siehe [Videos](#videos).
 - **Name** natürlich sortiert („Bild 2“ vor „Bild 10“), ohne Groß/Klein, Umlaute richtig.
 - **GPS = Orte alphabetisch (entschieden):** sortiert und gruppiert nach Ortsname A–Z, das Land
   als Zusatz („Dubrovnik · Kroatien“); innerhalb eines Ortes nach Aufnahmedatum. Der Ortsname
   kommt aus dem Ort-Feld der Metadaten (MWG `City`), sonst offline aus den GPS-Koordinaten
   (nächster Ort aus GeoNames-Daten im Paket). Gleichnamige Orte in verschiedenen Ländern bleiben
-  getrennte Gruppen. Bilder **ohne Standort stehen immer am Ende**, auch absteigend. Dazu Filter
+  getrennte Gruppen. Dateien **ohne Standort stehen immer am Ende**, auch absteigend. Dazu Filter
   „mit/ohne Standort“. Entfernung zu einem Bezugspunkt und Karte erst bei Bedarf (Phase 7).
 - **Weitere:** Kamera, Objektiv, ISO, Blende, Belichtungszeit, Brennweite, Bewertung, Farblabel,
-  Auflösung, Seitenverhältnis, Dateigröße, Typ, Ordner, Änderungsdatum.
-- **Filterleiste:** Zeitraum, Bewertung ≥, Farblabel, Kamera, Stichwort, Ort, Format,
-  Ausrichtung (hoch/quer), mit/ohne GPS; kombinierbar, als Ansicht speicherbar.
+  Auflösung, Seitenverhältnis, Dateigröße, Dauer, Typ (Bild/Video), Ordner, Änderungsdatum.
+- **Filterleiste:** Zeitraum, Bewertung ≥, Farblabel, Kamera, Stichwort, Ort, Typ (Bild/Video),
+  Format, Ausrichtung (hoch/quer), mit/ohne GPS; kombinierbar, als Ansicht speicherbar.
 - **Suche:** Volltext (FTS5) über Name, Titel, Beschreibung, Stichwörter, Ort.
 
 ### Betrachter
@@ -237,10 +257,44 @@ CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `connect-src 'self'`, 
 - Vorladen der Nachbarbilder; EXIF-Ausrichtung beachtet Chromium selbst, sharp bei Vorschaubildern.
 - Vergleichsansicht (zwei Bilder nebeneinander, gekoppelter Zoom) – Phase 7.
 
+### Videos
+
+- **Anzeigen:** Kachel mit Standbild (ffmpeg, bei ~10 % der Dauer; schwarze Anfangsbilder
+  meiden), Marke mit Dauer; in Liste und Info-Panel Dauer, Auflösung, Bildrate, Codec.
+- **Abspielen** im Betrachter (`<video>` über `bild://` mit Range-Anfragen): Play/Pause, Spulen,
+  Lautstärke, Vollbild, Einzelbild vor/zurück. Was Chromium nicht abspielen kann (je nach Rechner
+  z. B. HEVC aus dem iPhone, AVCHD `.mts`), zeigt einen klaren Hinweis und „Mit Standardprogramm
+  öffnen“; eine Abspiel-Kopie im Cache nur, wenn das Labor es für nötig hält.
+- **Aufnahmedatum:** Videos speichern Zeiten anders als Fotos – QuickTime-`CreateDate` ist laut
+  Spezifikation UTC, Apple legt zusätzlich `CreationDate` mit Zeitzone ab. Rangfolge: Datum mit
+  Zeitzone → QuickTime-Datum (UTC → lokale Zeit) → Datei. Im Labor mit Handy- und Kameravideos
+  bestätigen.
+- **Standort:** GPS aus den Video-Metadaten (ExifTool), damit auch Videos nach Ort (A–Z) sortiert
+  werden.
+- **Metadaten bearbeiten:** Titel, Beschreibung, Stichwörter, Bewertung über ExifTool (XMP bzw.
+  QuickTime-Felder in MP4/MOV); was Explorer davon anzeigt, klärt das Labor. Prüfung danach: die
+  Video- und Tonspuren sind unverändert (Prüfsumme der Spuren per ffmpeg).
+- **Stapel:** Umbenennen, Zeit verschieben, Metadaten, Ordnen gelten auch für Videos; Export =
+  Kopie, auf Wunsch ohne Standort. Keine Umwandlung, kein Schnitt.
+
+### Erscheinungsbild
+
+- **Design:** System (Standard, folgt der Windows-Einstellung über `nativeTheme`), Hell, Dunkel –
+  Umschalter in der Titelleiste und in den Einstellungen. Optional „Betrachter immer dunkel“.
+- **Akzent Hellgrün** (entschieden): Fläche `#4ade80` mit dunkler Schrift `#052e16` in beiden
+  Modi; Linien, Symbole, Links, Auswahlrahmen im Dunkelmodus `#4ade80`, im Hellmodus `#15803d`
+  (5:1 auf Weiß). Weitere Akzente wählbar (Himmelblau, Apricot, Flieder).
+- **Status nicht in Akzentfarbe:** OK Türkis, Warnung Bernstein, Fehler Rot – immer mit Symbol
+  und Text, nie Farbe allein.
+- **Umsetzung wie Mottulbox:** CSS-Variablen, Klasse am `<html>`, Farben nur über Tailwind-Tokens;
+  Marken auf Vorschaubildern bleiben in beiden Modi dunkel-halbtransparent (Fotos sind hell und
+  dunkel). Tokens und Kontraste: Bildschirm „Farben“ der [Vorschau](#vorschau-der-oberfläche).
+
 ### Metadaten bearbeiten
 
 Einzeln und für eine Auswahl: gemischte Werte zeigen „‹verschieden›“; geschrieben werden nur
-geänderte Felder; Stichwörter **hinzufügen/entfernen** statt ersetzen.
+geänderte Felder; Stichwörter **hinzufügen/entfernen** statt ersetzen. Geschrieben wird **in die
+Datei**, bei RAW und schreibgeschützten Dateien in ein XMP-Sidecar (entschieden).
 
 | Feld | Schreibt in (Startpunkt – im Labor gegen Windows-Explorer, digiKam und Lightroom prüfen) |
 |---|---|
@@ -257,7 +311,6 @@ geänderte Felder; Stichwörter **hinzufügen/entfernen** statt ersetzen.
 - **Schreiben:** über die Warteschlange; vorher prüfen, ob die Datei seit dem Lesen geändert wurde
   (Größe + Änderungszeit); alte Werte ins Journal (Rückgängig); optional vollständige Sicherung;
   danach neu lesen und vergleichen; Dateidatum auf Wunsch behalten.
-- **RAW und schreibgeschützte Dateien:** XMP-Sidecar (`bild.xmp`) statt Datei ändern.
 - Regeln im Skill [`metadaten-schreiben`](../.claude/skills/metadaten-schreiben/SKILL.md).
 
 ### Stapelverarbeitung
@@ -272,7 +325,7 @@ danach „Rückgängig“ für umkehrbare Aktionen. Voreinstellungen („Rezepte
 | Zeit verschieben | Uhrzeit der Kamera falsch gestellt: ± Tage/Stunden/Minuten, oder „dieses Bild war um 14:32“ → Versatz für alle |
 | Standort | entfernen; setzen (Ort wählen); später aus GPX-Track zuordnen |
 | Drehen/Spiegeln | verlustfrei über die EXIF-Ausrichtung (Standard) oder pixelweise |
-| Konvertieren/Exportieren | Format (JPEG, PNG, WebP, AVIF, TIFF), Qualität, längste Kante, Farbraum sRGB, Metadaten behalten / ohne Standort / alle entfernen, Zielordner, Namensmuster |
+| Konvertieren/Exportieren | Bilder: Format (JPEG, PNG, WebP, AVIF, TIFF), Qualität, längste Kante, Farbraum sRGB, Metadaten-Profil, Zielordner, Namensmuster. Videos: Kopie, Metadaten-Profil |
 | Ordnen | in Ordner nach Datum verschieben/kopieren (`{jahr}/{monat}`) |
 | Bearbeitung übertragen | Rezept eines Bildes auf die Auswahl anwenden (Phase 5) |
 
@@ -295,40 +348,83 @@ danach „Rückgängig“ für umkehrbare Aktionen. Voreinstellungen („Rezepte
 
 ## Schutzkonzept für Bilddaten
 
-„Gut geschützt“ wird in sechs Schichten umgesetzt. A–D sind Pflicht ab Phase 1, E–F folgen.
+„Gut geschützt“ wird in sechs Schichten umgesetzt (entschieden: A–F reichen; keine App-Sperre,
+kein verschlüsselter Index, kein Tresor). A–D sind Pflicht ab Phase 1, E–F folgen.
 Checkliste: Skill [`bildschutz`](../.claude/skills/bildschutz/SKILL.md).
 
 | | Schicht | Umsetzung | Nachweis |
 |---|---|---|---|
-| **A** | **Nichts verlässt den Rechner** | Netzsperre: `session.webRequest` weist alles außer App-Seite und eigenen Protokollen ab; ESLint verbietet `node:http(s)`, `node:net`, `node:dgram`, Electrons `net` im main; keine Telemetrie, keine Absturzberichte, kein Auto-Update; Schriften/Symbole/Ortsdaten im Paket | E2E `netz`: lokaler Spion-Server bekommt nie eine Anfrage, auch nicht über Bilder mit Fremd-URLs (SVG, XMP) |
-| **B** | **Originale unantastbar** | Standard ist lesen; jede schreibende Aktion ist ausdrücklich und nennt die Dateien; vorher Sicherung (`Sicherungen/`, Aufbewahrung einstellbar), atomar ersetzen, danach nachprüfen; Löschen nur in den Papierkorb (`shell.trashItem`), sonst ausdrückliche Rückfrage; Ordner-Modus „nur lesen“; Journal für Rückgängig | E2E `originale`: Prüfsummen aller Testbilder vor/nach jedem Lauf; nach Metadaten-Schreiben sind die **Pixeldaten** gleich (sharp roh → sha256) |
-| **C** | **Renderer ohne Dateizugriff** | Sandbox, contextIsolation, kein Node, keine Webviews, keine Navigation (aus Mottulbox); Bilder nur über `thumb://`/`bild://` mit Kennungen aus dem Index; jeder IPC-Eingang wird geprüft (Allowlist, Grenzen); Schreiben nur in freigegebene Pfade | Unit-Tests der Protokolle (erfundene Kennung, `..`, Symlink aus dem Ordner) und E2E `security` |
+| **A** | **Nichts verlässt den Rechner** | Netzsperre: `session.webRequest` weist alles außer App-Seite und eigenen Protokollen ab; ESLint verbietet `node:http(s)`, `node:net`, `node:dgram`, Electrons `net` im main – **außer** in `services/update/` (eigene Sitzung, Host-Allowlist, nur nach Zustimmung); ffmpeg nur mit `-protocol_whitelist file` und `file:`-Pfaden (sonst öffnet es aus präparierten Dateien auch `http:`, `concat:` …); keine Telemetrie, keine Absturzberichte; Schriften/Symbole/Ortsdaten im Paket | E2E `netz`: lokaler Spion-Server bekommt nie eine Anfrage, auch nicht über Dateien mit Fremd-URLs (SVG, XMP, Playlist-Dateien); mit eingeschalteter Update-Prüfung nur die eine Anfrage an die Update-Adresse |
+| **B** | **Originale unantastbar** | Standard ist lesen; jede schreibende Aktion ist ausdrücklich und nennt die Dateien; vorher Sicherung (`Sicherungen/`, Aufbewahrung einstellbar), atomar ersetzen, danach nachprüfen; Löschen nur in den Papierkorb (`shell.trashItem`), sonst ausdrückliche Rückfrage; Ordner-Modus „nur lesen“; Journal für Rückgängig | E2E `originale`: Prüfsummen aller Testdateien vor/nach jedem Lauf; nach Metadaten-Schreiben sind **Pixeldaten** bzw. **Video-/Tonspuren** gleich |
+| **C** | **Renderer ohne Dateizugriff** | Sandbox, contextIsolation, kein Node, keine Webviews, keine Navigation (aus Mottulbox); Dateien nur über `thumb://`/`bild://` mit Kennungen aus dem Index; jeder IPC-Eingang wird geprüft (Allowlist, Grenzen); Schreiben nur in freigegebene Pfade | Unit-Tests der Protokolle (erfundene Kennung, `..`, Symlink aus dem Ordner) und E2E `security` |
 | **D** | **Abgeleitete Daten geschützt** | Index und Vorschaubilder unter `%LOCALAPPDATA%` (nicht im Roaming-Profil, nicht in OneDrive); Vorschaubilder **AES-256-GCM-verschlüsselt**, Schlüssel über `safeStorage` (Windows-DPAPI, an das Benutzerkonto gebunden); „privat“-Ordner ohne Cache auf der Platte; Cache leeren; Ordner entfernen löscht alles Abgeleitete; Log ohne Metadaten-Werte (keine GPS-Daten, Titel o. Ä.) | Unit-Test Verschlüsselung (falscher Schlüssel, manipulierte Datei); E2E: Cache enthält keine JPEG-Signatur |
-| **E** | **Weitergeben ohne Spuren** | Export standardmäßig **ohne Standort**, wahlweise ohne Seriennummern/Besitzer oder ohne alle Metadaten; „Was steckt drin?“-Bericht vor dem Export | Labortest: exportierte Datei enthält keine GPS-Tags |
-| **F** | **Lieferkette und Programm** | Wenige Laufzeit-Abhängigkeiten, exakt gepinnt, 7 Tage Abstand, `ignore-scripts`, Lockfile mit Integrity; ExifTool/Electron mit Prüfsumme; Fehlergrenzen, Wiederherstellung defekter DB/Einstellungen; Bilddienst als eigener Prozess | CI: `npm audit --omit=dev` ohne Befund, Prüfsummen in den Skripten |
-
-**Entschieden (25. Oktober 2026):** Die Schichten A–F reichen. App-Sperre, verschlüsselte
-Index-Datenbank und verschlüsselter „Tresor“-Ordner sind nicht vorgesehen.
+| **E** | **Weitergeben ohne Spuren** | Export standardmäßig **ohne Standort** (Bilder und Videos), wahlweise ohne Seriennummern/Besitzer oder ohne alle Metadaten; „Was steckt drin?“-Bericht vor dem Export | Labortest: exportierte Datei enthält keine GPS-Tags |
+| **F** | **Lieferkette und Programm** | Wenige Laufzeit-Abhängigkeiten, exakt gepinnt, 7 Tage Abstand, `ignore-scripts`, Lockfile mit Integrity; ExifTool/ffmpeg/Electron mit Prüfsumme; Updates mit eigener Signatur; Fehlergrenzen, Wiederherstellung defekter DB/Einstellungen; Bilddienst als eigener Prozess | CI: `npm audit --omit=dev` ohne Befund, Prüfsummen in den Skripten; E2E `update` lehnt falsch signierte Installer ab |
 
 ## Installation und Auslieferung
 
-- **Eine Datei:** `Galerie-<Version>-setup.exe` (NSIS, **One-Click, je Benutzer**): Doppelklick,
-  keine Administratorrechte, keine Fragen, Startmenü- und Desktop-Verknüpfung, startet danach.
-- **Alles im Paket:** ExifTool, sharp/libvips, Ortsdaten, Schriften. Beim ersten Start wird
-  **nichts** geladen; keine Laufzeitumgebung nötig (Electron bringt Chromium mit).
-- **Portable Variante** (`Galerie-<Version>-portable.exe`, Phase 7): ohne Installation, z. B.
-  vom USB-Stick; Daten wahlweise neben der Datei.
-- **Bewusst unsigniert (entschieden):** SmartScreen meldet „Unbekannter Herausgeber“
-  (*Weitere Informationen → Trotzdem ausführen*). `docs/INSTALL.md` zeigt den Weg mit Bildern, wie
-  bei der Mottulbox.
-- **Updates:** offline gedacht → neue Version = neuen Installer ausführen, Bibliothek und
-  Einstellungen bleiben. Kein automatisches Nachladen.
+- **Eine Datei:** `Galeria-Beata-<Version>-setup.exe` (NSIS, **One-Click, je Benutzer**):
+  Doppelklick, keine Administratorrechte, keine Fragen, Startmenü- und Desktop-Verknüpfung,
+  startet danach.
+- **Alles im Paket:** ExifTool, ffmpeg/ffprobe, sharp/libvips, Ortsdaten, Schriften. Beim ersten
+  Start wird **nichts** geladen; keine Laufzeitumgebung nötig (Electron bringt Chromium mit).
+- **Portable Variante** (`Galeria-Beata-<Version>-portable.exe`, Phase 7): ohne Installation,
+  z. B. vom USB-Stick; Daten wahlweise neben der Datei.
+- **Bewusst unsigniert (entschieden):** SmartScreen meldet beim ersten Installieren
+  „Unbekannter Herausgeber“ (*Weitere Informationen → Trotzdem ausführen*). `docs/INSTALL.md`
+  zeigt den Weg mit Bildern, wie bei der Mottulbox. Updates prüft die App selbst über ihre eigene
+  Signatur (unten).
 - **Deinstallation** entfernt Programm **und** Cache/Index (enthält Vorschaubilder); Einstellungen
   und Sicherungen nach Rückfrage bzw. Doku. Umsetzung im Skill [`windows-paket`](../.claude/skills/windows-paket/SKILL.md).
-- **„Öffnen mit“**/Dateizuordnung für JPEG, PNG … (Phase 7), damit Doppelklick im Explorer die
-  Galerie öffnet.
+- **„Öffnen mit“**/Dateizuordnung für JPEG, PNG, MP4 … (Phase 7), damit Doppelklick im Explorer
+  Galeria Beata öffnet.
 - Abnahme jeder Version in der **Windows-Sandbox ohne Netz** (`<Networking>Disable</Networking>`):
-  installieren, Ordner hinzufügen, ansehen, Metadaten schreiben, deinstallieren.
+  installieren, Ordner hinzufügen, ansehen, Video abspielen, Metadaten schreiben, deinstallieren.
+
+### App-Aktualisierung
+
+**Wofür Updates nötig sind** – eine Bildbetrachter-App öffnet ständig fremde Dateien, und deren
+Dekoder sind ein bekannter Angriffsweg:
+
+| Komponente | Warum aktualisieren | Beispiel |
+|---|---|---|
+| **Electron/Chromium** | zeigt Bilder und Videos an (Dekoder für JPEG, PNG, WebP, AVIF, GIF, Video) | WebP-Lücke 2023 (CVE-2023-4863): präparierte Bilder konnten Code ausführen, in freier Wildbahn ausgenutzt |
+| **ExifTool** | liest Metadaten aus fremden Dateien; kennt neue Kameras und RAW-Formate erst mit neuen Versionen | CVE-2021-22204: Codeausführung über eine präparierte Bilddatei (behoben in 12.24) |
+| **sharp/libvips** | dekodiert alle Bilder für Vorschaubilder und Export | Dekoder-Fehler in Bildbibliotheken werden regelmäßig behoben |
+| **ffmpeg** | liest Videos für Standbilder und Kennwerte | Video-Demuxer und -Dekoder sind große, oft gepatchte Angriffsfläche |
+| **Ortsdaten, App selbst** | neue Orte (selten), Fehlerkorrekturen, neue Funktionen | – |
+
+**Ein Weg für alles:** Electron lässt sich nicht einzeln austauschen, also ist jedes Update eine
+neue Version des ganzen Pakets (alle Komponenten darin). Getrennte Selbst-Updates für ExifTool
+oder ffmpeg wie in der Mottulbox braucht es damit nicht.
+
+**Ablauf:**
+
+1. **Beim ersten Start fragt die App einmal:** „Nach wichtigen Updates suchen? (höchstens einmal
+   pro Woche, nichts über dich oder deine Bilder)“ – *Ja* oder *Nein*; jederzeit änderbar in den
+   Einstellungen. Unabhängig davon: Knopf „Nach Updates suchen“ unter *Über*.
+2. **Anfrage:** nur ein GET an die Release-Liste des Repos (feste Adresse, keine Kennung, keine
+   Cookies, keine Daten aus der Bibliothek). Ohne Netz: still weiter, nächster Versuch nächste Woche.
+3. **Anzeige:** neue Version mit kurzer Beschreibung; Releases tragen eine Markierung
+   **„wichtig“** und nennen die betroffenen Komponenten („Sicherheitskorrektur: Chromium,
+   ExifTool“). Wichtige Updates erscheinen als Hinweis in der Statusleiste, andere nur unter *Über*.
+4. **Laden nur auf Klick**, dann Prüfung: SHA-256 aus der signierten Release-Beschreibung und
+   **Ed25519-Signatur** gegen den öffentlichen Schlüssel, der fest in der App steckt (Node `crypto`,
+   keine Abhängigkeit). Passt etwas nicht: verwerfen, nichts ausführen, Meldung.
+5. **Installieren:** laufende Aufträge abwarten bzw. Rückfrage, dann den geprüften Installer
+   starten (One-Click) und die App beenden; Bibliothek, Einstellungen und Journal bleiben.
+   Migrationen laufen beim nächsten Start.
+
+**Technik und Regeln:** eigener schlanker Updater in `services/update/` statt `electron-updater`
+(der prüft ohne Windows-Code-Signatur nur eine Prüfsumme aus derselben Quelle – wer das
+GitHub-Konto übernimmt, könnte sonst einen Installer unterschieben). Einzige Stelle im main mit
+Netz-Zugriff (ESLint-Ausnahme nur für diesen Ordner), eigene Sitzung mit Host-Allowlist (GitHub-API
+und Release-Downloads; Weiterleitungen nur innerhalb der Allowlist). Der **private
+Signierschlüssel** bleibt beim Nutzer (Datei außerhalb des Repos, `npm run release:sign`); ein
+Verlust heißt: neuer Schlüssel, Umstieg per manuellem Installer. Test: E2E `update` gegen einen
+lokalen Schein-Release-Server (Muster `e2e/ffmpeg-update.mjs` der Mottulbox) – gültig, falsch
+signiert, manipulierter Installer, kein Netz. Ob Windows bei einem von der App selbst geladenen
+Installer SmartScreen zeigt, in der Sandbox prüfen.
 
 ## Phasen
 
@@ -340,16 +436,22 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - Gerüst aus der Mottulbox (Tabelle oben): Build, Lint, Format, Typen, Tests, E2E-Harness, CI
   (Windows + Linux), Dependabot, `CLAUDE.md`, Doku-Gerüst (`docs/ENTWICKLUNG.md`,
   `docs/SICHERHEIT.md`, `docs/INSTALL.md`).
+- Erscheinungsbild von Anfang an: Tokens für Hell/Dunkel (Akzent Hellgrün), Umschalter
+  System/Hell/Dunkel.
 - Netzsperre (Schicht A) und Fenster-Härtung (C) von Anfang an, mit E2E `netz` und `security`.
-- `scripts/download-exiftool.mjs` (`npm run exiftool:fetch`; offizielle Quelle, Version und SHA-256 fest im Skript) und `scripts/testbilder.mjs`
-  (synthetische Testbibliothek, nie echte Fotos).
+- `scripts/download-exiftool.mjs` (`npm run exiftool:fetch`; offizielle Quelle, Version und
+  SHA-256 fest im Skript), `scripts/download-ffmpeg.mjs` (aus der Mottulbox) und
+  `scripts/testbilder.mjs` (synthetische Testbibliothek mit Bildern und kurzen Videos, nie echte
+  Fotos).
 - **Labor** (Skill `bild-labor`), Ergebnisse in diesen Plan:
   - sharp im Electron-Bilddienst: Vorschaubilder je Sekunde (24-MP-JPEG, 4-Kern-Laptop),
     Spitzenspeicher, `concurrency`, sehr große Bilder (Panorama > 100 MP), kaputte Dateien.
   - ExifTool `-stay_open`: Lesen von 1.000 / Schreiben von 100 Dateien, Unicode-Pfade
     (`-charset filename=utf8`), Pfade > 260 Zeichen, Netzlaufwerk.
-  - Formatmatrix (was dekodiert sharp, was zeigt Chromium, was schreibt ExifTool).
-  - Paket: `asarUnpack` für sharp/`@img`, ExifTool über `extraResources`, Größe des Installers.
+  - Formatmatrix (was dekodiert sharp, was zeigt/spielt Chromium – auch HEVC –, was schreibt
+    ExifTool).
+  - Paket: `asarUnpack` für sharp/`@img`, ExifTool und ffmpeg über `extraResources`, Größe des
+    Installers (LGPL- statt GPL-Build von ffmpeg).
   - better-sqlite3: 50.000 Zeilen in Stapeln einfügen – wie lange blockiert main je Stapel?
 - **Abnahme:** leere App installiert und startet offline in der Windows-Sandbox; E2E grün auf
   Windows und Linux; Messwerte stehen hier.
@@ -395,42 +497,53 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - **Abnahme:** E2E `stapel` (Vorschau = Ergebnis, Konflikte blockieren, Abbrechen hinterlässt
   keine halben Dateien, Rückgängig).
 
-### Phase 5 – Bildbearbeitung
+### Phase 5 – Bildbearbeitung und App-Aktualisierung → Version 1.0
 
 - Editor mit Werkzeugen, Rezept, Vorschau/Ergebnis-Abgleich, Als Kopie / Original ersetzen.
 - Rezept auf Auswahl übertragen (Stapel).
-- **Abnahme:** Labortest Vorschau ↔ Ergebnis (PSNR-Grenze), E2E `editor`.
-- **Version 1.0** nach Phase 5.
+- **App-Aktualisierung** (Abschnitt oben): Frage beim ersten Start, Prüfung, signierte Releases,
+  `npm run release:sign`, Installer-Workflow hängt Signatur und Release-Beschreibung an.
+- **Abnahme:** Labortest Vorschau ↔ Ergebnis (PSNR-Grenze), E2E `editor` und `update`; Update von
+  der Vorversion in der Windows-Sandbox (mit Netz nur für diesen Schritt).
+- **Version 1.0** nach Phase 5 – ab hier erreichen Korrekturen die Nutzer über die App.
 
-### Phase 6 – HEIC und RAW (fest eingeplant)
+### Phase 6 – Weitere Formate: Videos, HEIC, RAW (fest eingeplant)
 
-- **HEIC** (iPhone): Dekoder im Labor vergleichen – libheif als WebAssembly im Bilddienst oder ein
-  gebündeltes ffmpeg (wie in der Mottulbox); Kriterien: Lizenz, Paketgröße, Geschwindigkeit,
+- **Videos** (Abschnitt [Videos](#videos)): Standbild und Kennwerte per ffmpeg, Abspielen im
+  Betrachter, Aufnahmedatum und GPS aus den Video-Metadaten, Metadaten bearbeiten, Stapel.
+  Formate: MP4/MOV (H.264, HEVC), WebM, AVI, MTS – was Chromium spielt, entscheidet das Labor.
+- **HEIC** (iPhone): Dekoder im Labor vergleichen – das gebündelte ffmpeg (ist dann ohnehin da)
+  oder libheif als WebAssembly im Bilddienst; Kriterien: Lizenz, Paketgröße, Geschwindigkeit,
   Bild-Raster (iPhone-HEIC besteht aus Kacheln), Farbprofil, EXIF-Ausrichtung. Vorschaubilder und
   Betrachter über `bild://` als Umrechnung; Metadaten schreibt ExifTool direkt in die HEIC-Datei.
-- **RAW** (CR2/CR3, NEF, ARW, RAF, DNG …): Anzeige über das eingebettete Vorschau-JPEG
-  (ExifTool `PreviewImage`/`JpgFromRaw`), keine RAW-Entwicklung; Metadaten nur als XMP-Sidecar
-  (Original bleibt unberührt); Export aus dem Vorschau-JPEG mit Hinweis auf die Auflösung.
-- Testdateien: synthetisch erzeugbare HEIC; für RAW kleine, frei lizenzierte Musterdateien je
-  Hersteller (Herkunft und Lizenz dokumentieren) – keine eigenen Fotos.
-- **Abnahme:** Formatmatrix im Labor, E2E `galerie` mit HEIC- und RAW-Testdateien.
+- **RAW – die wichtigsten Formate zuerst (entschieden):** Canon CR2/CR3, Nikon NEF, Sony ARW,
+  Fujifilm RAF, DNG (Adobe, viele Handys). Anzeige über das eingebettete Vorschau-JPEG (ExifTool
+  `PreviewImage`/`JpgFromRaw`), keine RAW-Entwicklung; Metadaten nur als XMP-Sidecar (Original
+  bleibt unberührt); Export aus dem Vorschau-JPEG mit Hinweis auf die Auflösung. Weitere (ORF,
+  RW2, PEF …) nach Bedarf.
+- Testdateien: synthetisch erzeugte Videos (lavfi) und HEIC; für RAW kleine, frei lizenzierte
+  Musterdateien je Hersteller (Herkunft und Lizenz dokumentieren) – keine eigenen Fotos.
+- Videos können auf Wunsch früher kommen (nach Phase 2), weil sie unabhängig von HEIC/RAW sind.
+- **Abnahme:** Formatmatrix im Labor, E2E `galerie` mit Video-, HEIC- und RAW-Testdateien,
+  `originale` mit Videos.
 
 ### Phase 7 – Erweiterungen nach Bedarf
 
 Sortieren nach Entfernung zu einem Ort, Karte offline (Natural-Earth-Grundkarte), Duplikate
 (exakt per Hash, ähnlich per Wahrnehmungs-Hash), GPX-Zuordnung, Vergleichsansicht,
-Dateizuordnung, portable Variante, Videos (nur anzeigen).
+Dateizuordnung, portable Variante.
 
 ## Tests und Qualität
 
 - **Rein und getestet** (vitest): `sortFilter`, `renamePattern`, `batchPlan`, `editPlan`,
-  `metaFields`, `dates`, `geo`, Argumentdateien für ExifTool, Protokoll-Prüfungen.
-- **Labortests** mit echtem sharp/ExifTool auf synthetischen Bildern (`*.lab.test.ts`, wie
+  `metaFields`, `updatePlan`, `dates`, `geo`, Argumentdateien für ExifTool, Protokoll-Prüfungen,
+  Signaturprüfung.
+- **Labortests** mit echtem sharp/ExifTool/ffmpeg auf synthetischen Dateien (`*.lab.test.ts`, wie
   `player.lab.test.ts` der Mottulbox).
 - **E2E** (Playwright, gebaute App, frischer Benutzerordner, Testbibliothek aus
   `scripts/testbilder.mjs`): `smoke`, `security`, `netz`, `originale`, `galerie`, `sortieren`,
-  `metadaten`, `stapel`, `editor`, `paket`.
-- **Nie echte Fotos** in Repository, Tests, Logs oder Fehlerberichten.
+  `metadaten`, `stapel`, `editor`, `update`, `paket`.
+- **Nie echte Fotos oder Videos** in Repository, Tests, Logs oder Fehlerberichten.
 - Vor jedem Abschluss: Skill `abschluss-check`; zusätzlich `review-checkliste` und `bildschutz`.
 
 ## Risiken
@@ -438,36 +551,40 @@ Dateizuordnung, portable Variante, Videos (nur anzeigen).
 | Risiko | Gegenmittel |
 |---|---|
 | ExifTool-Start/Durchsatz unter Windows langsam (Perl in der exe) | `-stay_open`, ein Prozess je Spur, stapelweise; im Labor messen. Rückfall fürs schnelle Lesen beim Scan: reiner JS-Leser (z. B. exifr), Schreiben bleibt bei ExifTool |
-| Dekoder-Absturz an präparierten Dateien | Bilddienst als eigener Prozess, Zeitlimit je Datei, Datei als „defekt“ markieren |
+| Dekoder-Absturz an präparierten Dateien | Bilddienst als eigener Prozess, Zeitlimit je Datei, Datei als „defekt“ markieren; Updates für Dekoder |
 | `fs.watch` verpasst Änderungen (Netzlaufwerk, Überlauf) | Abgleich beim Start, bei Fokus und periodisch; Überlauf → Ordner neu abgleichen |
 | Metadaten erscheinen in anderen Programmen nicht | Feld-Zuordnung im Labor gegen Explorer/digiKam/Lightroom prüfen, MWG-Regeln |
+| Chromium spielt manche Videos nicht (HEVC je nach Rechner, AVCHD) | Klarer Hinweis + „Mit Standardprogramm öffnen“; Abspiel-Kopie nur nach Labor-Entscheidung |
+| Update-Weg wird missbraucht (Konto übernommen) | Eigene Ed25519-Signatur, Schlüssel nur beim Nutzer; Laden nur auf Klick |
+| Signierschlüssel verloren | Neuer Schlüssel, Umstieg einmalig per manuellem Installer; Sicherungskopie des Schlüssels offline |
 | SmartScreen schreckt ab (unsigniert, entschieden) | INSTALL.md mit Bildern; Installer-Name und Herausgeber-Angaben eindeutig |
-| Große Bibliotheken (> 100.000) | Kennungslisten statt Objekte über IPC, Indizes, virtualisiertes Raster; Messung mit 100.000 synthetischen Bildern |
-| Zeitzonen beim Aufnahmedatum | Datum „lokal wie in der Kamera“ speichern, Versatz getrennt; Zeitverschiebung als eigene Stapel-Aktion |
+| Große Bibliotheken (100.000 Dateien) | Kennungslisten statt Objekte über IPC, Indizes, virtualisiertes Raster; Messung mit 100.000 synthetischen Dateien |
+| Zeitzonen beim Aufnahmedatum (besonders Videos: UTC) | Datum „lokal wie in der Kamera“ speichern, Versatz getrennt; Zeitverschiebung als eigene Stapel-Aktion |
+| Paketgröße wächst durch ffmpeg | LGPL-Build mit nur den nötigen Teilen prüfen; Größe je Version notieren |
 
-## Offene Fragen
+## Entscheidungen und offene Fragen
 
 **Entschieden (25. Oktober 2026):**
 
+- **Name:** Arbeitstitel „Galeria Beata“.
 - **Schutz:** die Schichten A–F; keine App-Sperre, kein verschlüsselter Index, kein Tresor.
 - **„Sortieren nach GPS“** heißt: Orte alphabetisch (A–Z), gruppiert, ohne Standort am Ende.
-- **HEIC und RAW** werden gebraucht, aber später: eigene Phase 6 nach Version 1.0.
+- **Videos:** ja – anzeigen, abspielen, sortieren, Metadaten; kein Schnitt (Phase 6, auf Wunsch früher).
+- **HEIC und RAW:** gebraucht, Phase 6; RAW zuerst CR2/CR3, NEF, ARW, RAF, DNG.
+- **Bibliothek:** ausgelegt auf bis 100.000 Dateien.
+- **Metadaten** in die Datei; Sidecar für RAW und schreibgeschützte Dateien.
+- **Updates in der App** für wichtige Komponenten – Prüfung nur nach Zustimmung beim ersten Start,
+  eigene Signatur (Phase 5, vor Version 1.0).
 - **Code-Signatur:** keine, der Installer bleibt unsigniert.
+- **Erscheinungsbild:** Hell-/Dunkelmodus (Standard: wie Windows), Akzent Hellgrün statt Gold.
 - **Umsetzung** lokal auf dem PC des Nutzers.
 
 **Noch offen** (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
 
-1. **Videos** in der Galerie anzeigen? (Annahme: nein, später nur anzeigen.)
-2. **Größe der Bibliothek** und Ablage: wie viele Bilder, lokal, USB, NAS? (Annahme: bis 100.000,
-   lokal und USB, NAS mit Einschränkungen.)
-3. **Metadaten in die Bilddatei schreiben** (Standard) oder lieber nur XMP-Sidecars bzw. nur in
-   der App? (Annahme: in die Datei, Sidecar für RAW und schreibgeschützte Dateien.)
-4. **Updates:** ganz ohne Netz (manuell) oder ein Knopf „Nach Updates suchen“, der als einzige
-   Funktion online geht und ab Werk aus ist? (Annahme: ganz ohne Netz.)
-5. **Name der App** und Logo. (Annahme: Arbeitstitel „Galerie“.)
-6. **Eigenständige App** (Annahme) oder Werkzeug in der Mottulbox?
-7. Nur **Windows** oder auch macOS/Linux als Paket? (Annahme: nur Windows; Linux nur in der CI.)
-8. **RAW-Formate:** Welche Kameras bzw. Endungen konkret? (Annahme: CR2/CR3, NEF, ARW, RAF, DNG.)
+1. **Logo** für Galeria Beata. (Annahme: einfaches Bild-Symbol in Hellgrün bis dahin.)
+2. **Eigenständige App** (Annahme) oder Werkzeug in der Mottulbox?
+3. Nur **Windows** oder auch macOS/Linux als Paket? (Annahme: nur Windows; Linux nur in der CI.)
+4. **Update-Prüfung ab Werk:** Frage beim ersten Start (Annahme) – oder lieber still aus, nur per Knopf?
 
 ## Skills
 
@@ -478,19 +595,19 @@ In `.claude/skills/` angelegt. Aus der Mottulbox übernommen und angepasst:
 | `abschluss-check` | Prüfung vor Commit/PR: Format, Lint, Typen, Tests, E2E, Doku, Bericht |
 | `ipc-kanal` | neue IPC-Fläche (Channel, API, Preload, Handler) mit Eingabeprüfung |
 | `electron-e2e` | E2E-Tests der gebauten App, bewährte Muster und Grenzen aus der Mottulbox |
-| `abhaengigkeiten` | Pakete mit 7 Tagen Abstand, Electron-Hauptversionen, native Module (sharp, better-sqlite3), ExifTool |
+| `abhaengigkeiten` | Pakete mit 7 Tagen Abstand, Electron-Hauptversionen, native Module (sharp, better-sqlite3), ExifTool, ffmpeg |
 | `review-checkliste` | bestätigte Fehlerklassen aus den Mottulbox-Reviews, ergänzt um Bild-spezifische |
 
-Neu für die Galerie:
+Neu für Galeria Beata:
 
 | Skill | Wofür |
 |---|---|
-| `bild-labor` | Bildverfahren (sharp, ExifTool, Formate) messen statt raten – Testbilder, Pixel, Durchsatz, Speicher |
+| `bild-labor` | Bild- und Videoverfahren (sharp, ExifTool, ffmpeg, Formate) messen statt raten – Testdateien, Pixel, Durchsatz, Speicher |
 | `bibliothek-index` | Scan, Überwachen, Index-Schema, Migrationen, Sortier-/Filter-Abfragen, Leistung |
 | `metadaten-schreiben` | Metadaten sicher schreiben: Feld-Zuordnung, ExifTool-Aufrufe, Journal, Nachprüfung, Sidecars |
 | `stapelverarbeitung` | Stapel planen, Konflikte, zweistufiges Umbenennen, Ausführen, Bericht, Rückgängig |
 | `bildschutz` | Schutzkonzept A–F als Prüfliste vor jeder Änderung, die Dateien, Cache, Netz oder Export berührt |
-| `windows-paket` | Installer (One-Click, je Benutzer), Ressourcen im Paket, Offline-Test in der Windows-Sandbox |
+| `windows-paket` | Installer (One-Click, je Benutzer), Ressourcen im Paket, Offline-Test in der Windows-Sandbox, App-Aktualisierung und Release-Signatur |
 
 Nicht übernommen, weil Mottulbox-spezifisch: `projektdatei`, `kabelverlauf`, `anleitung-inhalte`,
 `fernsteuerung-seite`, `konvertierungs-kern`, `neues-werkzeug`, `ffmpeg-labor` (Vorgehen steckt in

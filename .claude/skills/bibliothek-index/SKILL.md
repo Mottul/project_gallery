@@ -1,6 +1,6 @@
 ---
 name: bibliothek-index
-description: Bibliothek der Galerie bauen oder ändern – Ordner und Ordner-Modi, Scan, Überwachen (fs.watch, Netzlaufwerke), Bilddienst (utilityProcess), Index-Schema in SQLite mit Migrationen, Aufnahmedatum und GPS ermitteln, Sortier-/Filter-/Gruppier-Abfragen, Vorschaubild-Reihenfolge, Leistung bei 100.000 Bildern. Verwenden, bevor an services/library/, services/bilddienst/, db.ts, sortFilter.ts, dates.ts, geo.ts oder dem Galerie-Raster gearbeitet wird.
+description: Bibliothek von Galeria Beata bauen oder ändern – Ordner und Ordner-Modi, Scan, Überwachen (fs.watch, Netzlaufwerke), Bilddienst (utilityProcess), Index-Schema in SQLite mit Migrationen, Aufnahmedatum und GPS ermitteln, Sortier-/Filter-/Gruppier-Abfragen, Vorschaubild-Reihenfolge, Leistung bei 100.000 Bildern. Verwenden, bevor an services/library/, services/bilddienst/, db.ts, sortFilter.ts, dates.ts, geo.ts oder dem Galerie-Raster gearbeitet wird.
 ---
 
 # Bibliothek und Index

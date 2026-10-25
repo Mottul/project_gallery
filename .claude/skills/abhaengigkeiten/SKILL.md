@@ -1,6 +1,6 @@
 ---
 name: abhaengigkeiten
-description: Abhängigkeiten der Galerie aktualisieren – Dependabot-PRs prüfen, Pakete mit 7 Tagen Abstand einspielen, native Module (sharp mit @img-Binaries, better-sqlite3) ohne Install-Skripte, gebündeltes ExifTool aktualisieren, neue Electron-Hauptversion übernehmen. Verwenden bei Paket-Updates, npm-audit-Befunden, einem neuen Paket, einem ExifTool- oder Electron-Upgrade. (Übernommen aus der Mottulbox und angepasst.)
+description: Abhängigkeiten von Galeria Beata aktualisieren – Dependabot-PRs prüfen, Pakete mit 7 Tagen Abstand einspielen, native Module (sharp mit @img-Binaries, better-sqlite3) ohne Install-Skripte, gebündeltes ExifTool und ffmpeg aktualisieren, neue Electron-Hauptversion übernehmen. Verwenden bei Paket-Updates, npm-audit-Befunden, einem neuen Paket, einem ExifTool-, ffmpeg- oder Electron-Upgrade. (Übernommen aus der Mottulbox und angepasst.)
 ---
 
 # Abhängigkeiten aktualisieren
@@ -42,6 +42,13 @@ Version und SHA-256 stehen fest in `scripts/download-exiftool.mjs`. Neue Version
 lesen (Änderungen an geschriebenen Tags?), ≥ 7 Tage alt, Hash aus der offiziellen Quelle
 eintragen, `npm run exiftool:fetch -- --force`, Labortests und E2E `metadaten`.
 
+## ffmpeg
+
+`scripts/download-ffmpeg.mjs` (aus der Mottulbox) lädt den neuesten Build, der **mindestens 7 Tage
+alt** ist, und prüft ihn gegen die `checksums.sha256` des Releases. Nach einem Wechsel: Labortest
+der Video-Standbilder (Bildzahl, Farben) und E2E `galerie` mit Videos. Zu den Anwendern kommt
+ein neues ffmpeg nur mit einem App-Release (kein Selbst-Update in der App).
+
 ## Neue Electron-Hauptversion
 
 Electron pflegt nur die drei neuesten Hauptversionen (etwa alle 8 Wochen eine neue).
@@ -56,5 +63,6 @@ Electron pflegt nur die drei neuesten Hauptversionen (etwa alle 8 Wochen eine ne
    Schlüssel, der nach dem Update nicht mehr entschlüsselt, heißt: Cache neu aufbauen, nie
    Daten verlieren).
 4. **Doku:** Version in `docs/ENTWICKLUNG.md`, Systemvoraussetzungen in `docs/INSTALL.md`.
-5. **Ausliefern:** Ohne Auto-Update erreicht ein Electron-Upgrade (Chromium-Sicherheit) die
-   Anwender erst mit einem neuen Installer – nach dem Merge ein Release vorschlagen.
+5. **Ausliefern:** Ein Electron-Upgrade (Chromium-Sicherheit) erreicht die Anwender erst mit
+   einem neuen Release – nach dem Merge eins vorschlagen und als **wichtig** markieren (Skill
+   `windows-paket`, App-Aktualisierung), damit die App darauf hinweist.
