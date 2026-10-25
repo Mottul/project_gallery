@@ -4,9 +4,9 @@ name: CI
 # Bei jedem Pull Request und auf main:
 # - Linux mit Node 22 und 24: Dateinamen, Verweise, Format, Lint, Typen (App und Tests),
 #   Unit-Tests, Build, npm audit für die Laufzeit-Abhängigkeiten (Schicht F).
-# - Windows (Zielsystem) und Linux: Labortests mit dem gebündelten ExifTool und ffmpeg, Build und
+# - Windows (Zielsystem) und Linux: Labortests mit dem gebündelten ExifTool und ffmpeg, Build,
 #   alle E2E-Skripte in der echten App – Pfade, Prozesse und Fenster verhalten sich je
-#   Betriebssystem anders.
+#   Betriebssystem anders – und die gepackte App (electron-builder --dir, e2e/paket.mjs).
 # Push nur auf main: Arbeits-Branches laufen über ihren Pull Request, sonst liefe alles doppelt.
 on:
   push:
@@ -89,3 +89,16 @@ jobs:
       - name: E2E
         if: runner.os != 'Linux'
         run: node e2e/run.mjs
+      # Paket probeweise (entpackt, ohne Installer) und die gepackte App starten: Fehler in asar,
+      # asarUnpack (sharp, better-sqlite3) und extraResources (ExifTool, ffmpeg) zeigen sich erst
+      # im Paket. electron-builder kommt gepinnt über npx (wie npm run package).
+      - name: Paket (entpackt)
+        run: npx --yes electron-builder@26.17.0 --dir --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Gepackte App (virtuelles Display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node e2e/run.mjs paket
+      - name: Gepackte App
+        if: runner.os != 'Linux'
+        run: node e2e/run.mjs paket

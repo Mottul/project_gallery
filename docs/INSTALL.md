@@ -3,9 +3,16 @@
 Galeria Beata kommt als **eine Datei**: `Galeria-Beata-<Version>-setup.exe`. Doppelklick genügt –
 ohne Administratorrechte, ohne Fragen, ohne Downloads beim ersten Start.
 
-> **Stand:** Es gibt noch keinen Installer. Er entsteht am Ende von Phase 0 (Plan:
-> [PLAN.md, „Installation und Auslieferung“](PLAN.md#installation-und-auslieferung)); dann folgt
-> hier die Anleitung mit Bildern.
+> **Stand:** Der Installer entsteht seit Phase 0 (`npm run package` bzw. GitHub Actions →
+> „Installer bauen“ → Artifacts), enthält aber noch eine leere Galerie. Die erste nutzbare Version
+> kommt mit Phase 1; dann folgt hier die Anleitung mit Bildern
+> ([PLAN.md, „Installation und Auslieferung“](PLAN.md#installation-und-auslieferung)).
+
+- **Installieren:** Doppelklick auf `Galeria-Beata-<Version>-setup.exe` – ohne Fragen und ohne
+  Administratorrechte. Die App landet unter `%LOCALAPPDATA%\Programs\`, mit Verknüpfung im
+  Startmenü und auf dem Desktop, und startet danach.
+- **Deinstallieren:** Windows-Einstellungen → Apps → Galeria Beata. Die Einstellungen
+  (`%APPDATA%\Galeria Beata`) bleiben für eine spätere Neuinstallation erhalten.
 
 ## Was beim ersten Installieren passiert
 

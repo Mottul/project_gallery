@@ -36,9 +36,16 @@ function aufraeumen(dir) {
  * Startet die App. `env` ergänzt die Umgebung, `args` kommt vor dem Projektordner.
  * `userData`: vorhandenen Ordner weiterverwenden (Neustart nachstellen) – der Aufrufer räumt ihn
  * dann selbst auf. `settings`: Inhalt der settings.json eines frischen Ordners.
+ * `executablePath`: die gepackte App (`e2e/paket.mjs`) statt Electron mit dem Projektordner.
  * Liefert { app, page, errors, userData, close } – `page` ist das Hauptfenster.
  */
-export async function launchApp({ env = {}, args = [], userData: given, settings } = {}) {
+export async function launchApp({
+  env = {},
+  args = [],
+  userData: given,
+  settings,
+  executablePath
+} = {}) {
   let userData = given
   if (!userData) {
     userData = mkdtempSync(join(tmpdir(), 'galeria-e2e-'))
@@ -51,8 +58,9 @@ export async function launchApp({ env = {}, args = [], userData: given, settings
   // Linux (Container/CI): ohne Chromium-Sandbox und mit virtuellem Display (xvfb-run).
   const sandbox = process.platform === 'linux' ? ['--no-sandbox'] : []
   const app = await electron.launch({
-    executablePath: require('electron'),
-    args: [...sandbox, `--user-data-dir=${userData}`, ...args, root],
+    // Die gepackte App lädt ihr app.asar selbst – ohne Projektordner als Argument
+    executablePath: executablePath ?? require('electron'),
+    args: [...sandbox, `--user-data-dir=${userData}`, ...args, ...(executablePath ? [] : [root])],
     env: full
   })
   // gleich hier holen: Hat sich die App schon selbst beendet, wirft app.process() in Playwright
