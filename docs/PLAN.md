@@ -290,6 +290,28 @@ kein `unsafe-eval`.
   Marken auf Vorschaubildern bleiben in beiden Modi dunkel-halbtransparent (Fotos sind hell und
   dunkel). Tokens und Kontraste: Bildschirm „Farben“ der [Vorschau](#vorschau-der-oberfläche).
 
+Werte aus den Entwürfen (Kontrast gegen `--bg`; Startpunkt für `assets/main.css`):
+
+| Token | Dunkel | Hell | Wofür |
+|---|---|---|---|
+| `--bg` | `#09090b` | `#fcfcfd` | Grund |
+| `--leiste` | `#111113` | `#f4f4f6` | Titelleiste, Seitenleisten |
+| `--karte` | `#18181b` | `#ffffff` | Felder, Karten |
+| `--gedaempft` | `#27272a` | `#e9e9ee` | gewählt, Chips |
+| `--rand` / `--rand-stark` | `#2a2a2e` / `#3f3f46` | `#dcdce3` / `#c4c4cc` | Linien |
+| `--text` | `#fafafa` (19 : 1) | `#1b1b22` (16,7 : 1) | Inhalte |
+| `--text2` | `#d4d4d8` (13,4 : 1) | `#3a3a44` (11 : 1) | Werte |
+| `--text3` | `#a1a1aa` (7,8 : 1) | `#5c5c66` (6,4 : 1) | Hinweise |
+| `--akzent` + `--auf-akzent` | `#4ade80` + `#052e16` (8,6 : 1) | gleich | Hauptknopf, Fläche |
+| `--akzent-linie` | `#4ade80` (11,4 : 1) | `#15803d` (4,9 : 1) | Links, Symbole, Auswahlrahmen |
+| `--ok` | `#2dd4bf` | `#0f766e` (5,3 : 1) | erledigt, geprüft |
+| `--gelb` | `#fbbf24` | `#b45309` (4,9 : 1) | Warnung, Sterne |
+| `--fehler` | `#fca5a5` | `#b91c1c` (6,3 : 1) | Konflikt, Fehler |
+| Betrachter `--buehne` | `#050506` | `#e4e4e9` | Hintergrund hinter dem Bild |
+
+Weitere Akzente: Himmelblau `#7dd3fc` (Linie hell `#0369a1`), Apricot `#fdba74` (`#c2410c`),
+Flieder `#c4b5fd` (`#6d28d9`), jeweils mit dunkler Schrift auf der Fläche.
+
 ### Metadaten bearbeiten
 
 Einzeln und für eine Auswahl: gemischte Werte zeigen „‹verschieden›“; geschrieben werden nur
