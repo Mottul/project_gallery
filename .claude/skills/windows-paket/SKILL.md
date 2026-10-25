@@ -21,7 +21,7 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
 - `extraResources`: `resources/exiftool/win` → `exiftool`, Ortsdaten → `geo`; Pfade zur Laufzeit
   über `process.resourcesPath` (gepackt) bzw. `resources/` (Entwicklung) – nur an einer Stelle
   (`exiftool/binPath.ts`).
-- `win.signAndEditExecutable: false`, solange keine Signatur da ist (Grund in der Mottulbox).
+- `win.signAndEditExecutable: false` – der Installer bleibt bewusst unsigniert (entschieden 25.10.2026; Grund für die Einstellung in der Mottulbox).
 - **Deinstallation:** Index und Cache (`%LOCALAPPDATA%\<App>`) enthalten Vorschaubilder privater
   Fotos und müssen weg. `deleteAppDataOnUninstall` greift nur bei One-Click und nur für den
   Benutzerdaten-Ordner – für den Cache-Ordner ein `include`-Skript (`build/installer.nsh`,

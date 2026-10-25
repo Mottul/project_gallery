@@ -2,8 +2,10 @@
 
 Arbeitstitel „Galerie“ (Name offen, siehe [Offene Fragen](#offene-fragen)). Stand 25. Oktober 2026,
 noch keine Zeile Code. Dieser Plan ist die Grundlage für die Umsetzung: vor jeder Phase lesen,
-offene Fragen klären, nach der Umsetzung Erledigtes in die Doku überführen.
+offene Fragen klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf
+dem Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
 
+- [Vorschau der Oberfläche](#vorschau-der-oberfläche)
 - [Ziele](#ziele)
 - [Leitplanken](#leitplanken)
 - [Entscheidungen](#entscheidungen)
@@ -18,13 +20,28 @@ offene Fragen klären, nach der Umsetzung Erledigtes in die Doku überführen.
 - [Offene Fragen](#offene-fragen)
 - [Skills](#skills)
 
+## Vorschau der Oberfläche
+
+Klickbare Entwürfe (privat, nur für den Nutzer freigegeben):
+<https://claude.ai/artifact/4Q4Exe9RKDCRAgU9MGPXrK>. Bilder darin sind synthetische Platzhalter,
+Farben und Schrift wie in der Mottulbox (dunkel, Gold-Akzent, Segoe UI).
+
+| Bildschirm | Zeigt |
+|---|---|
+| Galerie – Kacheln | Ordnerbaum mit Ordner-Modi („nur lesen“, „privat“), Größenregler, Sortieren mit Gruppen (Ort A–Z, Datum, Name natürlich, Kamera, Bewertung, Größe), Auswahl, Marken für Standort/Bewertung/bearbeitet, Statusleiste „Offline · verschlüsselt“ |
+| Galerie – Liste | Detailtabelle nach Ort (A–Z), wählbare Spalten, Auswahl per Kästchen |
+| Betrachter | Großansicht mit Filmstreifen, Zoom, verlustfreies Drehen, Schnellbewertung, Papierkorb, Info-Panel (Aufnahme mit Datumsquelle, Ort offline, Kamera, Histogramm, Beschreibung, Datei) |
+| Bildbearbeitung | Zuschnitt mit Seitenverhältnissen, Regler mit Live-Vorschau, Vorher/Nachher, Rezept, „Als Kopie speichern“ / „Original ersetzen“ |
+| Metadaten bearbeiten | Mehrfachauswahl mit ‹verschieden›, Stichwörter hinzufügen/entfernen, Bewertung, Farblabel, Standort entfernen, Schreiben nur geänderter Felder, Bericht mit Konflikt („inzwischen außerhalb geändert“) |
+| Stapelverarbeitung | Schritte, Aktionskette (Umbenennen, Zeit verschieben, Export mit Datenschutz-Profil), Vorschau mit Konflikten (Groß/Klein, Ziel existiert, Ordner nur lesen), Ausführen erst ohne Konflikte, Bericht, Rückgängig |
+
 ## Ziele
 
 Aus der Anfrage:
 
 1. **Windows-Desktop-App** zum Betrachten und Bearbeiten von Bildern.
 2. **Ordner angeben**, deren Bilder in der Galerie erscheinen (Bibliotheksordner, rekursiv).
-3. **Sortieren** nach Aufnahme-/Erstelldatum, GPS, Name und weiteren Metadaten (Kamera, Objektiv,
+3. **Sortieren** nach Aufnahme-/Erstelldatum, GPS (Orte alphabetisch), Name und weiteren Metadaten (Kamera, Objektiv,
    Bewertung, Größe …).
 4. **Anzeigegröße einstellbar:** Kacheln (stufenlos), Liste, weitere Ansichten.
 5. **Metadaten bearbeiten** (einzeln und für viele Bilder auf einmal).
@@ -198,9 +215,12 @@ CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `connect-src 'self'`, 
   Änderungsdatum. Die Quelle wird gespeichert und im Info-Panel genannt („Datum aus Datei, nicht
   aus der Kamera“).
 - **Name** natürlich sortiert („Bild 2“ vor „Bild 10“), ohne Groß/Klein, Umlaute richtig.
-- **GPS:** (a) nach Entfernung zu einem Bezugspunkt (gewähltes Bild oder Ort aus der Liste),
-  (b) gruppiert nach Ort (offline: nächster Ort aus GeoNames-Daten im Paket), (c) Filter
-  „mit/ohne Standort“; Karte offline in Phase 7.
+- **GPS = Orte alphabetisch (entschieden):** sortiert und gruppiert nach Ortsname A–Z, das Land
+  als Zusatz („Dubrovnik · Kroatien“); innerhalb eines Ortes nach Aufnahmedatum. Der Ortsname
+  kommt aus dem Ort-Feld der Metadaten (MWG `City`), sonst offline aus den GPS-Koordinaten
+  (nächster Ort aus GeoNames-Daten im Paket). Gleichnamige Orte in verschiedenen Ländern bleiben
+  getrennte Gruppen. Bilder **ohne Standort stehen immer am Ende**, auch absteigend. Dazu Filter
+  „mit/ohne Standort“. Entfernung zu einem Bezugspunkt und Karte erst bei Bedarf (Phase 7).
 - **Weitere:** Kamera, Objektiv, ISO, Blende, Belichtungszeit, Brennweite, Bewertung, Farblabel,
   Auflösung, Seitenverhältnis, Dateigröße, Typ, Ordner, Änderungsdatum.
 - **Filterleiste:** Zeitraum, Bewertung ≥, Farblabel, Kamera, Stichwort, Ort, Format,
@@ -287,9 +307,8 @@ Checkliste: Skill [`bildschutz`](../.claude/skills/bildschutz/SKILL.md).
 | **E** | **Weitergeben ohne Spuren** | Export standardmäßig **ohne Standort**, wahlweise ohne Seriennummern/Besitzer oder ohne alle Metadaten; „Was steckt drin?“-Bericht vor dem Export | Labortest: exportierte Datei enthält keine GPS-Tags |
 | **F** | **Lieferkette und Programm** | Wenige Laufzeit-Abhängigkeiten, exakt gepinnt, 7 Tage Abstand, `ignore-scripts`, Lockfile mit Integrity; ExifTool/Electron mit Prüfsumme; Fehlergrenzen, Wiederherstellung defekter DB/Einstellungen; Bilddienst als eigener Prozess | CI: `npm audit --omit=dev` ohne Befund, Prüfsummen in den Skripten |
 
-**Optional (Entscheidung offen):** App-Sperre mit PIN, verschlüsselte Index-Datenbank
-(SQLCipher-Variante – nur, wenn sie ohne Install-Skript und Compiler auskommt), „Tresor“-Ordner
-mit verschlüsselten Originalen. Siehe [Offene Fragen](#offene-fragen).
+**Entschieden (25. Oktober 2026):** Die Schichten A–F reichen. App-Sperre, verschlüsselte
+Index-Datenbank und verschlüsselter „Tresor“-Ordner sind nicht vorgesehen.
 
 ## Installation und Auslieferung
 
@@ -299,8 +318,9 @@ mit verschlüsselten Originalen. Siehe [Offene Fragen](#offene-fragen).
   **nichts** geladen; keine Laufzeitumgebung nötig (Electron bringt Chromium mit).
 - **Portable Variante** (`Galerie-<Version>-portable.exe`, Phase 7): ohne Installation, z. B.
   vom USB-Stick; Daten wahlweise neben der Datei.
-- **Ohne Code-Signatur** meldet SmartScreen „Unbekannter Herausgeber“ (*Weitere Informationen →
-  Trotzdem ausführen*). Das ist die größte Hürde für „so einfach wie möglich“ → [Offene Fragen](#offene-fragen).
+- **Bewusst unsigniert (entschieden):** SmartScreen meldet „Unbekannter Herausgeber“
+  (*Weitere Informationen → Trotzdem ausführen*). `docs/INSTALL.md` zeigt den Weg mit Bildern, wie
+  bei der Mottulbox.
 - **Updates:** offline gedacht → neue Version = neuen Installer ausführen, Bibliothek und
   Einstellungen bleiben. Kein automatisches Nachladen.
 - **Deinstallation** entfernt Programm **und** Cache/Index (enthält Vorschaubilder); Einstellungen
@@ -349,11 +369,13 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 ### Phase 2 – Metadaten lesen, Filtern, Suchen
 
 - Vollständiges Lesen per ExifTool, Info-Panel, „alle Felder“.
-- Sortieren nach allen Feldern inkl. GPS-Entfernung; Gruppieren (Tag/Monat/Jahr, Ordner,
-  Kamera, Ort); Blocksatz-Ansicht.
+- Offline-Ortsnamen (GeoNames, Lizenz CC BY 4.0 – Hinweis in „Über“) und **Sortieren nach Ort
+  (A–Z)** mit Gruppen.
+- Sortieren nach allen weiteren Feldern; Gruppieren (Tag/Monat/Jahr, Ordner, Kamera, Ort);
+  Blocksatz-Ansicht.
 - Filterleiste, gespeicherte Ansichten, Volltextsuche.
-- Offline-Ortsnamen (GeoNames, Lizenz CC BY 4.0 – Hinweis in „Über“).
-- **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet).
+- **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet, „Ohne
+  Standort“ am Ende in beiden Richtungen).
 
 ### Phase 3 – Metadaten bearbeiten
 
@@ -368,7 +390,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 
 - Assistent, alle Aktionen der Tabelle außer „Bearbeitung übertragen“, Rezepte speichern.
 - Zweistufiges Umbenennen (Tausch A↔B, nur Groß/Klein), Rückgängig über das Journal.
-- Export mit Datenschutz-Vorgaben (Schicht E).
+- Export mit Datenschutz-Profilen (Schicht E: ohne Standort ab Werk, ohne Seriennummern/Besitzer,
+  ohne alle Metadaten) und „Was steckt drin?“-Bericht vor dem Export.
 - **Abnahme:** E2E `stapel` (Vorschau = Ergebnis, Konflikte blockieren, Abbrechen hinterlässt
   keine halben Dateien, Rückgängig).
 
@@ -379,17 +402,24 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - **Abnahme:** Labortest Vorschau ↔ Ergebnis (PSNR-Grenze), E2E `editor`.
 - **Version 1.0** nach Phase 5.
 
-### Phase 6 – Privatsphäre-Ausbau
+### Phase 6 – HEIC und RAW (fest eingeplant)
 
-- „Was steckt drin?“-Bericht, Export-Profile, Seriennummern entfernen.
-- Je nach Antwort auf die offenen Fragen: App-Sperre, verschlüsselter Index, Tresor-Ordner.
+- **HEIC** (iPhone): Dekoder im Labor vergleichen – libheif als WebAssembly im Bilddienst oder ein
+  gebündeltes ffmpeg (wie in der Mottulbox); Kriterien: Lizenz, Paketgröße, Geschwindigkeit,
+  Bild-Raster (iPhone-HEIC besteht aus Kacheln), Farbprofil, EXIF-Ausrichtung. Vorschaubilder und
+  Betrachter über `bild://` als Umrechnung; Metadaten schreibt ExifTool direkt in die HEIC-Datei.
+- **RAW** (CR2/CR3, NEF, ARW, RAF, DNG …): Anzeige über das eingebettete Vorschau-JPEG
+  (ExifTool `PreviewImage`/`JpgFromRaw`), keine RAW-Entwicklung; Metadaten nur als XMP-Sidecar
+  (Original bleibt unberührt); Export aus dem Vorschau-JPEG mit Hinweis auf die Auflösung.
+- Testdateien: synthetisch erzeugbare HEIC; für RAW kleine, frei lizenzierte Musterdateien je
+  Hersteller (Herkunft und Lizenz dokumentieren) – keine eigenen Fotos.
+- **Abnahme:** Formatmatrix im Labor, E2E `galerie` mit HEIC- und RAW-Testdateien.
 
 ### Phase 7 – Erweiterungen nach Bedarf
 
-HEIC (libheif als WebAssembly oder das ffmpeg der Mottulbox – im Labor vergleichen), RAW-Vorschau
-(eingebettetes JPEG per ExifTool), Karte offline (Natural-Earth-Grundkarte), Duplikate (exakt per
-Hash, ähnlich per Wahrnehmungs-Hash), GPX-Zuordnung, Vergleichsansicht, Dateizuordnung,
-portable Variante, Videos (nur anzeigen).
+Sortieren nach Entfernung zu einem Ort, Karte offline (Natural-Earth-Grundkarte), Duplikate
+(exakt per Hash, ähnlich per Wahrnehmungs-Hash), GPX-Zuordnung, Vergleichsansicht,
+Dateizuordnung, portable Variante, Videos (nur anzeigen).
 
 ## Tests und Qualität
 
@@ -411,32 +441,33 @@ portable Variante, Videos (nur anzeigen).
 | Dekoder-Absturz an präparierten Dateien | Bilddienst als eigener Prozess, Zeitlimit je Datei, Datei als „defekt“ markieren |
 | `fs.watch` verpasst Änderungen (Netzlaufwerk, Überlauf) | Abgleich beim Start, bei Fokus und periodisch; Überlauf → Ordner neu abgleichen |
 | Metadaten erscheinen in anderen Programmen nicht | Feld-Zuordnung im Labor gegen Explorer/digiKam/Lightroom prüfen, MWG-Regeln |
-| SmartScreen schreckt ab | Code-Signatur prüfen (offene Frage), INSTALL.md mit Bildern |
+| SmartScreen schreckt ab (unsigniert, entschieden) | INSTALL.md mit Bildern; Installer-Name und Herausgeber-Angaben eindeutig |
 | Große Bibliotheken (> 100.000) | Kennungslisten statt Objekte über IPC, Indizes, virtualisiertes Raster; Messung mit 100.000 synthetischen Bildern |
 | Zeitzonen beim Aufnahmedatum | Datum „lokal wie in der Kamera“ speichern, Versatz getrennt; Zeitverschiebung als eigene Stapel-Aktion |
 
 ## Offene Fragen
 
-Vor Phase 1 klären (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
+**Entschieden (25. Oktober 2026):**
 
-1. **Was heißt „gut geschützt“ für dich?** Reichen die Schichten A–F, oder brauchst du zusätzlich
-   App-Sperre (PIN), verschlüsselten Index oder einen verschlüsselten Tresor-Ordner?
-   (Annahme: A–F, Rest optional in Phase 6.)
-2. **„Sortieren nach GPS“** – Entfernung zu einem Ort, nach Orten gruppiert oder eine Karte?
-   (Annahme: Entfernung + Gruppen ab Phase 2, Karte Phase 7.)
-3. **HEIC (iPhone) und RAW** nötig? Welche Kameras/Handys? (Annahme: Phase 7.)
-4. **Videos** in der Galerie anzeigen? (Annahme: nein, später nur anzeigen.)
-5. **Größe der Bibliothek** und Ablage: wie viele Bilder, lokal, USB, NAS? (Annahme: bis 100.000,
+- **Schutz:** die Schichten A–F; keine App-Sperre, kein verschlüsselter Index, kein Tresor.
+- **„Sortieren nach GPS“** heißt: Orte alphabetisch (A–Z), gruppiert, ohne Standort am Ende.
+- **HEIC und RAW** werden gebraucht, aber später: eigene Phase 6 nach Version 1.0.
+- **Code-Signatur:** keine, der Installer bleibt unsigniert.
+- **Umsetzung** lokal auf dem PC des Nutzers.
+
+**Noch offen** (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
+
+1. **Videos** in der Galerie anzeigen? (Annahme: nein, später nur anzeigen.)
+2. **Größe der Bibliothek** und Ablage: wie viele Bilder, lokal, USB, NAS? (Annahme: bis 100.000,
    lokal und USB, NAS mit Einschränkungen.)
-6. **Code-Signatur** (jährliche Kosten) für eine Installation ohne SmartScreen-Warnung?
-   (Annahme: vorerst unsigniert wie die Mottulbox.)
-7. **Metadaten in die Bilddatei schreiben** (Standard) oder lieber nur XMP-Sidecars bzw. nur in
+3. **Metadaten in die Bilddatei schreiben** (Standard) oder lieber nur XMP-Sidecars bzw. nur in
    der App? (Annahme: in die Datei, Sidecar für RAW und schreibgeschützte Dateien.)
-8. **Updates:** ganz ohne Netz (manuell) oder ein Knopf „Nach Updates suchen“, der als einzige
+4. **Updates:** ganz ohne Netz (manuell) oder ein Knopf „Nach Updates suchen“, der als einzige
    Funktion online geht und ab Werk aus ist? (Annahme: ganz ohne Netz.)
-9. **Name der App** und Logo. (Annahme: Arbeitstitel „Galerie“.)
-10. **Eigenständige App** (Annahme) oder Werkzeug in der Mottulbox?
-11. Nur **Windows** oder auch macOS/Linux als Paket? (Annahme: nur Windows; Linux nur in der CI.)
+5. **Name der App** und Logo. (Annahme: Arbeitstitel „Galerie“.)
+6. **Eigenständige App** (Annahme) oder Werkzeug in der Mottulbox?
+7. Nur **Windows** oder auch macOS/Linux als Paket? (Annahme: nur Windows; Linux nur in der CI.)
+8. **RAW-Formate:** Welche Kameras bzw. Endungen konkret? (Annahme: CR2/CR3, NEF, ARW, RAF, DNG.)
 
 ## Skills
 

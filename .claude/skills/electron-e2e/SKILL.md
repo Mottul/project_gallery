@@ -20,7 +20,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `netz.mjs` | lokaler Spion-Server: kein einziger Zugriff während Scan, Ansicht, Export – auch mit Testbildern, die Fremd-URLs enthalten (SVG, XMP) |
 | `originale.mjs` | Prüfsummen aller Testbilder vor/nach den Schritten; nur ausdrücklich geänderte Dateien weichen ab; keine Fremddateien (`_original`, Temp) im Bibliotheksordner |
 | `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Liste, Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
-| `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, GPS-Entfernung, Kamera), fehlende Werte am Ende |
+| `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera), fehlende Werte am Ende – „Ohne Standort“ auch absteigend |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |

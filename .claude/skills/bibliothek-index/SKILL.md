@@ -57,6 +57,10 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 - GPS als Dezimalgrad mit Vorzeichen (Ref beachten); `0,0` ohne weitere GPS-Tags gilt als „kein
   Standort“. Nächster Ort über die Ortsdaten im Paket (Gitter- oder k-d-Suche), `place_id` im
   Index – neu rechnen, wenn sich die Ortsdaten-Version ändert.
+- **Ortsname für die Sortierung** (entschieden: „nach GPS“ = Orte alphabetisch): Ort-Feld der
+  Metadaten (MWG `City`), sonst der nächste Ort aus den GPS-Koordinaten; Land als Zusatz. Den
+  Sortierschlüssel (`place_sort`: gefaltet wie `name_sort`, dann Land) beim Einfügen rechnen.
+  Gleichnamige Orte in verschiedenen Ländern sind getrennte Gruppen.
 
 ## Abfragen
 
@@ -68,8 +72,10 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 - Fehlende Werte (kein Datum, kein GPS) stehen **immer am Ende**, unabhängig von der Richtung.
 - Natürliche Namenssortierung: Sortierschlüssel beim Einfügen berechnen (`name_sort`, Zahlen
   aufgefüllt, Groß/Klein und Umlaute gefaltet), nicht per eigener SQL-Funktion zur Laufzeit.
-- GPS-Entfernung: Vorfilter per Begrenzungsrahmen in SQL, genaue Entfernung (Haversine) in
-  `geo.ts`; Ergebnis cachen, solange der Bezugspunkt gleich bleibt.
+- **Ort (A–Z):** `ORDER BY place_sort, taken_at, id`, gruppiert nach Ort; ohne Standort als
+  letzte Gruppe „Ohne Standort“ – auch absteigend (dann nur die Orte umgekehrt).
+- Entfernung zu einem Bezugspunkt (erst Phase 7): Vorfilter per Begrenzungsrahmen in SQL, genaue
+  Entfernung (Haversine) in `geo.ts`; Ergebnis cachen, solange der Bezugspunkt gleich bleibt.
 - Für das Raster: geordnete **Liste der Kennungen** (+ Gruppen-Grenzen) einmal je Abfrage,
   Details nur für den sichtbaren Ausschnitt. Nie 100.000 Objekte über IPC.
 - Neue Sortierspalte = Index in der Migration (mit `folder_id`, wenn nach Ordner gefiltert wird);
@@ -94,7 +100,8 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 ## Tests
 
 - Rein: Datum-Rangfolge und ungültige Daten, natürliche Sortierung, Abfrage-Bausteine (Allowlist,
-  NULL ans Ende, eindeutiger Schluss), GPS-Entfernung und nächster Ort.
+  NULL ans Ende, eindeutiger Schluss), Ortsname (Metadaten vor GPS, gleichnamige Orte, Umlaute)
+  und nächster Ort.
 - DB (vitest mit echter better-sqlite3 im Temp-Ordner): Migrationen, Abgleich (geändert, fehlt,
   nicht erreichbar), Stapel-Transaktionen, `EXPLAIN QUERY PLAN`.
 - E2E `galerie`/`sortieren`: Testbibliothek mit bekannter Reihenfolge, Datei von außen ändern
