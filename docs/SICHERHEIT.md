@@ -25,9 +25,17 @@ Verhalten macht den E2E-Schritt rot.
 
 - **`package-lock.json` ist eingecheckt** (sha512-Integrity je Paket). Die Versionen stammen aus
   dem Lockfile der Mottulbox (dort schon geprüft), Abweichungen unten.
-- **Keine Laufzeit-Abhängigkeit** bisher: Alles in `devDependencies` ist Werkzeug oder wird von
-  Vite in den Renderer gebaut. Kommen sharp und better-sqlite3 dazu (Labor, Phase 1), stehen sie
-  hier mit Grund.
+- **Laufzeit-Abhängigkeiten** (alles andere ist Werkzeug oder wird von Vite in den Renderer gebaut):
+
+  | Paket | Version | Grund |
+  |---|---|---|
+  | `sharp` | 0.35.5 (27.09.2026) | Bilder dekodieren, Vorschaubilder, Export (libvips, Plan „Entscheidungen“); kein Install-Skript, fertige Binaries als `@img/sharp-<plattform>`; Lizenz Apache-2.0, libvips LGPL-3.0 |
+
+  better-sqlite3 kommt mit dem Index (Phase 1) dazu.
+- **Gebündelte Programme fest gepinnt:** ExifTool und ffmpeg mit Version und SHA-256 im
+  Download-Skript (`scripts/download-exiftool.mjs`, `scripts/download-ffmpeg.mjs`); geprüft wird
+  vor dem Auspacken, eine veränderte Quelle kann so nichts unterschieben. Die Pins sind älter als
+  7 Tage.
 - **`.npmrc`:** `ignore-scripts=true` (keine Install-Skripte), `save-exact=true`,
   `engine-strict=true`.
 - **7 Tage Abstand** für jede neue Version (Skill `abhaengigkeiten`, Dependabot mit `cooldown`).

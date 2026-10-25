@@ -470,11 +470,26 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - ✅ Netzsperre (Schicht A) und Fenster-Härtung (C) von Anfang an, mit E2E `netz` und `security`.
   Strenger als die Mottulbox: Wächter geben nichts an den Browser weiter, `file:` nur im Ordner der
   App-Seite, IPC prüft den Absender, CSP im Build ohne Inline-Skripte, eine Instanz je Benutzer.
-- `scripts/download-exiftool.mjs` (`npm run exiftool:fetch`; offizielle Quelle, Version und
-  SHA-256 fest im Skript), `scripts/download-ffmpeg.mjs` (aus der Mottulbox) und
-  `scripts/testbilder.mjs` (synthetische Testbibliothek mit Bildern und kurzen Videos, nie echte
-  Fotos).
-- **Labor** (Skill `bild-labor`), Ergebnisse in diesen Plan:
+- ✅ `scripts/download-exiftool.mjs` (`npm run exiftool:fetch`; ExifTool 13.59 aus der
+  offiziellen Quelle, Version und SHA-256 fest im Skript), `scripts/download-ffmpeg.mjs`
+  (`npm run ffmpeg:fetch`; statt „latest“ wie in der Mottulbox ein fest gepinnter Monats-Build,
+  n9.0.2 LGPL) und `scripts/testbilder.mjs` (synthetische Testbibliothek mit Bildern, kaputten
+  Dateien und kurzen Videos samt `testbilder.json`, nie echte Fotos; Labortest prüft sie nach).
+  sharp 0.35.5 ist als erste Laufzeit-Abhängigkeit dazugekommen.
+- **Labor-Befunde bisher** (Windows 11, i7-8750H; sharp 0.35.5, ExifTool 13.59, ffmpeg n9.0.2):
+  - ffmpeg statisch: `ffmpeg.exe` und `ffprobe.exe` je 134 MB (zusammen 257 MB). Als „shared“-Build
+    teilen sie sich die DLLs: 150 MB, gleiche Dekoder (H.264, HEVC, AV1/dav1d, VP9, ProRes) →
+    **entschieden: shared für Windows**.
+  - **sharp hält gelesene Dateien offen** (libvips-Datei-Cache): Unter Windows ließ sich danach der
+    Ordner nicht löschen. Bilddienst muss `sharp.cache({ files: 0 })` setzen, sonst blockiert die
+    Galerie Umbenennen/Löschen von Bildern, die gerade angesehen wurden.
+  - **ExifTool erkennt kaputte Bilder nicht zuverlässig:** Ein abgeschnittenes JPEG liest es ohne
+    Fehler (nur der Kopf zählt); den Typ bestimmt es aus dem Inhalt (Text mit `.png` = `TXT`).
+    „Defekt“ entscheidet der Bilddienst mit sharp (`failOn: 'truncated'`), nicht der Scan per ExifTool.
+  - HEVC-Testvideos lassen sich nur mit einem Encoder des Rechners erzeugen (Media Foundation);
+    auf dem Entwickler-Laptop fehlt er – HEVC-Abspielen wird mit einer fremden Testdatei geprüft (Phase 6).
+  - Testbibliothek (31 Bilder, 5 Videos, 4 defekte Dateien): 3,8 s.
+- **Labor** (Skill `bild-labor`), offen:
   - sharp im Electron-Bilddienst: Vorschaubilder je Sekunde (24-MP-JPEG; Entwickler-Laptop
     i7-8750H mit 6 Kernen/12 Threads und 16 GB, zusätzlich mit `concurrency` 4 für 4-Kern-Rechner),
     Spitzenspeicher, `concurrency`, sehr große Bilder (Panorama > 100 MP), kaputte Dateien.
@@ -482,8 +497,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
     (`-charset filename=utf8`), Pfade > 260 Zeichen, Netzlaufwerk.
   - Formatmatrix (was dekodiert sharp, was zeigt/spielt Chromium – auch HEVC –, was schreibt
     ExifTool).
-  - Paket: `asarUnpack` für sharp/`@img`, ExifTool und ffmpeg über `extraResources`, Größe des
-    Installers (LGPL- statt GPL-Build von ffmpeg).
+  - Paket: `asarUnpack` für sharp/`@img`, ExifTool (35 MB) und ffmpeg (150 MB) über
+    `extraResources`, Größe des Installers.
   - better-sqlite3: 50.000 Zeilen in Stapeln einfügen – wie lange blockiert main je Stapel?
 - **Abnahme:** leere App installiert und startet offline in der Windows-Sandbox; E2E grün auf
   Windows und Linux; Messwerte stehen hier.

@@ -26,6 +26,7 @@ const ALIAS = [
 /** Gibt es nur zur Laufzeit, im Build oder in einem Paket – nicht im Repository */
 const ELSEWHERE = new Set([
   'settings.json', // userData
+  'testbilder.json', // erzeugte Testbibliothek (scripts/testbilder.mjs)
   'install.js' // node_modules/electron
 ])
 
