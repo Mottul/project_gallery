@@ -64,6 +64,10 @@ if (Test-Path $log) {
   $abgewiesen = Select-String -LiteralPath $log -Pattern '\[netzsperre\] abgewiesen' -SimpleMatch:$false
   Pruefe 'Netzsperre musste nichts abweisen (keine Anfrage nach außen)' ($abgewiesen.Count -eq 0) "$($abgewiesen.Line -join '; ')"
 }
+# Index lokal (nicht im Roaming-Profil) – Phase 1.1
+$lokal = Join-Path $env:LOCALAPPDATA 'Galeria Beata'
+Pruefe 'Index im lokalen Datenordner angelegt' (Test-Path (Join-Path $lokal 'index\galerie.db'))
+Pruefe 'kein Index im Roaming-Profil' (-not (Test-Path (Join-Path $env:APPDATA 'Galeria Beata\index')))
 Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
@@ -74,8 +78,15 @@ Start-Sleep -Seconds 3
 Pruefe 'Deinstallation ohne Fehler' ($u.ExitCode -eq 0) "(Code $($u.ExitCode))"
 Pruefe 'Programmordner entfernt' (-not (Test-Path $exe.DirectoryName))
 Pruefe 'Desktop-Verknüpfung entfernt' (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Galeria Beata.lnk')))
+Pruefe 'Index und Cache entfernt (keine Reste in %LOCALAPPDATA%)' (-not (Test-Path $lokal))
 Zeile "INFO    Einstellungen bleiben (gewollt): $(Test-Path (Join-Path $env:APPDATA 'Galeria Beata'))"
 
 Zeile ''
 Zeile ($(if ($fehler -eq 0) { 'ERGEBNIS: bestanden' } else { "ERGEBNIS: $fehler Fehler" }))
 Set-Content -LiteralPath (Join-Path $ergebnis 'fertig.txt') -Value $fehler
+
+# Sandbox selbst schließen: Bericht und Bildschirmfoto liegen schon auf dem Rechner (gemappter
+# Ordner). Eine offen gebliebene Sandbox ließe die nächste Abnahme nicht starten – es läuft immer
+# nur eine – und hielte die gemappten Ordner gesperrt.
+Start-Sleep -Seconds 3
+Stop-Computer -Force

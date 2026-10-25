@@ -9,7 +9,7 @@
 // Installer gebaut (npm run package).
 // Aufruf: npm run abnahme:sandbox   (= node scripts/sandbox-abnahme.mjs --starten)
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -28,13 +28,19 @@ const SANDBOX = 'C:\\Windows\\System32\\WindowsSandbox.exe'
 
 const xml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+/** Läuft schon eine Windows-Sandbox (Fenster oder Dienst)? */
+function sandboxLaeuft() {
+  const r = spawnSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8' })
+  return /"WindowsSandbox(RemoteSession|Server|Client)?\.exe"/i.test(r.stdout ?? '')
+}
+
 /** Neuester Installer in dist/ oder einem Unterordner davon; null, wenn keiner da ist. */
 function neuesterInstaller() {
   if (!existsSync(DIST)) return null
   const ordner = [
     DIST,
     ...readdirSync(DIST, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && e.name !== 'abnahme')
+      .filter((e) => e.isDirectory() && !e.name.startsWith('abnahme'))
       .map((e) => join(DIST, e.name))
   ]
   const kandidaten = ordner.flatMap((o) =>
@@ -50,9 +56,14 @@ function main() {
   if (process.platform !== 'win32') throw new Error('Die Windows-Sandbox gibt es nur unter Windows')
   const setup = neuesterInstaller()
   if (!setup) throw new Error('Kein Installer in dist/ – zuerst npm run package')
-  const ordner = join(DIST, 'abnahme')
+  let ordner = join(DIST, 'abnahme')
+  try {
+    rmSync(ordner, { recursive: true, force: true })
+  } catch {
+    // ein anderes Programm hält den alten Bericht offen (etwa ein Bildbetrachter): neuer Ordner
+    ordner = join(DIST, `abnahme-${Date.now()}`)
+  }
   const ergebnis = join(ordner, 'ergebnis')
-  rmSync(ordner, { recursive: true, force: true })
   mkdirSync(ergebnis, { recursive: true })
   const wsb = `<Configuration>
   <Networking>Disable</Networking>
@@ -76,7 +87,7 @@ function main() {
     </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Abnahme\\abnahme.ps1</Command>
+    <Command>cmd.exe /c "echo gestartet &gt; C:\\Ergebnis\\gestartet.txt &amp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Abnahme\\abnahme.ps1 &gt; C:\\Ergebnis\\powershell.txt 2&gt;&amp;1"</Command>
   </LogonCommand>
 </Configuration>
 `
@@ -93,20 +104,41 @@ function main() {
         'danach neu starten (docs/ENTWICKLUNG.md, „Voraussetzungen“).'
     )
   }
+  // Es läuft immer nur eine Sandbox: Ein neuer Start hängte sich sonst still an die offene an, und
+  // die Abnahme liefe nie (so geschehen am 25.10.2026)
+  if (sandboxLaeuft()) {
+    throw new Error(
+      'Es läuft schon eine Windows-Sandbox – bitte zuerst schließen, dann erneut starten.'
+    )
+  }
   spawn(SANDBOX, [datei], { detached: true, stdio: 'ignore' }).unref()
-  console.log('Sandbox startet – die Abnahme läuft dort von selbst (etwa 1–2 Minuten) …')
+  console.log('Sandbox startet – die Abnahme läuft dort von selbst und schließt sie danach …')
   const fertig = join(ergebnis, 'fertig.txt')
   const t0 = Date.now()
+  /** Was die Sandbox bisher geschrieben hat – zur Fehlersuche, wenn kein Bericht kommt. */
+  const spuren = () => {
+    for (const n of ['gestartet.txt', 'powershell.txt', 'abnahme.txt']) {
+      const p = join(ergebnis, n)
+      console.error(`--- ${n}: ${existsSync(p) ? '\n' + readFileSync(p, 'utf8') : '(fehlt)'}`)
+    }
+  }
   const warte = setInterval(() => {
+    const vergangen = Date.now() - t0
     if (existsSync(fertig)) {
       clearInterval(warte)
       console.log('\n' + readFileSync(join(ergebnis, 'abnahme.txt'), 'utf8'))
       console.log(`Bildschirmfoto: ${join(ergebnis, 'app.png')}`)
-      console.log('Die Sandbox kann jetzt geschlossen werden (alles darin wird verworfen).')
       process.exitCode = readFileSync(fertig, 'utf8').trim() === '0' ? 0 : 1
-    } else if (Date.now() - t0 > 10 * 60_000) {
+    } else if (vergangen > 4 * 60_000 && !existsSync(join(ergebnis, 'gestartet.txt'))) {
+      // Der Anmeldebefehl lief gar nicht (Sandbox hängt beim Start) – nicht 10 Minuten warten
       clearInterval(warte)
-      console.error('Kein Bericht nach 10 Minuten – in der Sandbox nachsehen (C:\\Ergebnis).')
+      console.error('Der Anmeldebefehl der Sandbox lief nach 4 Minuten noch nicht.')
+      spuren()
+      process.exitCode = 1
+    } else if (vergangen > 10 * 60_000) {
+      clearInterval(warte)
+      console.error('Kein Bericht nach 10 Minuten.')
+      spuren()
       process.exitCode = 1
     }
   }, 2000)

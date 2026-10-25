@@ -113,7 +113,7 @@ Drei Build-Ziele (electron-vite, CommonJS für main und preload):
 
 | Ordner | Was |
 |---|---|
-| `src/main/` | Lebenszyklus (`index.ts`), IPC-Handler (`ipc/`), Dienste (`services/`) |
+| `src/main/` | Lebenszyklus (`index.ts`), IPC-Handler (`ipc/`), Dienste (`services/`: `db.ts`, `library/`, `bilddienst/` …) |
 | `src/preload/` | die typisierte Brücke `window.api` (GalerieApi), sonst nichts |
 | `src/renderer/` | React-Oberfläche (`src/`), `index.html` mit der CSP |
 | `src/shared/` | rein und getestet: Typen, IPC-Vertrag, Einstellungen prüfen und zusammenführen |
@@ -138,6 +138,11 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   dem Plan), Tailwind-Namen in `tailwind.config.js`; Hell = Klasse `.light` am `<html>`. Das
   Design geht per `nativeTheme.themeSource` auch an Electron (Titelleiste, Dialoge).
 - **Kein Netz:** siehe [SICHERHEIT.md](SICHERHEIT.md) – Netzsperre, Lint-Regel, CSP.
+- **Bibliothek:** Index in SQLite (`services/db.ts`, Migrationen über `PRAGMA user_version`)
+  unter `%LOCALAPPDATA%\Galeria Beata\index`; nur main schreibt (`services/library/`). Alles, was
+  Nutzerordner liest, läuft im **Bilddienst** – einem eigenen Prozess (`utilityProcess`,
+  `services/bilddienst/`, Build-Einstieg bilddienst.js in out/main); er meldet Ergebnisse in
+  Stapeln, main schreibt je Stapel eine Transaktion. Skill `bibliothek-index`.
 
 ## Konventionen
 

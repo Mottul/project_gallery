@@ -8,7 +8,8 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 
 **Phase 0 abgeschlossen** (25.10.2026): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests,
 CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen, Installer und Abnahme in der
-Windows-Sandbox. **Als Nächstes Phase 1** (Bibliothek und Galerie). Grundlage ist
+Windows-Sandbox. **Phase 1 läuft** (Bibliothek und Galerie) in den Teilschritten 1.1–1.6 aus dem
+Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner) ist umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -65,6 +66,10 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   `windowGuards.ts` geben nichts an den Browser weiter.
 - **Einstellungen:** `services/store.ts` (atomar), Renderer `useSettings`/`updateSettings` aus
   `@renderer/lib/settings`; localStorage nur als Boot-Spiegel.
+- **Bibliothek:** Index `services/db.ts` (SQLite, Migrationen) im lokalen Datenordner
+  (`lokaleDaten.ts`, `%LOCALAPPDATA%`), nur main schreibt (`services/library/`); Nutzerordner liest
+  nur der **Bilddienst** (eigener Prozess, `services/bilddienst/`). Der Renderer schickt Kennungen,
+  nie Pfade; Ordner kommen aus dem Dialog des main. Skill `bibliothek-index`.
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
   Hell = `.light` am `<html>`, Standard „wie Windows“.
 

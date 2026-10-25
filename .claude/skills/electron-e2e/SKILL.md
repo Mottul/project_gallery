@@ -45,14 +45,22 @@ try {
 
 ## Galeria-Beata-spezifisch
 
-- **Testbibliothek je Lauf** frisch aus `scripts/testbilder.mjs` in einen Temp-Ordner – nie
-  echte Fotos, nie ein Ordner des Entwicklers. Inhalt (Namen, Daten, GPS, Ausrichtungen) ist
-  bekannt, also Reihenfolgen und Werte **exakt** erwarten.
-- **Cache und Index** liegen im frischen Benutzerordner des Laufs; der Harness leitet
-  `%LOCALAPPDATA%`-Pfade dorthin um (Einstellung oder Umgebungsvariable), sonst landen
-  Testdaten im echten Profil.
-- **Ordner-Dialog** per `app.evaluate` ersetzen (`dialog.showOpenDialog` → fester Pfad); die
-  Optionen stehen im letzten Argument (davor ggf. das Fenster).
+- **Testbibliothek je Lauf** frisch aus `scripts/testbilder.mjs` in einen Temp-Ordner –
+  `testbibliothek()` im Harness (liefert `dir`, `manifest`, `aufraeumen`); nie echte Fotos, nie
+  ein Ordner des Entwicklers. Inhalt (Namen, Daten, GPS, Ausrichtungen) ist bekannt, also
+  Reihenfolgen und Werte **exakt** erwarten; `erwarteteBilder(manifest)` = Dateien, die in die
+  Galerie gehören. Braucht das gebündelte ExifTool und ffmpeg.
+- **Cache und Index** liegen im frischen Benutzerordner des Laufs: Der Harness setzt
+  `LOCALAPPDATA` auf `<userData>/lokal`, sonst landen Testdaten im echten Profil. Für einen
+  Neustart denselben `userData` an `launchApp` geben und selbst aufräumen (Muster `galerie.mjs`).
+- **Ordner-Dialog** per `stubOrdnerDialog(app, pfad)` ersetzen (`null` = Abbrechen); die
+  Optionen des letzten Aufrufs stehen in `globalThis.__ordnerDialog`.
+- **Sichtbar heißt nicht „Rahmen im Fenster“:** Ein Aufklappmenü kann im Fenster liegen und
+  trotzdem vom `overflow` eines Containers abgeschnitten sein. Prüfen mit
+  `document.elementFromPoint` an den Ecken (liegt dort das Element selbst obenauf?) – Muster im
+  Modus-Schritt von `e2e/galerie.mjs`; gefunden per Bildschirmfoto in 1.1, nicht per Test.
+- **Zustand über die Brücke abfragen** (`window.api.library.state()`) und mit `waitFor` auf
+  „fertig eingelesen“ warten (`status === 'bereit'` und `lastScan`), nie feste Pausen.
 - **Bilder prüfen:** Ob ein Vorschaubild erscheint, an `naturalWidth > 0` des `<img>` erkennen,
   nicht an der Existenz des Elements; Pixel per Canvas `getImageData` (Farbe des Testmotivs).
 - **Watcher:** nach einer Änderung von außen mit `waitFor` auf das Ergebnis warten (Debounce),

@@ -51,7 +51,9 @@ export async function launchApp({
     userData = mkdtempSync(join(tmpdir(), 'galeria-e2e-'))
     if (settings) writeFileSync(join(userData, 'settings.json'), JSON.stringify(settings))
   }
-  const full = { ...process.env, ...env }
+  // Index und (ab 1.3) Vorschaubilder liegen unter %LOCALAPPDATA% – für den Lauf in den
+  // Testordner umleiten, sonst landeten Testdaten im echten Profil (Skill electron-e2e)
+  const full = { ...process.env, LOCALAPPDATA: join(userData, 'lokal'), ...env }
   // Von einer Electron-Umgebung (z. B. der Claude-Desktop-App) geerbt, würde die Binary als
   // reines Node starten statt als App.
   delete full.ELECTRON_RUN_AS_NODE
@@ -149,6 +151,36 @@ export async function stubConfirmSequence(app, answers) {
       checkboxChecked: false
     })
   }, answers)
+}
+
+/**
+ * Den Ordner-Dialog des main ersetzen: liefert `pfad` (oder Abbrechen bei null) und merkt sich die
+ * Optionen des letzten Aufrufs in globalThis.__ordnerDialog.
+ */
+export async function stubOrdnerDialog(app, pfad) {
+  await app.evaluate(({ dialog }, p) => {
+    dialog.showOpenDialog = async (...args) => {
+      globalThis.__ordnerDialog = args[args.length - 1]
+      return p ? { canceled: false, filePaths: [p] } : { canceled: true, filePaths: [] }
+    }
+  }, pfad)
+}
+
+/**
+ * Frische Testbibliothek (scripts/testbilder.mjs, nie echte Fotos) in einem Temp-Ordner.
+ * Liefert { dir, manifest, aufraeumen }. Braucht das gebündelte ExifTool und ffmpeg.
+ */
+export async function testbibliothek() {
+  const { erzeugeTestbilder } = await import('../scripts/testbilder.mjs')
+  const basis = mkdtempSync(join(tmpdir(), 'galeria-bib-'))
+  const dir = join(basis, 'bib')
+  const manifest = await erzeugeTestbilder(dir)
+  return { dir, manifest, aufraeumen: () => aufraeumen(basis) }
+}
+
+/** Zahl der Dateien der Testbibliothek, die in die Galerie gehören (Bilder und kaputte Bilder). */
+export function erwarteteBilder(manifest) {
+  return manifest.eintraege.filter((e) => e.art === 'bild' || e.art === 'defekt').length
 }
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))

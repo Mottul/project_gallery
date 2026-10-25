@@ -11,6 +11,12 @@ describe('pruefeAenderung', () => {
     expect(pruefeAenderung({ theme: undefined })).toEqual({})
   })
 
+  it('lässt den Renderer gemerkte Dialog-Ordner nicht setzen (nur main)', () => {
+    expect(() => pruefeAenderung({ dialogDirs: { ordner: 'C:\\Bilder' } })).toThrow(
+      /unbekanntes Feld/
+    )
+  })
+
   it('lehnt ungültige Werte ab', () => {
     for (const theme of ['blau', 'Light', '', 1, null, ['dark'], { dark: true }]) {
       expect(() => pruefeAenderung({ theme }), String(theme)).toThrow(/ungültiger Wert/)
@@ -44,6 +50,23 @@ describe('bereinigeEinstellungen', () => {
   })
 
   it('gibt nie die Vorgabe selbst heraus (wird später geändert)', () => {
-    expect(bereinigeEinstellungen({})).not.toBe(DEFAULT_SETTINGS)
+    const s = bereinigeEinstellungen({})
+    expect(s).not.toBe(DEFAULT_SETTINGS)
+    expect(s.dialogDirs).not.toBe(DEFAULT_SETTINGS.dialogDirs)
+  })
+
+  it('übernimmt gemerkte Dialog-Ordner nur als absolute Pfade bekannter Arten', () => {
+    const ok = { ordner: 'D:\\Bilder', speichern: '\\\\nas\\export', dateien: '/home/x' }
+    expect(bereinigeEinstellungen({ dialogDirs: ok }).dialogDirs).toEqual(ok)
+    for (const kaputt of [
+      { ordner: 'relativ\\Bilder' },
+      { fremd: 'D:\\x' },
+      { ordner: 42 },
+      { ordner: 'D:\\x\0y' },
+      'D:\\Bilder',
+      null
+    ]) {
+      expect(bereinigeEinstellungen({ dialogDirs: kaputt }).dialogDirs, String(kaputt)).toEqual({})
+    }
   })
 })

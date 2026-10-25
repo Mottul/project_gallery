@@ -1,7 +1,7 @@
 // Aus der Mottulbox übernommen (project_mega/electron.vite.config.ts), ohne deren NDI-Binding,
 // dafür mit strengerer CSP im Build.
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 
@@ -25,17 +25,25 @@ function cspOhneInlineSkripte(): Plugin {
 
 // main + preload werden als CommonJS gebaut (kein "type":"module" in package.json), damit
 // native Module (better-sqlite3, sharp) per require geladen werden können. Laufzeit-
-// Abhängigkeiten in `dependencies` werden über externalizeDepsPlugin NICHT gebündelt, sondern
-// zur Laufzeit aus node_modules geladen; alles für den Renderer baut Vite ein.
+// Abhängigkeiten in `dependencies` werden NICHT gebündelt, sondern zur Laufzeit aus node_modules
+// geladen (electron-vite 6: build.externalizeDeps, ab Werk an); alles für den Renderer baut Vite
+// ein. Der main hat zwei Einstiege: die App und den Bilddienst (eigener Prozess,
+// services/bilddienst/einstieg.ts → out/main/bilddienst.js).
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          bilddienst: resolve('src/main/services/bilddienst/einstieg.ts')
+        }
+      }
+    },
     resolve: {
       alias: { '@shared': resolve('src/shared') }
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: { '@shared': resolve('src/shared') }
     }

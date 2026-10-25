@@ -35,7 +35,13 @@ try {
       'Programmbrücke bietet genau die GalerieApi, sonst nichts',
       async () => {
         const keys = await page.evaluate(() => Object.keys(window.api).sort())
-        assert.deepEqual(keys, ['getSettings', 'log', 'onSettingsChanged', 'setSettings'])
+        assert.deepEqual(keys, [
+          'getSettings',
+          'library',
+          'log',
+          'onSettingsChanged',
+          'setSettings'
+        ])
       }
     ],
     [
