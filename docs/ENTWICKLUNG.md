@@ -92,6 +92,14 @@ Ergebnisse stehen in [PLAN.md, Phase 0](PLAN.md#phase-0--fundament-und-labor).
 Ordner für `npm run e2e:run -- paket`. Symbole: `build/icon.svg` → `node scripts/icon.mjs`
 (Ergebnis einchecken).
 
+**Stolperstein: gesperrtes `app.asar`.** Durchsucht ein anderes Electron-Programm den
+Projektordner – etwa die Claude-Desktop-App –, öffnet dessen Dateisystem
+`dist/win-unpacked/resources/app.asar` wie einen Ordner und hält es offen; dann lässt sich `dist/`
+weder löschen noch neu paketieren („Device or resource busy“, gemessen am 25.10.2026, Restart
+Manager nannte die Claude-App). Abhilfe: das Programm neu starten, oder in einen neuen Ordner
+bauen: `npx --yes electron-builder@26.17.0 --publish never -c.directories.output=dist/frisch`
+(die Sandbox-Abnahme nimmt den neuesten Installer unter `dist/`).
+
 Abnahme in der **Windows-Sandbox ohne Netz** (Voraussetzung oben): `npm run abnahme:sandbox`
 öffnet die Sandbox; darin installiert `scripts/sandbox/abnahme.ps1` still, startet die App, prüft
 die gebündelten Programme, deinstalliert und schreibt `dist/abnahme/ergebnis/abnahme.txt` samt

@@ -1,14 +1,24 @@
 // Abnahme des Installers in der Windows-Sandbox ohne Netz vorbereiten und starten (Skill
-// windows-paket, „Prüfen“). Schreibt dist/abnahme/abnahme.wsb: Netz aus, Installer (dist/) und
-// Skript (scripts/sandbox/) nur lesend eingebunden, Ergebnisordner beschreibbar; beim Anmelden
-// läuft scripts/sandbox/abnahme.ps1. Mit --starten öffnet es die Sandbox und wartet auf den Bericht.
+// windows-paket, „Prüfen“). Schreibt dist/abnahme/abnahme.wsb: Netz aus, Ordner des neuesten
+// Installers und Skript (scripts/sandbox/) nur lesend eingebunden, Ergebnisordner beschreibbar;
+// beim Anmelden läuft scripts/sandbox/abnahme.ps1. Mit --starten öffnet es die Sandbox und wartet
+// auf den Bericht. Der Installer darf auch in einem Unterordner von dist/ liegen (gebaut mit
+// `-c.directories.output=dist/<name>`, wenn dist/win-unpacked gesperrt ist – docs/ENTWICKLUNG.md).
 //
 // Voraussetzung: Windows 10/11 Pro, Windows-Sandbox eingeschaltet (docs/ENTWICKLUNG.md),
 // Installer gebaut (npm run package).
 // Aufruf: npm run abnahme:sandbox   (= node scripts/sandbox-abnahme.mjs --starten)
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,10 +28,27 @@ const SANDBOX = 'C:\\Windows\\System32\\WindowsSandbox.exe'
 
 const xml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+/** Neuester Installer in dist/ oder einem Unterordner davon; null, wenn keiner da ist. */
+function neuesterInstaller() {
+  if (!existsSync(DIST)) return null
+  const ordner = [
+    DIST,
+    ...readdirSync(DIST, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'abnahme')
+      .map((e) => join(DIST, e.name))
+  ]
+  const kandidaten = ordner.flatMap((o) =>
+    readdirSync(o)
+      .filter((n) => /^Galeria-Beata-.+-setup\.exe$/.test(n))
+      .map((n) => join(o, n))
+  )
+  kandidaten.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+  return kandidaten[0] ?? null
+}
+
 function main() {
   if (process.platform !== 'win32') throw new Error('Die Windows-Sandbox gibt es nur unter Windows')
-  const setup =
-    existsSync(DIST) && readdirSync(DIST).find((n) => /^Galeria-Beata-.+-setup\.exe$/.test(n))
+  const setup = neuesterInstaller()
   if (!setup) throw new Error('Kein Installer in dist/ – zuerst npm run package')
   const ordner = join(DIST, 'abnahme')
   const ergebnis = join(ordner, 'ergebnis')
@@ -33,7 +60,7 @@ function main() {
   <ClipboardRedirection>Disable</ClipboardRedirection>
   <MappedFolders>
     <MappedFolder>
-      <HostFolder>${xml(DIST)}</HostFolder>
+      <HostFolder>${xml(dirname(setup))}</HostFolder>
       <SandboxFolder>C:\\Installer</SandboxFolder>
       <ReadOnly>true</ReadOnly>
     </MappedFolder>
@@ -55,7 +82,7 @@ function main() {
 `
   const datei = join(ordner, 'abnahme.wsb')
   writeFileSync(datei, wsb, 'utf8')
-  console.log(`Installer: dist/${setup}`)
+  console.log(`Installer: ${setup}`)
   console.log(`Sandbox-Konfiguration: ${datei}`)
   if (!process.argv.includes('--starten')) return
 
