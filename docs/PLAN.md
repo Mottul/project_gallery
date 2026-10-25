@@ -489,19 +489,64 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
   - HEVC-Testvideos lassen sich nur mit einem Encoder des Rechners erzeugen (Media Foundation);
     auf dem Entwickler-Laptop fehlt er – HEVC-Abspielen wird mit einer fremden Testdatei geprüft (Phase 6).
   - Testbibliothek (31 Bilder, 5 Videos, 4 defekte Dateien): 3,8 s.
-- **Labor** (Skill `bild-labor`), offen:
-  - sharp im Electron-Bilddienst: Vorschaubilder je Sekunde (24-MP-JPEG; Entwickler-Laptop
-    i7-8750H mit 6 Kernen/12 Threads und 16 GB, zusätzlich mit `concurrency` 4 für 4-Kern-Rechner),
-    Spitzenspeicher, `concurrency`, sehr große Bilder (Panorama > 100 MP), kaputte Dateien.
-  - ExifTool `-stay_open`: Lesen von 1.000 / Schreiben von 100 Dateien, Unicode-Pfade
-    (`-charset filename=utf8`), Pfade > 260 Zeichen, Netzlaufwerk.
-  - Formatmatrix (was dekodiert sharp, was zeigt/spielt Chromium – auch HEVC –, was schreibt
-    ExifTool).
-  - Paket: `asarUnpack` für sharp/`@img`, ExifTool (35 MB) und ffmpeg (150 MB) über
-    `extraResources`, Größe des Installers.
-  - better-sqlite3: 50.000 Zeilen in Stapeln einfügen – wie lange blockiert main je Stapel?
-- **Abnahme:** leere App installiert und startet offline in der Windows-Sandbox; E2E grün auf
-  Windows und Linux; Messwerte stehen hier.
+- ✅ **Labor-Messungen** (Skripte in `scripts/labor/`, wiederholbar; alle unter Electrons Node
+  wie später im Bilddienst bzw. main):
+  - **sharp – Vorschaubilder** (`sharp-durchsatz.mjs`, 24-MP-JPEG 6,2 MB → 768 px, daraus 256 px):
+
+    | Einstellung | Bilder/s | Spitzenspeicher |
+    |---|---|---|
+    | ein Bild nach dem anderen | 9,3 | 95 MB |
+    | 4 parallel, `concurrency` Vorgabe (12) | 31,5 | 144 MB |
+    | 4 parallel, `concurrency(1)` (≈ 4-Kern-Rechner) | 35,6 | 111 MB |
+    | **6 parallel, `concurrency(1)`, `UV_THREADPOOL_SIZE` 6** | **45,3** | **139 MB** |
+    | 12 parallel, `concurrency(1)` | 51,0 | 227 MB |
+    | 4 parallel ohne `fastShrinkOnLoad` | 22,7 | 236 MB |
+
+    → **Bilddienst: mehrere Bilder parallel mit je einem libvips-Thread** (`sharp.concurrency(1)`,
+    parallel = halbe Thread-Zahl, mindestens 2; `UV_THREADPOOL_SIZE` = parallel + 2 für `fs`),
+    `fastShrinkOnLoad` an. 50.000 Vorschaubilder ≈ 19 min im Hintergrund (Dateien aus dem Cache;
+    von USB-Platte langsamer). Panorama 30.000 × 2.000: 160 ms / 89 MB; 108 MP: 290 ms / 117 MB –
+    `limitInputPixels` (Vorgabe 268 MP) reicht.
+  - **ExifTool `-stay_open`** (`exiftool-durchsatz.mjs`, kleine JPEGs mit Kamera-Metadaten):
+    Prozessstart 0,2 s (kein Kaltstart-Problem); Lesen einzeln 71/s, in Stapeln von 50 **165/s**,
+    `-fast2` bringt bei JPEG nichts; **2/3/4 Prozesse parallel 315/436/567 Dateien/s** (fast
+    linear) → 50.000 Dateien in rund 90 s mit 4 Prozessen. Schreiben 64 Dateien/s; Pixel danach
+    gleich, Dateidatum mit `-P` behalten. Unicode-Namen (Umlaute, Emoji) über das Argumentfile
+    und Pfade mit 324 Zeichen lesen und schreiben ohne Fehler. → Der Rückfall auf einen
+    JS-Leser (Risiken) ist nicht nötig. Netzlaufwerk noch offen (kein NAS am Laptop).
+  - **Formatmatrix** (`formate.mjs`, Chromium in der gebauten App über `blob:`):
+
+    | Format | sharp dekodiert | Chromium zeigt/spielt | ExifTool schreibt |
+    |---|---|---|---|
+    | JPEG (auch progressiv, CMYK, P3), PNG (16 Bit, Alpha), WebP, GIF, AVIF, animiert | ja | ja | ja |
+    | TIFF | ja | **nein** → Umrechnung über `bild://` | ja |
+    | BMP | **nein** (Binaries ohne BMP) | ja | nein |
+    | SVG | ja (librsvg) | ja, mit MIME-Typ | nein |
+    | Datei mit falscher Endung (PNG als `.jpg`) | ja | ja | **nein** („Not a valid JPG“) |
+    | MP4/MOV H.264+AAC, hochkant, < 1 s; MP4 AV1 | – | ja | ja |
+    | WebM VP9+Opus, MKV H.264 | – | ja | **nein** (WebM/MKV nicht schreibbar) |
+    | MOV ProRes, AVI MPEG-4 | – | **nein** → Hinweis + „Mit Standardprogramm öffnen“ | ProRes ja, AVI nein |
+    | HEVC | – | nicht prüfbar (kein Encoder am Laptop) | – |
+
+    → Metadaten von WebM/MKV/AVI, BMP und SVG nur lesen (oder XMP-Sidecar, Phase 3); vor dem
+    Schreiben Endung und Inhalt abgleichen (sonst lehnt ExifTool ab).
+  - **better-sqlite3** (`sqlite-index.mjs`, 50.000 Zeilen nach dem Index-Entwurf samt
+    Stichwörtern und FTS5, WAL): Stapel 250 / 1.000 / 5.000 blockieren main im Median 40 / 87 /
+    200 ms (höchstens 97 / 139 / 244 ms); gesamt 8,5 / 4,2 / 2,0 s; Datei 27 MB. Öffnen nach
+    Neustart 3 ms. Alle Sortier- und Filterabfragen über 50.000 Zeilen 2–47 ms (Ziel < 200 ms);
+    Details für 200 sichtbare Kacheln 0,4 ms. „Ohne Ort am Ende“ per `IS NULL` sortiert ohne Index
+    (36 statt 11 ms) → eigene Spalte im Index (Skill `bibliothek-index`).
+- ✅ **Paket** (`electron-builder.yml`, `npm run package`): NSIS One-Click je Benutzer, unsigniert,
+  aber mit Symbol und Versionsangaben in der exe (`signExecutable: false`, neu in electron-builder
+  26.17). **Installer 179 MB** (Plan: 150–250 MB); entpackt 575 MB, davon ffmpeg 150 MB, ExifTool
+  35 MB, sharp + better-sqlite3 22 MB. E2E `paket`: Start aus `app.asar`, sharp und better-sqlite3
+  aus `app.asar.unpacked`, ExifTool und ffmpeg aus `resources/` – Gegenprobe ohne `asarUnpack`
+  für sharp rot. Installer-Workflow (`installer.yml`) baut bei Tag `v*` einen Release-**Entwurf**.
+- **Abnahme:** E2E grün auf Windows und Linux ✅; Messwerte stehen hier ✅; **leere App installiert
+  und startet offline in der Windows-Sandbox – offen**: Die Sandbox ist am Laptop noch nicht
+  eingeschaltet. Vorbereitet: `npm run abnahme:sandbox` (installiert still ohne Netz, startet die
+  App, prüft ExifTool/ffmpeg aus der Installation, deinstalliert, schreibt Bericht und
+  Bildschirmfoto).
 
 ### Phase 1 – Bibliothek und Galerie (erste nutzbare Version)
 
@@ -510,7 +555,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - Kacheln mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste.
 - Sortieren nach Name, Aufnahmedatum (Grundfelder schon beim Scan), Dateidatum, Größe, Typ.
 - Betrachter: Vollbild, Zoom, Vor/Zurück, Filmstreifen, Diashow, Löschen in den Papierkorb.
-- Formate: JPEG, PNG, WebP, GIF, AVIF, TIFF; BMP nach Labor.
+- Formate: JPEG, PNG, WebP, GIF, AVIF, TIFF; BMP (Labor: sharp kann es nicht) mit Vorschaubild
+  per ffmpeg und Anzeige direkt in Chromium – siehe offene Frage unten.
 - **Abnahme** (50.000 synthetische Bilder): Neustart mit vorhandenem Index bis zur sichtbaren
   Galerie < 2 s, Sortierwechsel < 200 ms, Scrollen ohne Ruckeln, Erstindex im Hintergrund ohne
   hängende Oberfläche; E2E `galerie`, `originale`.
@@ -597,7 +643,7 @@ Dateizuordnung, portable Variante.
 
 | Risiko | Gegenmittel |
 |---|---|
-| ExifTool-Start/Durchsatz unter Windows langsam (Perl in der exe) | `-stay_open`, ein Prozess je Spur, stapelweise; im Labor messen. Rückfall fürs schnelle Lesen beim Scan: reiner JS-Leser (z. B. exifr), Schreiben bleibt bei ExifTool |
+| ExifTool-Start/Durchsatz unter Windows langsam (Perl in der exe) | Gemessen (Phase 0): Start 0,2 s, 165 Dateien/s je Prozess, 567/s mit 4 Prozessen – `-stay_open`, Stapel von 50, mehrere Prozesse; kein JS-Leser nötig |
 | Dekoder-Absturz an präparierten Dateien | Bilddienst als eigener Prozess, Zeitlimit je Datei, Datei als „defekt“ markieren; Updates für Dekoder |
 | `fs.watch` verpasst Änderungen (Netzlaufwerk, Überlauf) | Abgleich beim Start, bei Fokus und periodisch; Überlauf → Ordner neu abgleichen |
 | Metadaten erscheinen in anderen Programmen nicht | Feld-Zuordnung im Labor gegen Explorer/digiKam/Lightroom prüfen, MWG-Regeln |
@@ -631,7 +677,10 @@ Dateizuordnung, portable Variante.
 - **Paket nur für Windows**; Linux läuft nur in der CI für E2E mit.
 - **Update-Prüfung ab Werk:** einmalige Frage beim ersten Start (siehe [App-Aktualisierung](#app-aktualisierung)).
 
-**Noch offen:** nichts. Neue Fragen hier eintragen.
+**Noch offen** (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
+
+1. **BMP** in Phase 1? (Annahme: ja – Vorschaubild per ffmpeg, Anzeige in Chromium, Metadaten nur
+   lesen; sharp kann BMP nicht, Labor 25.10.2026.)
 
 ## Skills
 

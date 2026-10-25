@@ -6,8 +6,8 @@ description: Windows-Installer von Galeria Beata bauen und prüfen – NSIS One-
 # Windows-Paket
 
 Ziel aus `docs/PLAN.md`: **eine Datei, Doppelklick, ohne Administratorrechte, ohne Fragen, ohne
-Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen – sie erklären
-`signAndEditExecutable: false`, Icons, `asarUnpack`).
+Netz.** Die Konfiguration steht in `electron-builder.yml` (Kommentare dort lesen), Symbole
+erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0, gemessen).
 
 ## electron-builder.yml – Galeria-Beata-spezifisch
 
@@ -23,7 +23,11 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
 - `extraResources`: `resources/exiftool/win` → `exiftool`, `resources/ffmpeg/win` → `ffmpeg`,
   Ortsdaten → `geo`; Pfade zur Laufzeit über `process.resourcesPath` (gepackt) bzw. `resources/`
   (Entwicklung) – je Programm nur an einer Stelle (`exiftool/binPath.ts`, `ffmpeg/ffmpegPath.ts`).
-- `win.signAndEditExecutable: false` – der Installer bleibt bewusst unsigniert (entschieden 25.10.2026; Grund für die Einstellung in der Mottulbox).
+- `win.signExecutable: false` – der Installer bleibt bewusst unsigniert (entschieden 25.10.2026),
+  aber Symbol und Versionsangaben kommen in die exe (seit electron-builder 26.17; die Mottulbox
+  braucht noch `signAndEditExecutable: false` und verliert dadurch beides). electron-builder ist
+  gepinnt (`npx --yes electron-builder@<version>` in `package.json` und den Workflows – alle
+  Stellen zusammen ändern, 7 Tage Abstand).
 - **Deinstallation:** Index und Cache (`%LOCALAPPDATA%\<App>`) enthalten Vorschaubilder privater
   Fotos und müssen weg. `deleteAppDataOnUninstall` greift nur bei One-Click und nur für den
   Benutzerdaten-Ordner – für den Cache-Ordner ein `include`-Skript (`build/installer.nsh`,
@@ -60,9 +64,11 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
    entsteht, ein Metadaten-Schreiben gelingt. **Gegenprobe:** ohne `asarUnpack` für `@img`
    muss der Schritt rot werden.
 2. Größe des Installers notieren (Plan: Phase 0) – Sprünge erklären können.
-3. **Windows-Sandbox ohne Netz** (Windows Pro/Enterprise): `.wsb`-Datei mit
-   `<Networking>Disable</Networking>` und dem Installer als gemapptem Ordner (nur lesen).
-   Ablauf: installieren (keine UAC-Abfrage, keine Fragen) → starten → Testbilder-Ordner
+3. **Windows-Sandbox ohne Netz** (Windows Pro/Enterprise): `npm run abnahme:sandbox`
+   (`scripts/sandbox-abnahme.mjs` schreibt die `.wsb` mit `<Networking>Disable</Networking>`,
+   Installer nur lesend; `scripts/sandbox/abnahme.ps1` prüft automatisch und schreibt
+   `dist/abnahme/ergebnis/abnahme.txt`). Neue Prüfschritte dort ergänzen, sobald die Funktion da
+   ist. Ablauf: installieren (keine UAC-Abfrage, keine Fragen) → starten → Testbilder-Ordner
    hinzufügen → ansehen, sortieren → Metadaten schreiben → Export ohne Standort →
    deinstallieren → `%LOCALAPPDATA%` und `%APPDATA%` ohne Reste (außer Sicherungen laut Doku).
    SmartScreen-Meldung dabei mit Bild für `docs/INSTALL.md` festhalten.

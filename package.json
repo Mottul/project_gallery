@@ -30,7 +30,10 @@
     "electron:bin": "node scripts/fetch-electron-bin.mjs",
     "exiftool:fetch": "node scripts/download-exiftool.mjs",
     "ffmpeg:fetch": "node scripts/download-ffmpeg.mjs",
-    "testbilder": "node scripts/testbilder.mjs"
+    "testbilder": "node scripts/testbilder.mjs",
+    "package": "npm run exiftool:fetch && npm run ffmpeg:fetch && npm run build && npx --yes electron-builder@26.17.0 --publish never",
+    "package:dir": "npm run exiftool:fetch && npm run ffmpeg:fetch && npm run build && npx --yes electron-builder@26.17.0 --dir --publish never",
+    "abnahme:sandbox": "node scripts/sandbox-abnahme.mjs --starten"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -60,6 +63,7 @@
     "zustand": "5.0.15"
   },
   "dependencies": {
+    "better-sqlite3": "13.0.3",
     "sharp": "0.35.5"
   }
 }

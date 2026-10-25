@@ -40,6 +40,8 @@ npm-Paket. Danach braucht die Entwicklung kein Netz mehr.
 | `npm run electron:bin` | nur die Electron-Binary holen |
 | `npm run exiftool:fetch` / `ffmpeg:fetch` | gebündelte Werkzeuge nach `resources/` laden (`-- --force` lädt neu) |
 | `npm run testbilder -- <ordner>` | synthetische Testbibliothek erzeugen (`--gross`, `--ohne-videos`) |
+| `npm run package` / `package:dir` | Installer nach `dist/` bzw. nur entpackt (`dist/win-unpacked`) |
+| `npm run abnahme:sandbox` | Installer in der Windows-Sandbox ohne Netz prüfen (Bericht in `dist/abnahme/ergebnis`) |
 
 Ein einzelner Test: `npx vitest run src/main/services/netzRegel.test.ts`.
 E2E mit Ausgabe des main-Prozesses: `E2E_DEBUG=1 npm run e2e:run -- smoke`.
@@ -67,6 +69,35 @@ Zeitzone und GPS, VP9, unter 1 s; HEVC nur, wo Windows einen Encoder hat). Daneb
 `testbilder.json` mit allen erwarteten Werten. Der Labortest `scripts/testbilder.lab.test.mjs`
 prüft die Bibliothek mit sharp, ExifTool und ffprobe nach; ohne gebündelte Werkzeuge überspringt
 er sich.
+
+## Labor
+
+Messen statt raten (Skill `bild-labor`): Die Skripte in `scripts/labor/` sind wiederholbar und
+schreiben ihre Ergebnisse auf die Konsole und als JSON in den Temp-Ordner. Sie laufen unter
+Electrons eigener Node-Laufzeit (`ELECTRON_RUN_AS_NODE`), also wie später Bilddienst und main.
+
+| Skript | Misst |
+|---|---|
+| `scripts/labor/sharp-durchsatz.mjs` | Vorschaubilder je Sekunde und Spitzenspeicher (24 MP, Gleichzeitigkeit, sehr große Bilder) |
+| `scripts/labor/exiftool-durchsatz.mjs` | ExifTool `-stay_open`: Lesen, Schreiben, parallele Prozesse, Unicode, lange Pfade |
+| `scripts/labor/formate.mjs` | Formatmatrix: sharp, Chromium in der gebauten App, ExifTool schreibt (vorher bauen) |
+| `scripts/labor/sqlite-index.mjs` | 50.000 Zeilen einfügen (Blockierzeit je Stapel), Sortier- und Filterabfragen |
+
+Ergebnisse stehen in [PLAN.md, Phase 0](PLAN.md#phase-0--fundament-und-labor).
+
+## Paket und Abnahme
+
+`npm run package` lädt ExifTool und ffmpeg (falls nötig), baut und erzeugt mit electron-builder
+(gepinnt, per `npx`) `dist/Galeria-Beata-<version>-setup.exe`; `package:dir` nur den entpackten
+Ordner für `npm run e2e:run -- paket`. Symbole: `build/icon.svg` → `node scripts/icon.mjs`
+(Ergebnis einchecken).
+
+Abnahme in der **Windows-Sandbox ohne Netz** (Voraussetzung oben): `npm run abnahme:sandbox`
+öffnet die Sandbox; darin installiert `scripts/sandbox/abnahme.ps1` still, startet die App, prüft
+die gebündelten Programme, deinstalliert und schreibt `dist/abnahme/ergebnis/abnahme.txt` samt
+Bildschirmfoto. Die SmartScreen-Meldung für `docs/INSTALL.md` zeigt sich nur bei einem
+heruntergeladenen Installer (Markierung „aus dem Internet“) – dafür den Installer aus dem
+Release bzw. CI-Artefakt von Hand in der Sandbox starten.
 
 ## Aufbau
 

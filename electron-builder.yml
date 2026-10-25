@@ -1,0 +1,75 @@
+# Paket und Installer (Skill windows-paket). Vorbild: electron-builder.yml der Mottulbox.
+# Symbole erzeugt scripts/icon.mjs aus build/icon.svg (eigene .ico, nicht von electron-builder
+# umgewandelt). Bauen: npm run package (Installer) bzw. package:dir (entpackt, für E2E paket).
+# Ziel aus docs/PLAN.md: eine Datei, Doppelklick, ohne Administratorrechte, ohne Fragen, ohne Netz.
+appId: com.mottul.galeria-beata
+productName: Galeria Beata
+copyright: Copyright (c) 2026 Matthias
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**
+  - package.json
+  # better-sqlite3 bringt Binaries für alle Plattformen und die SQLite-Quellen mit:
+  # ins Paket kommt nur das Binary der Zielplattform (Muster Mottulbox).
+  - '!**/node_modules/better-sqlite3/{deps,src}/**'
+  - '!**/node_modules/better-sqlite3/binding.gyp'
+  - '!**/node_modules/better-sqlite3/prebuilds/**'
+  - '**/node_modules/better-sqlite3/prebuilds/${platform}-${arch}.node'
+
+# sharp und better-sqlite3 bringen fertige N-API-Binaries mit: kein Neubau, keine node-gyp-Kette.
+npmRebuild: false
+
+asar: true
+# Native Module dürfen nicht ins asar-Archiv. sharp: so verlangt es die sharp-Doku für
+# electron-builder (sharp und die Binaries in @img, samt libvips-DLL).
+asarUnpack:
+  - '**/node_modules/sharp/**/*'
+  - '**/node_modules/@img/**/*'
+  - '**/node_modules/better-sqlite3/**'
+
+# Gebündelte Programme je Zielplattform (scripts/download-*.mjs) und das Fenster-Symbol.
+# ${os} ist win oder linux – wie die Ordner unter resources/.
+extraResources:
+  - from: resources/exiftool/${os}
+    to: exiftool
+  - from: resources/ffmpeg/${os}
+    to: ffmpeg
+  - from: build/icon.png
+    to: icon.png
+
+win:
+  target:
+    - nsis
+  # ohne Leerzeichen im Dateinamen (Downloads, Kommandozeile)
+  artifactName: Galeria-Beata-${version}-setup.${ext}
+  icon: build/icon.ico
+  # Bewusst unsigniert (entschieden 25.10.2026). Die Mottulbox überspringt mit
+  # signAndEditExecutable: false den ganzen Pfad (winCodeSign scheiterte beim Entpacken) – die exe
+  # hat dort weder Symbol noch Versionsangaben. Seit electron-builder 26.17 überspringt
+  # signExecutable: false nur das Signieren: Symbol, Produktname und Version kommen in die exe
+  # (geprüft 25.10.2026 unter Windows 11).
+  signExecutable: false
+
+nsis:
+  # One-Click je Benutzer: keine Fragen, keine Administratorrechte (keine UAC-Abfrage)
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Galeria Beata
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  # Einstellungen bleiben beim Deinstallieren (Plan: nur nach Rückfrage bzw. laut Doku entfernen);
+  # Index und Vorschaubilder kommen mit Phase 1 und werden dann per build/installer.nsh entfernt.
+  deleteAppDataOnUninstall: false
+
+# Linux nur für die CI (E2E der gepackten App, electron-builder --dir)
+linux:
+  executableName: galeria-beata
+  target:
+    - dir

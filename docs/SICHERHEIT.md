@@ -30,8 +30,12 @@ Verhalten macht den E2E-Schritt rot.
   | Paket | Version | Grund |
   |---|---|---|
   | `sharp` | 0.35.5 (27.09.2026) | Bilder dekodieren, Vorschaubilder, Export (libvips, Plan „Entscheidungen“); kein Install-Skript, fertige Binaries als `@img/sharp-<plattform>`; Lizenz Apache-2.0, libvips LGPL-3.0 |
+  | `better-sqlite3` | 13.0.3 (05.08.2026) | Index (SQLite mit FTS5, Plan „Entscheidungen“); N-API-Binaries im Paket (`prebuilds/`), kein Install-Skript, kein node-gyp; Lizenz MIT |
 
-  better-sqlite3 kommt mit dem Index (Phase 1) dazu.
+  Beide liegen im Paket entpackt neben dem `app.asar` (`asarUnpack`), geprüft per E2E `paket`.
+- **electron-builder** ist keine Abhängigkeit, sondern kommt beim Paketieren gepinnt per `npx`
+  (`electron-builder@26.17.0`, 26.09.2026) – seine Werkzeugkette bleibt aus `npm ci` heraus
+  (Muster Mottulbox).
 - **Gebündelte Programme fest gepinnt:** ExifTool und ffmpeg mit Version und SHA-256 im
   Download-Skript (`scripts/download-exiftool.mjs`, `scripts/download-ffmpeg.mjs`); geprüft wird
   vor dem Auspacken, eine veränderte Quelle kann so nichts unterschieben. Die Pins sind älter als

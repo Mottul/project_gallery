@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Platzhalter-Logo (docs/PLAN.md, Entscheidungen): Bild-Symbol auf Hellgrün, Farben aus den
+       Tokens akzent #4ade80 und auf-akzent #052e16. Quelle für scripts/icon.mjs. -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#4ade80"/>
+  <rect x="50" y="62" width="156" height="132" rx="20" fill="none" stroke="#052e16" stroke-width="14"/>
+  <circle cx="160" cy="102" r="15" fill="#052e16"/>
+  <path d="M64 180 L108 126 L138 160 L158 140 L192 180 Z" fill="#052e16"/>
+</svg>

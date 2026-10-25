@@ -22,8 +22,11 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 ## Regeln
 
 - **Ein Schreiber:** Nur main schreibt die DB (better-sqlite3 ist synchron). Der Bilddienst
-  liefert Ergebnisse in Stapeln (Start: 500), main schreibt je Stapel **eine** Transaktion. Wie
-  lange ein Stapel main blockiert, steht im Plan (Labor); über ~16 ms kleiner machen.
+  liefert Ergebnisse in Stapeln, main schreibt je Stapel **eine** Transaktion. Gemessen
+  (`scripts/labor/sqlite-index.mjs`, 25.10.2026): 250 Zeilen samt Stichwörtern und FTS5 blockieren
+  main im Median 40 ms (höchstens 100 ms), 1.000 Zeilen 90 ms – die FTS5-Pflege kostet je
+  Transaktion. Start mit 250 und zwischen zwei Stapeln an die Ereignisschleife abgeben
+  (`setImmediate`), damit IPC und `thumb://` dazwischen antworten.
 - **Nie synchron auf Nutzerordner** (`statSync`, `existsSync`, `readdirSync`): Ein getrenntes
   Netzlaufwerk hält sonst den main an. `isDirReachable()` mit Zeitlimit (aus der Mottulbox),
   Dateiarbeit im Bilddienst.
@@ -73,7 +76,9 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 - Natürliche Namenssortierung: Sortierschlüssel beim Einfügen berechnen (`name_sort`, Zahlen
   aufgefüllt, Groß/Klein und Umlaute gefaltet), nicht per eigener SQL-Funktion zur Laufzeit.
 - **Ort (A–Z):** `ORDER BY place_sort, taken_at, id`, gruppiert nach Ort; ohne Standort als
-  letzte Gruppe „Ohne Standort“ – auch absteigend (dann nur die Orte umgekehrt).
+  letzte Gruppe „Ohne Standort“ – auch absteigend (dann nur die Orte umgekehrt). Dafür eine
+  eigene Spalte `place_missing` (0/1) vorn in den Index: `ORDER BY place_sort IS NULL …` sortiert
+  ohne Index (gemessen bei 50.000 Zeilen 36 statt 11 ms).
 - Entfernung zu einem Bezugspunkt (erst Phase 7): Vorfilter per Begrenzungsrahmen in SQL, genaue
   Entfernung (Haversine) in `geo.ts`; Ergebnis cachen, solange der Bezugspunkt gleich bleibt.
 - Für das Raster: geordnete **Liste der Kennungen** (+ Gruppen-Grenzen) einmal je Abfrage,
