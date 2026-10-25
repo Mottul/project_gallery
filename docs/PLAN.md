@@ -1,7 +1,7 @@
 # Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026: Phase 0 läuft,
-das Gerüst steht ([Phase 0](#phase-0--fundament-und-labor)). Dieser Plan ist die Grundlage für die
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026: Phase 0 ist
+abgeschlossen ([Phase 0](#phase-0--fundament-und-labor)), als Nächstes kommt Phase 1. Dieser Plan ist die Grundlage für die
 Umsetzung: vor jeder Phase lesen, offene Fragen
 klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
 Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
@@ -542,11 +542,17 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
   35 MB, sharp + better-sqlite3 22 MB. E2E `paket`: Start aus `app.asar`, sharp und better-sqlite3
   aus `app.asar.unpacked`, ExifTool und ffmpeg aus `resources/` – Gegenprobe ohne `asarUnpack`
   für sharp rot. Installer-Workflow (`installer.yml`) baut bei Tag `v*` einen Release-**Entwurf**.
-- **Abnahme:** E2E grün auf Windows und Linux ✅; Messwerte stehen hier ✅; **leere App installiert
-  und startet offline in der Windows-Sandbox – offen**: Die Sandbox ist am Laptop noch nicht
-  eingeschaltet. Vorbereitet: `npm run abnahme:sandbox` (installiert still ohne Netz, startet die
-  App, prüft ExifTool/ffmpeg aus der Installation, deinstalliert, schreibt Bericht und
-  Bildschirmfoto).
+- ✅ **Abnahme (25.10.2026, Stand `main` nach #1–#6):** E2E grün auf Windows und Linux; Messwerte
+  stehen hier; **leere App installiert und startet offline in der Windows-Sandbox**
+  (`npm run abnahme:sandbox`, 14 von 14 Prüfungen): Sandbox ohne Netz, Installer still in 25 s
+  ohne Rückfrage, je Benutzer unter `%LOCALAPPDATA%\Programs\galeria-beata`, Startmenü- und
+  Desktop-Verknüpfung (mit Symbol), ExifTool 13.59 und ffmpeg n9.0.2 starten aus der
+  Installation, Fenster „Galeria Beata“ erscheint (Bildschirmfoto geprüft: Oberfläche hell nach
+  Windows, Statusleiste „Offline“), die Netzsperre musste nichts abweisen, Deinstallation entfernt
+  Programmordner und Verknüpfungen; Einstellungen bleiben wie geplant.
+  Noch nicht geprüft und für später vorgemerkt: SmartScreen bei einem heruntergeladenen Installer
+  (Bild für `docs/INSTALL.md`, mit dem ersten Release), Netzlaufwerk für ExifTool, HEVC.
+- **Phase 0 abgeschlossen.**
 
 ### Phase 1 – Bibliothek und Galerie (erste nutzbare Version)
 
