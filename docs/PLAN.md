@@ -555,11 +555,22 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - Kacheln mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste.
 - Sortieren nach Name, Aufnahmedatum (Grundfelder schon beim Scan), Dateidatum, Größe, Typ.
 - Betrachter: Vollbild, Zoom, Vor/Zurück, Filmstreifen, Diashow, Löschen in den Papierkorb.
-- Formate: JPEG, PNG, WebP, GIF, AVIF, TIFF; BMP (Labor: sharp kann es nicht) mit Vorschaubild
-  per ffmpeg und Anzeige direkt in Chromium – siehe offene Frage unten.
+- Formate: JPEG, PNG, WebP, GIF, AVIF, TIFF; BMP (entschieden 25.10.2026: Vorschaubild per
+  ffmpeg, Anzeige direkt in Chromium, Metadaten nur lesen – sharp kann BMP nicht).
 - **Abnahme** (50.000 synthetische Bilder): Neustart mit vorhandenem Index bis zur sichtbaren
   Galerie < 2 s, Sortierwechsel < 200 ms, Scrollen ohne Ruckeln, Erstindex im Hintergrund ohne
   hängende Oberfläche; E2E `galerie`, `originale`.
+
+**Teilschritte** (je ein Pull Request gegen `main`, jeder für sich grün und installierbar):
+
+| | Inhalt | E2E |
+|---|---|---|
+| 1.1 | **Bibliothek-Fundament:** Index-DB (better-sqlite3, Migrationen, lokaler Datenordner unter `%LOCALAPPDATA%`), Bilddienst als utilityProcess mit Neustart, Scan (rekursiv, Ausschlüsse, Abgleich, „fehlt“/„nicht erreichbar“), Ordner hinzufügen/entfernen/neu einlesen, Ordner-Modi, Ordnerliste mit Anzahl | `galerie` (Ordner, Anzahl, Neustart), `originale` |
+| 1.2 | **Grundfelder und Sortieren:** Maße, Ausrichtung, Aufnahmedatum (Rangfolge, `dates.ts`) per ExifTool im Bilddienst; `sortFilter.ts`; Abfrage liefert Kennungslisten | `sortieren` (Name, Datum, Dateidatum, Größe, Typ) |
+| 1.3 | **Vorschaubilder:** sharp im Bilddienst (Gleichzeitigkeit nach Labor), BMP per ffmpeg, AES-256-GCM-Cache mit Schlüssel über `safeStorage`, `thumb://`, sichtbare zuerst, Ordner „privat“ nur im Speicher | `galerie` (Bilder erscheinen), `security` (`thumb://`), Cache ohne JPEG-Signatur |
+| 1.4 | **Galerie-Oberfläche:** virtualisiertes Raster mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste | `galerie` |
+| 1.5 | **Betrachter:** `bild://` (mit Range, TIFF umgerechnet), Vollbild, Zoom, Vor/Zurück, Filmstreifen, Diashow, Papierkorb | `galerie`, `originale` |
+| 1.6 | **Überwachen und Abnahme:** `fs.watch` mit Abgleich, Netzlaufwerke periodisch; Messung mit 50.000 Bildern; Sandbox-Abnahme mit Testbildern | alle |
 
 ### Phase 2 – Metadaten lesen, Filtern, Suchen
 
@@ -676,11 +687,10 @@ Dateizuordnung, portable Variante.
 - **Logo:** vorerst einfaches Bild-Symbol in Hellgrün; ein eigenes Logo kann später folgen.
 - **Paket nur für Windows**; Linux läuft nur in der CI für E2E mit.
 - **Update-Prüfung ab Werk:** einmalige Frage beim ersten Start (siehe [App-Aktualisierung](#app-aktualisierung)).
+- **BMP** ab Phase 1: Vorschaubild per ffmpeg, Anzeige in Chromium, Metadaten nur lesen (sharp
+  kann BMP nicht, Labor 25.10.2026).
 
-**Noch offen** (Annahme in Klammern, gilt, bis etwas anderes entschieden ist):
-
-1. **BMP** in Phase 1? (Annahme: ja – Vorschaubild per ffmpeg, Anzeige in Chromium, Metadaten nur
-   lesen; sharp kann BMP nicht, Labor 25.10.2026.)
+**Noch offen:** nichts. Neue Fragen hier eintragen.
 
 ## Skills
 

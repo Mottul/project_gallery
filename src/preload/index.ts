@@ -14,7 +14,16 @@ const api: GalerieApi = {
   getSettings: () => ipcRenderer.invoke(Channels.settingsGet),
   setSettings: (patch) => ipcRenderer.invoke(Channels.settingsSet, patch),
   onSettingsChanged: (cb) => subscribe(Channels.settingsChanged, (s) => cb(s as never)),
-  log: (message) => ipcRenderer.send(Channels.appLog, message)
+  log: (message) => ipcRenderer.send(Channels.appLog, message),
+
+  library: {
+    state: () => ipcRenderer.invoke(Channels.libraryState),
+    addFolder: () => ipcRenderer.invoke(Channels.libraryAddFolder),
+    removeFolder: (id) => ipcRenderer.invoke(Channels.libraryRemoveFolder, id),
+    setFolderMode: (id, mode) => ipcRenderer.invoke(Channels.librarySetFolderMode, id, mode),
+    rescan: (id) => ipcRenderer.invoke(Channels.libraryRescan, id),
+    onChanged: (cb) => subscribe(Channels.libraryChanged, (s) => cb(s as never))
+  }
 }
 
 // contextIsolation ist immer an (secureWebPreferences) – ohne sie gibt es keine Brücke: Ein

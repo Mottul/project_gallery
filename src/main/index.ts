@@ -2,6 +2,7 @@
 // dann IPC, dann das Hauptfenster.
 import { app, BrowserWindow } from 'electron'
 import { registerIpcHandlers } from './ipc/registry'
+import { bibliothekBeenden, bibliothekStarten } from './services/library/library'
 import { logLine } from './services/log'
 import { installNetzsperre } from './services/netzsperre'
 import { appPages, createMainWindow } from './services/windows/appWindows'
@@ -46,6 +47,15 @@ if (!app.requestSingleInstanceLock()) {
     installWindowGuards()
     registerIpcHandlers()
     openMainWindow()
+    // Index öffnen und alle Ordner im Hintergrund abgleichen (Bilddienst), nach dem Fenster
+    try {
+      bibliothekStarten()
+    } catch (err) {
+      logLine(
+        '[bibliothek] Start fehlgeschlagen:',
+        err instanceof Error ? err.message : String(err)
+      )
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) openMainWindow()
@@ -55,4 +65,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })
+
+  // Laufende Scans abbrechen, Bilddienst beenden, Index sauber schließen (WAL zurückschreiben)
+  app.on('will-quit', () => bibliothekBeenden())
 }
