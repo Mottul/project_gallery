@@ -43,13 +43,13 @@ Netz.** Vorbild ist `electron-builder.yml` der Mottulbox (Kommentare dort lesen 
   SHA-256 fest im Skript** (wie ein Lockfile); Download nur von der offiziellen Quelle
   (exiftool.org), Prüfsumme vor dem Auspacken, Ablage `resources/exiftool/win/` (nicht im Git,
   `.gitignore`). Neue Version = Skript ändern (Version, Hash), mit 7 Tagen Abstand wie npm.
-- Die Windows-Ausgabe besteht aus einer exe und einem Ordner mit Perl-Laufzeit – beide
-  mitnehmen; den Namen der exe so ablegen, dass sie ohne Tastendruck-Pause startet (Aufbau des
-  Archivs beim Einrichten prüfen und im Skript kommentieren).
-- **ffmpeg:** `scripts/download-ffmpeg.mjs` aus der Mottulbox (Prüfsumme gegen die
-  `checksums.sha256` des BtbN-Releases); HAP braucht Galeria Beata nicht – kleineren LGPL-Build
-  bevorzugen (Lizenz, Größe), im Labor bestätigen. Kein Selbst-Update von ffmpeg in der App: Es
-  kommt mit der App-Aktualisierung.
+- Die Windows-Ausgabe besteht aus `exiftool(-k).exe` und dem Ordner `exiftool_files` (Perl-
+  Laufzeit) – das Skript legt sie als `exiftool.exe` (ohne Tastendruck-Pause) samt Ordner ab;
+  `extraResources` nimmt den ganzen Ordner `resources/exiftool/win` mit (35 MB).
+- **ffmpeg:** `scripts/download-ffmpeg.mjs`, fest gepinnt (Skill `abhaengigkeiten`). Windows als
+  LGPL-„shared“-Build: `ffmpeg.exe`, `ffprobe.exe` und ihre DLLs (`avcodec-*.dll` …) gehören
+  zusammen in einen Ordner – 150 MB statt 257 MB bei zwei statischen exe. Kein Selbst-Update
+  von ffmpeg in der App: Es kommt mit der App-Aktualisierung.
 - Lizenztexte (ExifTool, ffmpeg LGPL, libvips LGPL, sharp Apache-2.0, GeoNames CC BY 4.0) in
   „Über“ und als Datei im Paket.
 

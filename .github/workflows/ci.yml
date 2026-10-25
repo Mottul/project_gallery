@@ -4,8 +4,9 @@ name: CI
 # Bei jedem Pull Request und auf main:
 # - Linux mit Node 22 und 24: Dateinamen, Verweise, Format, Lint, Typen (App und Tests),
 #   Unit-Tests, Build, npm audit für die Laufzeit-Abhängigkeiten (Schicht F).
-# - Windows (Zielsystem) und Linux: Build und alle E2E-Skripte in der echten App – Pfade,
-#   Prozesse und Fenster verhalten sich je Betriebssystem anders.
+# - Windows (Zielsystem) und Linux: Labortests mit dem gebündelten ExifTool und ffmpeg, Build und
+#   alle E2E-Skripte in der echten App – Pfade, Prozesse und Fenster verhalten sich je
+#   Betriebssystem anders.
 # Push nur auf main: Arbeits-Branches laufen über ihren Pull Request, sonst liefe alles doppelt.
 on:
   push:
@@ -69,6 +70,18 @@ jobs:
       - run: npm ci
       # Electron-Binary für die E2E-Läufe (mit Prüfsumme; npm ci führt keine Skripte aus)
       - run: npm run electron:bin
+      # Gebündelte Werkzeuge: fest gepinnt (Version + SHA-256 im Skript), daher ist das Skript
+      # selbst der Cache-Schlüssel – ein neuer Pin lädt neu, sonst kommt alles aus dem Cache
+      - uses: actions/cache@v6
+        with:
+          path: |
+            resources/exiftool
+            resources/ffmpeg
+          key: werkzeuge-${{ runner.os }}-${{ hashFiles('scripts/download-exiftool.mjs', 'scripts/download-ffmpeg.mjs', 'scripts/lib/laden.mjs') }}
+      - run: npm run exiftool:fetch
+      - run: npm run ffmpeg:fetch
+      # mit den Werkzeugen laufen auch die Labortests (Testbibliothek mit sharp, ExifTool, ffmpeg)
+      - run: npm test
       - run: npx electron-vite build
       - name: E2E (virtuelles Display)
         if: runner.os == 'Linux'

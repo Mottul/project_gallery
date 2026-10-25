@@ -38,9 +38,35 @@ npm-Paket. Danach braucht die Entwicklung kein Netz mehr.
 | `npm run check:files` | Dateinamen, die unter Windows kollidieren |
 | `npm run check:refs` | Dateiverweise in CLAUDE.md, README, docs/ und Skills existieren |
 | `npm run electron:bin` | nur die Electron-Binary holen |
+| `npm run exiftool:fetch` / `ffmpeg:fetch` | gebündelte Werkzeuge nach `resources/` laden (`-- --force` lädt neu) |
+| `npm run testbilder -- <ordner>` | synthetische Testbibliothek erzeugen (`--gross`, `--ohne-videos`) |
 
 Ein einzelner Test: `npx vitest run src/main/services/netzRegel.test.ts`.
 E2E mit Ausgabe des main-Prozesses: `E2E_DEBUG=1 npm run e2e:run -- smoke`.
+
+## Gebündelte Werkzeuge und Testbilder
+
+ExifTool und ffmpeg liegen nicht im Git, sondern werden per Skript nach `resources/exiftool/<os>/`
+bzw. `resources/ffmpeg/<os>/` geladen (`os` = `win` oder `linux`; Linux nur für die CI). Version
+und SHA-256 stehen **fest im Skript** – wie ein Lockfile:
+
+| Werkzeug | Stand | Quelle |
+|---|---|---|
+| ExifTool | 13.59 (27.05.2026) | SourceForge-Projekt von ExifTool (Links auf exiftool.org), Prüfsumme aus exiftool.org/checksums.txt |
+| ffmpeg/ffprobe | n9.0.2, LGPL, Monats-Build vom 30.09.2026 | BtbN/FFmpeg-Builds; Windows „shared“ (150 MB), Linux statisch |
+
+Neue Version: Skill `abhaengigkeiten`. Ein Skript lädt nur, wenn der Pin nicht schon da ist; ein
+fehlgeschlagener Lauf lässt den vorhandenen Stand stehen (neuer Ordner wird erst fertig gebaut,
+dann getauscht – `scripts/lib/laden.mjs`).
+
+**Testbilder** (`scripts/testbilder.mjs`, nie echte Fotos): Ausrichtungen 1–8 mit Vierfarb-Motiv,
+Orte für die Sortierung (auch „Paris“ in zwei Ländern, ohne Standort), Namen mit Umlauten, Emoji,
+„Bild 2/10“ und führendem `-`, Formate (progressiv, CMYK, 16 Bit, Alpha, WebP, GIF, AVIF, TIFF,
+Display-P3, animiert), kaputte Dateien und kurze Videos (H.264/AAC, hochkant, „Handy“-MOV mit
+Zeitzone und GPS, VP9, unter 1 s; HEVC nur, wo Windows einen Encoder hat). Daneben
+`testbilder.json` mit allen erwarteten Werten. Der Labortest `scripts/testbilder.lab.test.mjs`
+prüft die Bibliothek mit sharp, ExifTool und ffprobe nach; ohne gebündelte Werkzeuge überspringt
+er sich.
 
 ## Aufbau
 
@@ -90,8 +116,10 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
 - **E2E** (`e2e/`): `smoke` (Start, Design-Umschalter), `security` (Sandbox, CSP, Navigation,
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
   Gegenprobe). Jeder Schritt hat ein Zeitlimit von 60 s.
+- **Labortests** (`*.lab.test.*`) mit den echten Werkzeugen auf synthetischen Dateien; sie laufen
+  mit `npm test`, sobald ExifTool und ffmpeg geladen sind.
 - **CI** (`.github/workflows/ci.yml`): Prüfungen unter Linux mit Node 22 und 24 (samt
-  `npm audit --omit=dev`), E2E unter Windows und Linux.
+  `npm audit --omit=dev`); unter Windows und Linux Labortests (Werkzeuge im Cache) und E2E.
 - **Geplante Dateien:** Plan und Skills nennen Dateien späterer Phasen. Sie stehen in
   `scripts/geplante-dateien.json` und gelten für `check:refs` als vorhanden; entsteht eine,
   meldet die Prüfung, dass der Eintrag gestrichen werden soll.

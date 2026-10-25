@@ -38,6 +38,12 @@ Scratchpad oder im Temp-Ordner des Tests, nie im Repository. Absichtlich unbeque
 - **Gleichzeitigkeit:** `sharp.concurrency()` und `UV_THREADPOOL_SIZE` im Bilddienst; mehr als
   Kerne bringt nichts, aber teilt den Threadpool mit `fs` – ein Scan darf das Lesen nicht verhungern lassen.
 - **Grenzen:** `limitInputPixels` bewusst setzen; zu große Bilder → verständlicher Fehler, kein Absturz.
+- **Datei-Cache aus (gemessen 25.10.2026):** libvips hält gelesene Dateien im Cache offen – unter
+  Windows lassen sie sich dann nicht löschen oder umbenennen. Im Bilddienst und in jedem Labortest
+  `sharp.cache({ files: 0 })`.
+- **Defekt erkennt sharp, nicht ExifTool (gemessen):** ExifTool liest nur den Kopf – ein
+  abgeschnittenes JPEG meldet es ohne Fehler; den Typ bestimmt es aus dem Inhalt (Text mit
+  `.png`-Endung = `TXT`). Sharp mit `failOn: 'truncated'` lehnt alle kaputten Testdateien ab.
 - **Metadaten beim Export:** sharp entfernt sie ab Werk; `keepExif`/`withMetadata` nur mit
   Absicht und danach per ExifTool prüfen, dass kein GPS übrig ist (Schicht E im `bildschutz`).
 - **Pixel vergleichen statt ansehen:** `.raw()` → sha256 (gleich/ungleich) oder PSNR gegen eine
