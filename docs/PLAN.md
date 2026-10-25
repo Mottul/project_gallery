@@ -571,7 +571,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 
 | | Inhalt | E2E |
 |---|---|---|
-| 1.1 | **Bibliothek-Fundament:** Index-DB (better-sqlite3, Migrationen, lokaler Datenordner unter `%LOCALAPPDATA%`), Bilddienst als utilityProcess mit Neustart, Scan (rekursiv, Ausschlüsse, Abgleich, „fehlt“/„nicht erreichbar“), Ordner hinzufügen/entfernen/neu einlesen, Ordner-Modi, Ordnerliste mit Anzahl | `galerie` (Ordner, Anzahl, Neustart), `originale` |
+| 1.1 ✅ | **Bibliothek-Fundament:** Index-DB (better-sqlite3, Migrationen, lokaler Datenordner unter `%LOCALAPPDATA%`), Bilddienst als utilityProcess mit Neustart, Scan (rekursiv, Ausschlüsse, Abgleich, „fehlt“/„nicht erreichbar“), Ordner hinzufügen/entfernen/neu einlesen, Ordner-Modi, Ordnerliste mit Anzahl | `galerie` (Ordner, Anzahl, Neustart), `originale`; Sandbox: Index lokal, nach Deinstallation weg |
 | 1.2 | **Grundfelder und Sortieren:** Maße, Ausrichtung, Aufnahmedatum (Rangfolge, `dates.ts`) per ExifTool im Bilddienst; `sortFilter.ts`; Abfrage liefert Kennungslisten | `sortieren` (Name, Datum, Dateidatum, Größe, Typ) |
 | 1.3 | **Vorschaubilder:** sharp im Bilddienst (Gleichzeitigkeit nach Labor), BMP per ffmpeg, AES-256-GCM-Cache mit Schlüssel über `safeStorage`, `thumb://`, sichtbare zuerst, Ordner „privat“ nur im Speicher | `galerie` (Bilder erscheinen), `security` (`thumb://`), Cache ohne JPEG-Signatur |
 | 1.4 | **Galerie-Oberfläche:** virtualisiertes Raster mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste | `galerie` |

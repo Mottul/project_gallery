@@ -8,16 +8,22 @@ description: Bibliothek von Galeria Beata bauen oder ändern – Ordner und Ordn
 Der Index ist eine **Kopie** dessen, was in den Dateien steht – nie die Wahrheit. Alles muss
 sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepten).
 
-## Wo was liegt (geplant)
+## Wo was liegt
 
 | Was | Ort |
 |---|---|
-| Datenbank, Schema, Migrationen | `src/main/services/db.ts` (Muster Mottulbox: WAL, defekte DB sichern und neu anlegen) |
-| Ordner, Modi, Scan, Watcher, Abgleich | `src/main/services/library/` |
-| Bilddienst (utilityProcess) und Client | `src/main/services/bilddienst/` |
-| Sortieren/Filtern/Gruppieren → SQL-Bausteine (rein) | `src/shared/sortFilter.ts` + Test |
-| Aufnahmedatum (Rangfolge, Zeitzone), natürliche Namenssortierung | `src/shared/dates.ts`, `sortFilter.ts` |
-| Entfernung, nächster Ort (rein) | `src/shared/geo.ts` + Test |
+| Datenbank, Schema, Migrationen (`PRAGMA user_version`) | `src/main/services/db.ts` (WAL, defekte DB sichern und neu anlegen, neuere DB nie anfassen) |
+| Lokaler Datenordner (`%LOCALAPPDATA%\Galeria Beata`) | `src/main/services/lokaleDaten.ts` |
+| Index-Zugriffe (Ordner, Stapel, Abgleich) – nur SQL | `src/main/services/library/repo.ts` + Test |
+| Ordner hinzufügen/entfernen, Modus, Warteschlange, Zustand für den Renderer | `src/main/services/library/library.ts` |
+| Bilddienst: Einstieg, Scan, Nachrichten, Client mit Neustart | `src/main/services/bilddienst/` (`einstieg.ts`, `scan.ts`, `protokoll.ts`, `client.ts`) |
+| Formate, Scan-Regeln, Pfad-Schlüssel, Namens-Sortierschlüssel (rein) | `src/shared/bildFormate.ts`, `scanRegeln.ts`, `ordnerPruefen.ts`, `sortKey.ts` |
+| Sortieren/Filtern/Gruppieren → SQL-Bausteine (rein, ab 1.2) | `src/shared/sortFilter.ts` + Test |
+| Aufnahmedatum (Rangfolge, Zeitzone; ab 1.2) | `src/shared/dates.ts` |
+| Entfernung, nächster Ort (rein, Phase 2) | `src/shared/geo.ts` + Test |
+
+Umgesetzt in 1.1: Schema 1, Scan im Bilddienst, Abgleich mit Scan-Nummer, „fehlt“ /
+„nicht erreichbar“, Pfad-Schlüssel ohne Groß/Klein (Windows), Ordner-Überlappung abgelehnt.
 
 ## Regeln
 
