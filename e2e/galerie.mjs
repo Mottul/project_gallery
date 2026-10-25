@@ -104,8 +104,28 @@ try {
       }
     ],
     [
-      'Modus „Nur lesen“ über das Menü',
+      'Modus „Nur lesen“ über das Menü (Menü liegt ganz im Fenster)',
       async () => {
+        await ctx.page.getByRole('button', { name: 'Aktionen für „bib“' }).click()
+        // ganz sichtbar: im Fenster UND nicht von einem Scrollbereich abgeschnitten – an allen vier
+        // Ecken (etwas nach innen) liegt das Menü selbst obenauf
+        const sichtbar = await ctx.page.getByRole('menu').evaluate((m) => {
+          const r = m.getBoundingClientRect()
+          const ecken = [
+            [r.left + 4, r.top + 4],
+            [r.right - 4, r.top + 4],
+            [r.left + 4, r.bottom - 4],
+            [r.right - 4, r.bottom - 4]
+          ]
+          const imFenster =
+            r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight
+          return {
+            imFenster,
+            ecken: ecken.map(([x, y]) => m.contains(document.elementFromPoint(x, y)))
+          }
+        })
+        assert.deepEqual(sichtbar, { imFenster: true, ecken: [true, true, true, true] })
+        await ctx.page.keyboard.press('Escape')
         await menue({ rolle: 'menuitemradio', name: /^Nur lesen/ })
         assert.ok(await waitFor(async () => (await ordner())[0].mode === 'nur-lesen', 5_000))
         await ctx.page

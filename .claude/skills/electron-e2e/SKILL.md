@@ -55,6 +55,10 @@ try {
   Neustart denselben `userData` an `launchApp` geben und selbst aufräumen (Muster `galerie.mjs`).
 - **Ordner-Dialog** per `stubOrdnerDialog(app, pfad)` ersetzen (`null` = Abbrechen); die
   Optionen des letzten Aufrufs stehen in `globalThis.__ordnerDialog`.
+- **Sichtbar heißt nicht „Rahmen im Fenster“:** Ein Aufklappmenü kann im Fenster liegen und
+  trotzdem vom `overflow` eines Containers abgeschnitten sein. Prüfen mit
+  `document.elementFromPoint` an den Ecken (liegt dort das Element selbst obenauf?) – Muster im
+  Modus-Schritt von `e2e/galerie.mjs`; gefunden per Bildschirmfoto in 1.1, nicht per Test.
 - **Zustand über die Brücke abfragen** (`window.api.library.state()`) und mit `waitFor` auf
   „fertig eingelesen“ warten (`status === 'bereit'` und `lastScan`), nie feste Pausen.
 - **Bilder prüfen:** Ob ein Vorschaubild erscheint, an `naturalWidth > 0` des `<img>` erkennen,
