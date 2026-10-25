@@ -6,9 +6,9 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 
 ## Stand
 
-**Phase 0 fast fertig** (Fundament und Labor): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel,
-Tests, CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen und Installer stehen; offen
-ist nur die Abnahme in der Windows-Sandbox (muss am Rechner eingeschaltet werden). Grundlage ist
+**Phase 0 abgeschlossen** (25.10.2026): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests,
+CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen, Installer und Abnahme in der
+Windows-Sandbox. **Als Nächstes Phase 1** (Bibliothek und Galerie). Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.

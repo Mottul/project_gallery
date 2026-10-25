@@ -59,10 +59,12 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0, geme
 
 ## Prüfen
 
-1. `npm run package:dir` und `npm run e2e -- paket`: gepackte App startet aus `app.asar`,
+1. `npm run package:dir` und `npm run e2e:run -- paket`: gepackte App startet aus `app.asar`,
    sharp lädt aus `app.asar.unpacked`, ExifTool aus `resources/exiftool`, ein Vorschaubild
    entsteht, ein Metadaten-Schreiben gelingt. **Gegenprobe:** ohne `asarUnpack` für `@img`
-   muss der Schritt rot werden.
+   muss der Schritt rot werden (so geprüft in Phase 0). Scheitert das Paketieren mit „Device or
+   resource busy“, hält ein anderes Electron-Programm `app.asar` offen (`docs/ENTWICKLUNG.md`,
+   „Paket und Abnahme“).
 2. Größe des Installers notieren (Plan: Phase 0) – Sprünge erklären können.
 3. **Windows-Sandbox ohne Netz** (Windows Pro/Enterprise): `npm run abnahme:sandbox`
    (`scripts/sandbox-abnahme.mjs` schreibt die `.wsb` mit `<Networking>Disable</Networking>`,
