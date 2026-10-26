@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { lokalAusMs } from '@shared/dates'
+import { grundfelderAus } from '@shared/grundfelder'
+import { orderBy, SORT_FELDER } from '@shared/sortFilter'
 import type { GefundeneDatei } from './repo'
 
 vi.mock('../log', () => ({ logLine: vi.fn() }))
@@ -135,5 +138,202 @@ describe('Bibliothek im Index', () => {
     expect(() =>
       repo.modusSetzen(db, id, 'alles' as unknown as Parameters<typeof repo.modusSetzen>[2])
     ).toThrow(/CHECK/)
+  })
+})
+
+describe('Grundfelder im Index', () => {
+  const datum = (rel: string): unknown =>
+    db
+      .prepare('SELECT taken_at, taken_offset, taken_source FROM images WHERE rel_path = ?')
+      .get(rel)
+
+  it('neue Dateien haben sofort ein vorläufiges Datum (die ältere Dateizeit)', () => {
+    scan(db, id, [
+      { rel: 'kopiert.jpg', name: 'kopiert.jpg', size: 1, mtime: 1_000_000, btime: 9_000_000 },
+      { rel: 'bearbeitet.jpg', name: 'bearbeitet.jpg', size: 1, mtime: 9_000_000, btime: 1_000 },
+      { rel: 'ohne.jpg', name: 'ohne.jpg', size: 1, mtime: 5_000_000, btime: null }
+    ])
+    expect(datum('kopiert.jpg')).toEqual({
+      taken_at: lokalAusMs(1_000_000),
+      taken_offset: null,
+      taken_source: 'datei-geaendert'
+    })
+    expect(datum('bearbeitet.jpg')).toMatchObject({
+      taken_at: lokalAusMs(1_000),
+      taken_source: 'datei-erstellt'
+    })
+    expect(datum('ohne.jpg')).toMatchObject({ taken_source: 'datei-geaendert' })
+  })
+
+  it('Warteschlange: offene Dateien mit Pfad, ohne fehlende und ohne ausgeschlossene Ordner', () => {
+    const id2 = repo.ordnerAnlegen(db, 'E:\\Stick', true, 1)
+    scan(db, id, [datei('a.jpg'), datei('Urlaub/b.jpg'), datei('c.jpg')])
+    scan(db, id2, [datei('d.jpg')])
+    scan(db, id, [datei('a.jpg'), datei('Urlaub/b.jpg')]) // c fehlt
+    const offen = repo.metaOffen(db, 10)
+    expect(offen.map((o) => [o.ordner, o.rel_path])).toEqual([
+      ['D:\\Bilder', 'a.jpg'],
+      ['D:\\Bilder', 'Urlaub/b.jpg'],
+      ['E:\\Stick', 'd.jpg']
+    ])
+    expect(offen[0]).toMatchObject({ folder_id: id, size: 100, mtime: 1000, btime: 500 })
+    expect(repo.metaOffen(db, 1)).toHaveLength(1)
+    expect(repo.metaOffen(db, 10, [id2]).map((o) => o.rel_path)).toEqual(['a.jpg', 'Urlaub/b.jpg'])
+    expect(repo.metaOffenAnzahl(db)).toBe(3)
+    expect(repo.metaOffenAnzahl(db, [id])).toBe(1)
+  })
+
+  it('schreibt Grundfelder; das Datum aus den Metadaten übersteht weitere Scans', () => {
+    scan(db, id, [datei('a.jpg')])
+    const [o] = repo.metaOffen(db, 10)
+    const felder = grundfelderAus(
+      {
+        'EXIF:DateTimeOriginal': '2024:07:14 18:30:05',
+        'EXIF:OffsetTimeOriginal': '+02:00',
+        'EXIF:Orientation': 6,
+        'Composite:ImageSize': '300 200',
+        'File:FileType': 'JPEG',
+        'EXIF:Make': 'Testkamera'
+      },
+      o
+    )
+    expect(repo.metaSchreiben(db, [{ ...o, felder }], 5000)).toBe(1)
+    expect(
+      db
+        .prepare(
+          'SELECT width, height, orientation, format, camera_make, taken_at, taken_offset, taken_source, meta_read_at FROM images'
+        )
+        .get()
+    ).toEqual({
+      width: 200,
+      height: 300,
+      orientation: 6,
+      format: 'jpeg',
+      camera_make: 'Testkamera',
+      taken_at: '2024-07-14T18:30:05',
+      taken_offset: '+02:00',
+      taken_source: 'exif',
+      meta_read_at: 5000
+    })
+    expect(repo.metaOffenAnzahl(db)).toBe(0)
+    // unverändert neu eingelesen: bleibt
+    scan(db, id, [datei('a.jpg')])
+    expect(datum('a.jpg')).toEqual({
+      taken_at: '2024-07-14T18:30:05',
+      taken_offset: '+02:00',
+      taken_source: 'exif'
+    })
+    // geändert: wird neu gelesen, das EXIF-Datum bleibt bis dahin stehen
+    scan(db, id, [datei('a.jpg', 222, 3000)])
+    expect(repo.metaOffenAnzahl(db)).toBe(1)
+    expect(datum('a.jpg')).toMatchObject({ taken_source: 'exif' })
+  })
+
+  it('verwirft ein Ergebnis, wenn sich die Datei seit dem Lesen geändert hat', () => {
+    scan(db, id, [datei('a.jpg')])
+    const [o] = repo.metaOffen(db, 10)
+    scan(db, id, [datei('a.jpg', 999, 4000)]) // während ExifTool liest
+    const felder = grundfelderAus({ 'File:FileType': 'PNG' }, o)
+    expect(repo.metaSchreiben(db, [{ ...o, felder }], 5000)).toBe(0)
+    expect(repo.metaOffen(db, 10)).toMatchObject([{ id: o.id, size: 999, mtime: 4000 }])
+  })
+
+  it('nicht lesbare Datei: gilt als gelesen, Datum aus der Datei', () => {
+    scan(db, id, [datei('kaputt.jpg')])
+    const [o] = repo.metaOffen(db, 10)
+    expect(repo.metaSchreiben(db, [{ ...o, felder: grundfelderAus(null, o) }], 5000)).toBe(1)
+    expect(repo.metaOffenAnzahl(db)).toBe(0)
+    expect(datum('kaputt.jpg')).toMatchObject({ taken_source: 'datei-erstellt' })
+  })
+})
+
+describe('Abfragen', () => {
+  const zeile = (rel: string, size: number, mtime: number): GefundeneDatei => ({
+    rel,
+    name: rel,
+    size,
+    mtime,
+    btime: null
+  })
+
+  /** Drei vorhandene Dateien und eine fehlende; liefert Name → Kennung. */
+  function mitDateien(): Record<string, number> {
+    const da = [zeile('b.png', 300, 3000), zeile('A.jpg', 100, 2000), zeile('c.jpg', 200, 1000)]
+    scan(db, id, [...da, zeile('weg.jpg', 1, 1)])
+    scan(db, id, da)
+    return Object.fromEntries(
+      (db.prepare('SELECT name, id FROM images').all() as { name: string; id: number }[]).map(
+        (r) => [r.name, r.id]
+      )
+    )
+  }
+
+  it('liefert Kennungen je Sortierung, ohne fehlende Dateien; „ab“ ist „auf“ rückwärts', () => {
+    const k = mitDateien()
+    const namen = (ids: number[]): string[] =>
+      ids.map((i) => Object.keys(k).find((n) => k[n] === i) as string)
+    const auf = (feld: (typeof SORT_FELDER)[number]): string[] =>
+      namen(repo.kennungen(db, { feld, richtung: 'auf' }))
+    expect(auf('name')).toEqual(['A.jpg', 'b.png', 'c.jpg'])
+    expect(auf('groesse')).toEqual(['A.jpg', 'c.jpg', 'b.png'])
+    expect(auf('geaendert')).toEqual(['c.jpg', 'A.jpg', 'b.png'])
+    expect(auf('aufnahme')).toEqual(['c.jpg', 'A.jpg', 'b.png'])
+    expect(auf('typ')).toEqual(['A.jpg', 'c.jpg', 'b.png'])
+    for (const feld of SORT_FELDER) {
+      const vor = repo.kennungen(db, { feld, richtung: 'auf' })
+      expect(repo.kennungen(db, { feld, richtung: 'ab' })).toEqual([...vor].reverse())
+    }
+  })
+
+  it('jede Sortierung nutzt einen Index (kein Umsortieren im Speicher)', () => {
+    mitDateien()
+    for (const feld of SORT_FELDER) {
+      for (const richtung of ['auf', 'ab'] as const) {
+        const plan = (
+          db
+            .prepare(
+              `EXPLAIN QUERY PLAN SELECT id FROM images WHERE status != 'fehlt' ORDER BY ${orderBy({ feld, richtung })}`
+            )
+            .all() as { detail: string }[]
+        )
+          .map((r) => r.detail)
+          .join(' | ')
+        expect(plan, `${feld} ${richtung}`).not.toMatch(/TEMP B-TREE/)
+        expect(plan, `${feld} ${richtung}`).toMatch(/USING INDEX/)
+      }
+    }
+  })
+
+  it('Details in der Reihenfolge der Anfrage, ohne Pfad; unbekannte Kennungen fehlen', () => {
+    const k = mitDateien()
+    const d = repo.details(db, [k['c.jpg'], 9999, k['A.jpg']])
+    expect(d.map((x) => x.name)).toEqual(['c.jpg', 'A.jpg'])
+    expect(d[0]).toEqual({
+      id: k['c.jpg'],
+      folderId: id,
+      name: 'c.jpg',
+      ext: 'jpg',
+      format: null,
+      size: 200,
+      mtime: 1000,
+      width: null,
+      height: null,
+      orientation: null,
+      takenAt: lokalAusMs(1000),
+      takenOffset: null,
+      takenSource: 'datei-geaendert',
+      cameraMake: null,
+      cameraModel: null,
+      status: 'ok',
+      metaRead: false
+    })
+    expect(JSON.stringify(d)).not.toMatch(/Bilder/)
+    expect(repo.details(db, [])).toEqual([])
+    expect(() =>
+      repo.details(
+        db,
+        Array.from({ length: 1001 }, (_, i) => i)
+      )
+    ).toThrow(/Höchstens/)
   })
 })

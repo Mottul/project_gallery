@@ -50,6 +50,15 @@ try {
           }, 30_000)
         const o = await fertig()
         assert.ok(o && o.count > 0, 'nicht eingelesen')
+        // ExifTool hat jede Datei gelesen (1.2) – auch das darf nichts verändern
+        const gelesen = await waitFor(async () => {
+          const ids = await page.evaluate(() =>
+            window.api.library.query({ feld: 'name', richtung: 'auf' })
+          )
+          const d = await page.evaluate((x) => window.api.library.details(x), ids)
+          return d.length === o.count && d.every((b) => b.metaRead)
+        }, 60_000)
+        assert.ok(gelesen, 'Metadaten nicht vollständig gelesen')
         for (const mode of ['privat', 'nur-lesen', 'normal']) {
           await page.evaluate(([id, m]) => window.api.library.setFolderMode(id, m), [o.id, mode])
         }

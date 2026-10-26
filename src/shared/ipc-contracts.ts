@@ -2,7 +2,15 @@
 // bereitstellt. Einzige Quelle für main (Handler) und renderer (Aufruf); neue Fläche nach Skill
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
-import type { AddFolderResult, AppSettings, FolderMode, LibraryState, SettingsPatch } from './types'
+import type { Sortierung } from './sortFilter'
+import type {
+  AddFolderResult,
+  AppSettings,
+  FolderMode,
+  ImageInfo,
+  LibraryState,
+  SettingsPatch
+} from './types'
 
 export const Channels = {
   settingsGet: 'settings:get',
@@ -15,6 +23,8 @@ export const Channels = {
   libraryRemoveFolder: 'library:removeFolder',
   librarySetFolderMode: 'library:setFolderMode',
   libraryRescan: 'library:rescan',
+  libraryQuery: 'library:query',
+  libraryDetails: 'library:details',
   libraryChanged: 'library:changed' // Event: LibraryState (Ordner, Anzahl, Einlesen)
 } as const
 
@@ -38,6 +48,10 @@ export interface GalerieApi {
     setFolderMode(id: number, mode: FolderMode): Promise<void>
     /** Ordner neu einlesen (Abgleich) */
     rescan(id: number): Promise<void>
+    /** Kennungen aller vorhandenen Dateien, geordnet (einmal je Sortierung) */
+    query(sortierung: Sortierung): Promise<number[]>
+    /** Details zu höchstens 1000 Kennungen (sichtbarer Ausschnitt), ohne Pfade */
+    details(ids: number[]): Promise<ImageInfo[]>
     /** Änderungen (auch Fortschritt beim Einlesen); Rückgabe = Abmelden */
     onChanged(cb: (state: LibraryState) => void): () => void
   }

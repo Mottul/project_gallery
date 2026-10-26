@@ -22,6 +22,8 @@ const api: GalerieApi = {
     removeFolder: (id) => ipcRenderer.invoke(Channels.libraryRemoveFolder, id),
     setFolderMode: (id, mode) => ipcRenderer.invoke(Channels.librarySetFolderMode, id, mode),
     rescan: (id) => ipcRenderer.invoke(Channels.libraryRescan, id),
+    query: (sortierung) => ipcRenderer.invoke(Channels.libraryQuery, sortierung),
+    details: (ids) => ipcRenderer.invoke(Channels.libraryDetails, ids),
     onChanged: (cb) => subscribe(Channels.libraryChanged, (s) => cb(s as never))
   }
 }

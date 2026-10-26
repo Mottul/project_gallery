@@ -1,6 +1,14 @@
 import { Channels } from '@shared/ipc-contracts'
-import { pruefeKennung, pruefeOrdnerModus } from '@shared/eingaben'
 import {
+  pruefeKennung,
+  pruefeKennungen,
+  pruefeOrdnerModus,
+  pruefeSortierungStreng
+} from '@shared/eingaben'
+import { DETAILS_MAX } from '../services/library/repo'
+import {
+  abfrage,
+  bildDetails,
   fensterVon,
   modusSetzen,
   neuEinlesen,
@@ -21,4 +29,7 @@ export function registerLibraryHandlers(): void {
     modusSetzen(pruefeKennung(id), pruefeOrdnerModus(mode))
   )
   handle(Channels.libraryRescan, (_e, id) => neuEinlesen(pruefeKennung(id)))
+  // Sortierfeld nur aus der Allowlist (sortFilter.ts) – nie Text aus dem Renderer ins SQL
+  handle(Channels.libraryQuery, (_e, s) => abfrage(pruefeSortierungStreng(s)))
+  handle(Channels.libraryDetails, (_e, ids) => bildDetails(pruefeKennungen(ids, DETAILS_MAX)))
 }

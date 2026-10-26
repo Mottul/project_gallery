@@ -14,16 +14,25 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 |---|---|
 | Datenbank, Schema, Migrationen (`PRAGMA user_version`) | `src/main/services/db.ts` (WAL, defekte DB sichern und neu anlegen, neuere DB nie anfassen) |
 | Lokaler Datenordner (`%LOCALAPPDATA%\Galeria Beata`) | `src/main/services/lokaleDaten.ts` |
-| Index-Zugriffe (Ordner, Stapel, Abgleich) – nur SQL | `src/main/services/library/repo.ts` + Test |
-| Ordner hinzufügen/entfernen, Modus, Warteschlange, Zustand für den Renderer | `src/main/services/library/library.ts` |
+| Index-Zugriffe (Ordner, Stapel, Abgleich, Metadaten-Warteschlange, Abfragen) – nur SQL | `src/main/services/library/repo.ts` + Test |
+| Ordner hinzufügen/entfernen, Modus, Warteschlangen (Einlesen, Metadaten), Zustand für den Renderer | `src/main/services/library/library.ts` |
+| Grundfelder aus ExifTool-Tags prüfen (rein) | `src/shared/grundfelder.ts` + Test |
 | Bilddienst: Einstieg, Scan, Nachrichten, Client mit Neustart | `src/main/services/bilddienst/` (`einstieg.ts`, `scan.ts`, `protokoll.ts`, `client.ts`) |
 | Formate, Scan-Regeln, Pfad-Schlüssel, Namens-Sortierschlüssel (rein) | `src/shared/bildFormate.ts`, `scanRegeln.ts`, `ordnerPruefen.ts`, `sortKey.ts` |
-| Sortieren/Filtern/Gruppieren → SQL-Bausteine (rein, ab 1.2) | `src/shared/sortFilter.ts` + Test |
-| Aufnahmedatum (Rangfolge, Zeitzone; ab 1.2) | `src/shared/dates.ts` |
+| Sortieren/Filtern/Gruppieren → SQL-Bausteine (rein; 1.2: Sortieren) | `src/shared/sortFilter.ts` + Test |
+| Aufnahmedatum (Rangfolge, Zeitzone) | `src/shared/dates.ts` + Test |
 | Entfernung, nächster Ort (rein, Phase 2) | `src/shared/geo.ts` + Test |
 
 Umgesetzt in 1.1: Schema 1, Scan im Bilddienst, Abgleich mit Scan-Nummer, „fehlt“ /
 „nicht erreichbar“, Pfad-Schlüssel ohne Groß/Klein (Windows), Ordner-Überlappung abgelehnt.
+Umgesetzt in 1.2: Schema 2 (`format`, vorläufiges Dateidatum, Indizes je Sortierung, Teilindex
+für die Metadaten-Warteschlange), ExifTool-Pool im Bilddienst, Warteschlange der Grundfelder in
+`library.ts` (Stapel zu 200; schreibt nur, wenn Größe und Änderungszeit noch stimmen; scheitert
+ein Stapel – Absturz, Zeitlimit –, werden die Lücken einzeln nachgelesen, und nur eine Datei, die
+auch allein scheitert, gilt als gelesen mit Dateidatum; ein nicht erreichbarer Ordner bleibt offen;
+Test `library.test.ts`), Abfrage der Kennungen und
+Details. ExifTool beendet sich selbst, wenn der Bilddienst stirbt (stdin endet; geprüft mit
+hartem Kill) – es bleiben keine verwaisten Prozesse.
 
 ## Regeln
 
@@ -58,7 +67,9 @@ Umgesetzt in 1.1: Schema 1, Scan im Bilddienst, Abgleich mit Scan-Nummer, „feh
 ## Aufnahmedatum, Ort
 
 - Rangfolge (`dates.ts`): `DateTimeOriginal` (+ `SubSecTimeOriginal`) → `CreateDate` → XMP
-  `photoshop:DateCreated` → Dateierstellung → Änderungszeit. Gespeichert als **lokale Zeit wie
+  `photoshop:DateCreated` → die **ältere** von Dateierstellung und Änderungszeit (Kopieren setzt
+  unter Windows die Erstellzeit neu). Ein Datum aus den Metadaten überschreibt kein Scan, ein
+  Dateidatum jeder. Gespeichert als **lokale Zeit wie
   in der Kamera** (`taken_at`, ISO ohne Zone) plus `taken_offset` (falls bekannt) plus
   `taken_source`. Sortiert wird nach `taken_at`, nicht nach UTC – sonst springen Urlaubsfotos
   um die Zeitverschiebung.

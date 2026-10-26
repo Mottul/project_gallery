@@ -6,9 +6,16 @@
 
 import { utilityProcess, type UtilityProcess } from 'electron'
 import { join } from 'node:path'
+import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
 import { logLine } from '../log'
-import type { AnDienst, VomDienst } from './protokoll'
+import {
+  ARG_EXIFTOOL,
+  type AnDienst,
+  type MetaDatei,
+  type MetaErgebnis,
+  type VomDienst
+} from './protokoll'
 
 /** So lange darf ein Auftrag ohne jede Nachricht bleiben (ein Stapel kommt sonst alle paar ms). */
 const STILLE_MS = 60_000
@@ -20,8 +27,8 @@ export interface ScanAuftrag {
 }
 
 interface Laufend {
-  onStapel: (dateien: GefundeneDatei[]) => void
-  resolve: (r: { gefunden: number; unlesbar: string[] }) => void
+  onStapel?: (dateien: GefundeneDatei[]) => void
+  resolve: (r: unknown) => void
   reject: (err: Error) => void
   waechter: NodeJS.Timeout
 }
@@ -37,10 +44,14 @@ class Bilddienst {
 
   private prozess(): UtilityProcess {
     if (this.kind) return this.kind
-    const kind = utilityProcess.fork(join(__dirname, 'bilddienst.js'), [], {
-      serviceName: 'Galeria Bilddienst',
-      stdio: 'pipe'
-    })
+    const kind = utilityProcess.fork(
+      join(__dirname, 'bilddienst.js'),
+      [ARG_EXIFTOOL + (exiftoolPfad() ?? '')],
+      {
+        serviceName: 'Galeria Bilddienst',
+        stdio: 'pipe'
+      }
+    )
     kind.stdout?.on('data', (d) => logLine('[bilddienst]', String(d).trimEnd()))
     kind.stderr?.on('data', (d) => logLine('[bilddienst!]', String(d).trimEnd()))
     kind.on('message', (n: VomDienst) => this.nachricht(n))
@@ -54,16 +65,12 @@ class Bilddienst {
     return kind
   }
 
-  private senden(n: AnDienst): void {
-    this.prozess().postMessage(n)
-  }
-
   private wache(auftrag: number): NodeJS.Timeout {
     return setTimeout(() => {
       logLine('[bilddienst] Auftrag', auftrag, `ohne Antwort seit ${STILLE_MS / 1000} s – Neustart`)
       const l = this.laufend.get(auftrag)
       this.laufend.delete(auftrag)
-      l?.reject(fehler('ZEITLIMIT', 'Der Ordner antwortet nicht (Zeitlimit)'))
+      l?.reject(fehler('ZEITLIMIT', 'Der Bilddienst antwortet nicht (Zeitlimit)'))
       this.kind?.kill()
     }, STILLE_MS)
   }
@@ -78,11 +85,12 @@ class Bilddienst {
     clearTimeout(l.waechter)
     if (n.typ === 'stapel') {
       l.waechter = this.wache(n.auftrag)
-      l.onStapel(n.dateien)
+      l.onStapel?.(n.dateien)
       return
     }
     this.laufend.delete(n.auftrag)
     if (n.typ === 'fertig') l.resolve({ gefunden: n.gefunden, unlesbar: n.unlesbar })
+    else if (n.typ === 'meta-ergebnis') l.resolve(n.ergebnisse)
     else l.reject(fehler(n.code, n.meldung))
   }
 
@@ -94,15 +102,32 @@ class Bilddienst {
     this.laufend.clear()
   }
 
+  /** Auftrag schicken; die Antwort kommt über nachricht(). */
+  private auftrag<T>(
+    bauen: (auftrag: number) => AnDienst,
+    onStapel?: (dateien: GefundeneDatei[]) => void
+  ): { auftrag: number; antwort: Promise<T> } {
+    const auftrag = this.naechster++
+    const antwort = new Promise<T>((resolve, reject) => {
+      this.laufend.set(auftrag, {
+        onStapel,
+        resolve: resolve as (r: unknown) => void,
+        reject,
+        waechter: this.wache(auftrag)
+      })
+    })
+    this.prozess().postMessage(bauen(auftrag))
+    return { auftrag, antwort }
+  }
+
   /** Ordner einlesen; `onStapel` bekommt die gefundenen Dateien in Stapeln (in Reihenfolge). */
   scan(wurzel: string, onStapel: (dateien: GefundeneDatei[]) => void): ScanAuftrag {
-    const auftrag = this.naechster++
-    const fertig = new Promise<{ gefunden: number; unlesbar: string[] }>((resolve, reject) => {
-      this.laufend.set(auftrag, { onStapel, resolve, reject, waechter: this.wache(auftrag) })
-    })
-    this.senden({ typ: 'scan', auftrag, wurzel })
+    const { auftrag, antwort } = this.auftrag<{ gefunden: number; unlesbar: string[] }>(
+      (a) => ({ typ: 'scan', auftrag: a, wurzel }),
+      onStapel
+    )
     return {
-      fertig,
+      fertig: antwort,
       abbrechen: () => {
         const l = this.laufend.get(auftrag)
         if (!l) return
@@ -114,12 +139,23 @@ class Bilddienst {
     }
   }
 
-  /** Beim Beenden der App: laufende Aufträge abbrechen, Prozess beenden. */
+  /** Grundfelder (rohe ExifTool-Tags) vieler Dateien lesen. */
+  meta(dateien: MetaDatei[]): Promise<MetaErgebnis[]> {
+    return this.auftrag<MetaErgebnis[]>((a) => ({ typ: 'meta', auftrag: a, dateien })).antwort
+  }
+
+  /** Beim Beenden der App: laufende Aufträge abbrechen, ExifTool sauber beenden, Prozess beenden. */
   beenden(): void {
     this.alleAbbrechen(fehler('ABGEBROCHEN', 'App wird beendet'))
     const kind = this.kind
     this.kind = null
-    kind?.kill()
+    if (!kind) return
+    try {
+      kind.postMessage({ typ: 'beenden' } satisfies AnDienst)
+    } catch {
+      /* schon weg */
+    }
+    setTimeout(() => kind.kill(), 1000).unref()
   }
 }
 
