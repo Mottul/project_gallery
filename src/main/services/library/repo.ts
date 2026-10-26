@@ -406,6 +406,7 @@ export interface VorschauZeile {
   ordner: string
   mode: FolderMode
   rel_path: string
+  name: string
   ext: string
   format: string | null
   size: number
@@ -414,8 +415,8 @@ export interface VorschauZeile {
   thumb_state: VorschauZustand | null
 }
 
-const VORSCHAU_SPALTEN = `i.id, i.folder_id, f.path AS ordner, f.mode, i.rel_path, i.ext, i.format,
-  i.size, i.mtime, i.status, i.thumb_state`
+const VORSCHAU_SPALTEN = `i.id, i.folder_id, f.path AS ordner, f.mode, i.rel_path, i.name, i.ext,
+  i.format, i.size, i.mtime, i.status, i.thumb_state`
 
 /**
  * Die nächsten Dateien ohne Vorschaubild (Teilindex images_thumb_offen) nach `nachId` – so
@@ -529,6 +530,13 @@ export function ordnerKennungen(db: DB, folderId: number): number[] {
 /** Alle fertigen Vorschaubilder als offen markieren (neuer Schlüssel: der Cache ist leer). */
 export function vorschauAlleOffen(db: DB): number {
   return db.prepare("UPDATE images SET thumb_state = NULL WHERE thumb_state = 'ok'").run().changes
+}
+
+/** Index-Zeilen von Dateien entfernen, die es nicht mehr gibt (Papierkorb); liefert die Zahl. */
+export function bilderEntfernen(db: DB, ids: readonly number[]): number {
+  return db
+    .prepare('DELETE FROM images WHERE id IN (SELECT value FROM json_each(?))')
+    .run(JSON.stringify(ids)).changes
 }
 
 /** Vorschaubilder eines Ordners als offen markieren (Wechsel nach/aus „privat“). */

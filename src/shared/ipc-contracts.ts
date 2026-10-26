@@ -10,7 +10,8 @@ import type {
   ImageInfo,
   LibraryDirs,
   LibraryState,
-  SettingsPatch
+  SettingsPatch,
+  TrashResult
 } from './types'
 
 export const Channels = {
@@ -30,6 +31,7 @@ export const Channels = {
   librarySize: 'library:size',
   libraryVisible: 'library:visible', // Renderer -> main, Einweg: sichtbare Kennungen
   libraryAddDropped: 'library:addDropped',
+  libraryTrash: 'library:trash',
   libraryChanged: 'library:changed' // Event: LibraryState (Ordner, Anzahl, Einlesen)
 } as const
 
@@ -69,6 +71,8 @@ export interface GalerieApi {
      * Pfad liest erst der Preload daraus – die Seite selbst kann keinen Pfad vorgeben (Schicht C).
      */
     addDropped(files: File[]): Promise<AddFolderResult[]>
+    /** Bilder in den Papierkorb – Rückfrage im main, nie in Ordnern „nur lesen“ */
+    trash(ids: number[]): Promise<TrashResult>
     /** Änderungen (auch Fortschritt beim Einlesen); Rückgabe = Abmelden */
     onChanged(cb: (state: LibraryState) => void): () => void
   }

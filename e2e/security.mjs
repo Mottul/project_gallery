@@ -205,6 +205,44 @@ try {
       }
     ],
     [
+      'bild://: nur gültige Adressen und Kennungen aus dem Index, nur GET – sonst kein Bild',
+      async () => {
+        const status = (url, method = 'GET') =>
+          app.evaluate(
+            async ({ net }, [u, m]) => (await net.fetch(u, { method: m })).status,
+            [url, method]
+          )
+        assert.equal(await status('bild://id/999999'), 404, 'erfundene Kennung')
+        for (const url of [
+          'bild://id/0',
+          'bild://id/abc',
+          'bild://id/1/256',
+          'bild://anders/1',
+          'bild://id/1%2f..%2f..%2fwindows',
+          'bild://42'
+        ]) {
+          assert.equal(await status(url), 400, url)
+        }
+        assert.equal(await status('bild://id/1', 'POST'), 405)
+        const geladen = await page.evaluate(
+          (urls) =>
+            Promise.all(
+              urls.map(
+                (u) =>
+                  new Promise((res) => {
+                    const i = new Image()
+                    i.onload = () => res(u)
+                    i.onerror = () => res(false)
+                    i.src = u
+                  })
+              )
+            ),
+          ['bild://id/999999', 'bild://id/../../../windows/win.ini', 'bild://42']
+        )
+        assert.deepEqual(geladen, [false, false, false])
+      }
+    ],
+    [
       'thumb://: nur gültige Adressen und Kennungen aus dem Index, nur GET – sonst kein Bild',
       async () => {
         // im main über denselben Handler wie die Seite (net.fetch kennt eigene Protokolle)

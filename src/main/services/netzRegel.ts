@@ -3,7 +3,7 @@
 //
 // Erlaubt ist nur, was die App-Seite selbst braucht: ihre eigenen Dateien (der Ordner der
 // gebauten index.html), beim Entwickeln der Vite-Server auf diesem Rechner und die eigenen
-// Protokolle (thumb:, später bild:). Alles andere wird abgewiesen – Webadressen ohnehin, aber
+// Protokolle (thumb:, bild:). Alles andere wird abgewiesen – Webadressen ohnehin, aber
 // auch file:-Adressen außerhalb der App: Eine file://-Seite dürfte sonst jede Datei der Platte
 // als <img> laden (Schicht C, Renderer ohne Dateizugriff).
 

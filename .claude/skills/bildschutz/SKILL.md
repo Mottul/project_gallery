@@ -39,8 +39,12 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 - [ ] Schreibt sie in Nutzerdateien? Dann ausdrücklich ausgelöst, Dateien in der Rückfrage bzw.
       Vorschau genannt, Ordner-Modus „nur lesen“ beachtet, Sicherung, atomar, nachgeprüft,
       Journal für Rückgängig (Skills `metadaten-schreiben`, `stapelverarbeitung`).
-- [ ] Löschen nur über `shell.trashItem`; geht das nicht (Netzlaufwerk, Wechseldatenträger),
-      ausdrückliche Rückfrage „endgültig löschen“ mit Anzahl.
+- [ ] Löschen nur über `shell.trashItem` (`inPapierkorb` in `library.ts`): Rückfrage im main mit
+      Namen, Vorgabe „Abbrechen“; nie in Ordnern „nur lesen“ – nach der Rückfrage frisch aus dem
+      Index lesen (der Modus kann inzwischen gewechselt haben); je Datei vorher `pruefeDatei` mit
+      Zeitlimit; Index-Zeile und Caches erst nach Erfolg weg. Geht der Papierkorb nicht
+      (Netzlaufwerk, Wechseldatenträger): ausdrückliche Rückfrage „endgültig löschen“ mit Anzahl
+      (noch nicht umgesetzt – bis dahin bleibt die Datei).
 - [ ] Keine Nebenprodukte im Ordner des Nutzers (`_original`, `Thumbs`, Temp-Dateien) – Zwischen-
       dateien entweder im App-Temp-Ordner oder als Nachbardatei, die immer weggeräumt wird.
 - [ ] Fehlerpfade räumen auf (`finally`): halbe Ausgaben, Zwischennamen.
@@ -51,9 +55,10 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 ## C – Renderer ohne Dateizugriff
 
 - [ ] Kein `file://`, keine Pfade im Renderer-Zustand außer zur Anzeige (Pfad als Text).
-- [ ] Bilder nur über `thumb://id/<kennung>/<stufe>` und `bild://…`; der Handler schlägt die Kennung im
-      Index nach, prüft `realpath` innerhalb eines Bibliotheksordners (Symlinks/Junctions nach
-      außen!) und dass die Datei zum Index passt.
+- [ ] Bilder nur über `thumb://id/<kennung>/<stufe>` und `bild://id/<kennung>`; der Handler schlägt
+      die Kennung im Index nach, prüft `realpath` innerhalb eines Bibliotheksordners
+      (Symlinks/Junctions nach außen!) und dass die Datei zum Index passt – eine Prüfung für alle:
+      `dateien/pruefeDatei.ts`. `no-store`; Typ nach Inhalt, nie nach Endung (`nosniff`).
 - [ ] Ordner per Drag & Drop: Pfad nur aus dem Datei-Objekt im Preload (`webUtils.getPathForFile`),
       nie aus einem Text der Seite; Gegenprobe im E2E `galerie` (untergeschobenes File).
 - [ ] Jeder IPC-Eingang geprüft: Typ, Allowlist, Grenzen (Skill `ipc-kanal`). Pfade, in die

@@ -34,8 +34,10 @@ Vollständigkeit – `npm run typecheck` zeigt vergessene Stellen.
   ungeprüfter Pfad an ExifTool, sharp, `shell.openPath` oder `shell.trashItem`.
 - **Große Daten nie über IPC:** Bilder gehen über `thumb://`/`bild://` (Skill `bildschutz`,
   Schicht C); Abfragen liefern Kennungslisten und Details nur für den sichtbaren Ausschnitt.
-  Ein neues Protokoll braucht vier Stellen: `protocol.registerSchemesAsPrivileged` vor
-  `app.whenReady`, `protocol.handle` danach, CSP in `src/renderer/index.html`, `docs/SICHERHEIT.md`.
+  Ein neues Protokoll braucht vier Stellen: Eintrag in `services/protocols/schemata.ts` (dort
+  `registerSchemesAsPrivileged` – nur **ein** Aufruf, ein zweiter ersetzt den ersten – und die
+  Liste für die Netzsperre), `protocol.handle` nach `app.whenReady`, CSP in
+  `src/renderer/index.html`, `docs/SICHERHEIT.md`.
 - Der Renderer spricht **nur** über `api` (`@renderer/lib/api`), nie direkt mit `ipcRenderer`.
 - Logik aus dem Handler in einen Dienst (`src/main/services/<bereich>/`) oder in `src/shared/`
   ziehen und dort testen; der Handler bleibt eine dünne Hülle.

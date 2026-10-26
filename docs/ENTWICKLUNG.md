@@ -132,7 +132,7 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   die prüfen, dass die Anfrage von der App-Seite kommt. Eingaben gelten als fremd und werden
   geprüft (Beispiel `src/shared/settingsCheck.ts`).
 - **Renderer** spricht nur über `api` (`src/renderer/src/lib/api.ts`), nie direkt mit
-  `ipcRenderer`; er bekommt nie Dateipfade zum Lesen (später `thumb://`/`bild://` mit Kennungen).
+  `ipcRenderer`; er bekommt nie Dateipfade zum Lesen (Bilder über `thumb://`/`bild://` mit Kennungen).
 - **Einstellungen:** `settings.json` in userData über `services/store.ts` (atomar, defekte Datei
   wird weggesichert); im Renderer `useSettings(sel)` und `updateSettings(teiländerung)` aus
   `lib/settings.ts`. localStorage nur als Boot-Spiegel (Design), nie als eigener Speicher.
@@ -165,6 +165,15 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   `lib/ansicht.ts` (localStorage, geprüft), die Auswahl (Kennungen, nie Positionen) `lib/auswahl.ts`.
   Ordner per Drag & Drop: Die Seite reicht die Datei-Objekte an `library.addDropped`, der Preload
   liest den Pfad (`webUtils.getPathForFile`); ein in der Seite erzeugtes File hat keinen.
+- **Betrachter:** `galerie/Betrachter.tsx` (Dialog über der Galerie, Filmstreifen virtualisiert)
+  zeigt das Original über `bild://id/<kennung>` (`services/protocols/bild.ts`; Adresse und `Range`
+  rein in `shared/bild.ts`). `library/anzeige.ts` schlägt die Kennung nach, prüft die Datei
+  (`dateien/pruefeDatei.ts`, wie der Bilddienst) und liefert entweder den Pfad zum Streamen oder
+  – was Chromium nicht kann (TIFF) – eine Umrechnung aus dem Bilddienst (`anzeigeFuer` in
+  `bilddienst/vorschau.ts`), gemerkt nur im Arbeitsspeicher. Beide eigenen Protokolle meldet
+  `protocols/schemata.ts` einmal vor `app.whenReady` an (`registerSchemesAsPrivileged` darf nur
+  einmal laufen). Papierkorb: `library.trash` → `inPapierkorb` in `library.ts` (Rückfrage im main,
+  `shell.trashItem`).
 
 ## Konventionen
 
@@ -181,12 +190,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   Regeln im main (`windowPolicy`, `netzRegel`).
 - **E2E** (`e2e/`): `smoke` (Start, Design-Umschalter), `security` (Sandbox, CSP, Navigation,
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
-  Gegenprobe), `galerie` (Ordner, Abgleich, Vorschaubilder samt Cache und „privat“, Neustart,
-  Entfernen, Log ohne Inhalte), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
+  Gegenprobe), `galerie` (Ordner, Abgleich, Vorschaubilder samt Cache und „privat“, Oberfläche,
+  Betrachter mit `bild://` und Papierkorb, Neustart, Entfernen, Log ohne Inhalte), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
   nach dem Beenden), `originale` (Prüfsummen vorher/nachher); `paket` nur auf Wunsch (gepackte
-  App samt Bilddienst). Jeder Schritt hat ein Zeitlimit von 60 s. Pixel aus `thumb://` prüft ein
-  Test im main über `net.fetch` (derselbe Handler) – eine Canvas in der Seite dürfte sie nicht
-  lesen (anderer Ursprung).
+  App samt Bilddienst). Jeder Schritt hat ein Zeitlimit von 60 s. Pixel aus `thumb://` und
+  Bytes aus `bild://` prüft ein Test im main über `net.fetch` (derselbe Handler) – eine Canvas in
+  der Seite dürfte sie nicht lesen (anderer Ursprung). Den Papierkorb ersetzt `galerie` durch
+  einen Stub, der die Datei in einen Temp-Ordner verschiebt.
 - **Labortests** (`*.lab.test.*`) mit den echten Werkzeugen auf synthetischen Dateien; sie laufen
   mit `npm test`, sobald ExifTool und ffmpeg geladen sind.
 - **CI** (`.github/workflows/ci.yml`): Prüfungen unter Linux mit Node 22 und 24 (samt

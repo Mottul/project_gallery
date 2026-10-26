@@ -6,13 +6,13 @@
 // BMP kann sharp nicht lesen: ffmpeg wandelt es zuerst in PNG (nur lokale Datei, Schicht A).
 
 import { spawn } from 'node:child_process'
-import { lstat, readFile, realpath } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import sharp, { type Sharp } from 'sharp'
-import { liegtIn, pfadSchluessel } from '@shared/ordnerPruefen'
 import { QUALITAET } from '@shared/vorschau'
 import { schreibeAtomar, vorschauPfad } from '../cache/ablage'
 import { verschluesseln, zusatzdaten } from '../cache/verschluesselung'
-import type { VorschauDatei, VorschauErgebnis } from './protokoll'
+import { fehler, mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
+import type { AnzeigeDatei, AnzeigeErgebnis, VorschauDatei, VorschauErgebnis } from './protokoll'
 
 /** Obergrenze der Bildgröße (sharp-Vorgabe 16383², bewusst gesetzt – Skill bild-labor) */
 export const MAX_PIXEL = 0x3fff * 0x3fff
@@ -28,31 +28,6 @@ export interface Vorschau {
   klein: Buffer
   /** Durchschnittsfarbe „#rrggbb“ für den Platzhalter */
   farbe: string
-}
-
-export function fehler(code: string, meldung = code): Error {
-  return Object.assign(new Error(meldung), { code })
-}
-
-/**
- * Passt die Datei noch zum Index und liegt sie wirklich im Bibliotheksordner? Keine Verknüpfung,
- * gleiche Größe und Änderungszeit, der echte Pfad (Junctions, Symlinks aufgelöst) im Ordner
- * (Schicht C, Skill bildschutz). Wirft mit `code`.
- */
-export async function pruefeDatei(
-  pfad: string,
-  ordner: string,
-  size: number,
-  mtime: number,
-  windows = process.platform === 'win32'
-): Promise<void> {
-  const st = await lstat(pfad)
-  if (!st.isFile()) throw fehler('KEINE_DATEI')
-  if (st.size !== size || Math.trunc(st.mtimeMs) !== mtime) throw fehler('GEAENDERT')
-  const [echt, wurzel] = await Promise.all([realpath(pfad), realpath(ordner)])
-  if (!liegtIn(pfadSchluessel(echt, windows), pfadSchluessel(wurzel, windows))) {
-    throw fehler('AUSSERHALB')
-  }
 }
 
 /** Inhalt zum Dekodieren: kleine Dateien als Buffer (prüft die Länge), sehr große als Pfad. */
@@ -139,6 +114,43 @@ export async function erzeugeVorschau(eingabe: Buffer | string): Promise<Vorscha
   return { gross, klein, farbe: `#${hex(data[0])}${hex(data[1])}${hex(data[2])}` }
 }
 
+/** Längste Kante der Anzeige-Umrechnung (Betrachter, „bildschirmgroß“ – 4K) */
+export const ANZEIGE_MAX = 3840
+const ANZEIGE_QUALITAET = 90
+
+/**
+ * Bildschirmgroße Fassung für den Betrachter, wenn Chromium das Original nicht zeigen kann
+ * (TIFF): aufgerichtet, nach sRGB, nie vergrößert; JPEG bzw. WebP bei Alpha-Kanal.
+ */
+export async function erzeugeAnzeige(eingabe: Buffer | string): Promise<Buffer> {
+  const bild = sharp(eingabe, { failOn: 'truncated', limitInputPixels: MAX_PIXEL })
+  const { hasAlpha } = await bild.metadata()
+  const s = bild
+    .rotate()
+    .resize(ANZEIGE_MAX, ANZEIGE_MAX, { fit: 'inside', withoutEnlargement: true })
+  return (
+    hasAlpha
+      ? s.webp({ quality: ANZEIGE_QUALITAET, alphaQuality: ANZEIGE_QUALITAET })
+      : s.jpeg({ quality: ANZEIGE_QUALITAET })
+  ).toBuffer()
+}
+
+/** Anzeige-Fassung einer Datei: prüfen, lesen, umrechnen. Wirft nie – Fehler werden zum Code. */
+export async function anzeigeFuer(d: AnzeigeDatei): Promise<AnzeigeErgebnis> {
+  try {
+    await pruefeDatei(d.pfad, d.ordner, d.size, d.mtime)
+    const eingabe = await eingabeLesen(d.pfad, d.size)
+    return { daten: await mitZeitlimit(erzeugeAnzeige(eingabe), ZEITLIMIT_MS), code: null }
+  } catch (err) {
+    const code = codeVon(err, '')
+    if (code) return { daten: null, code }
+    return {
+      daten: null,
+      code: /pixel limit/i.test(String((err as Error)?.message)) ? 'ZU_GROSS' : 'DEFEKT'
+    }
+  }
+}
+
 // ── Ein Auftrag je Datei (Bilddienst) ─────────────────────────────────────────────────────────
 
 export interface Einrichtung {
@@ -149,14 +161,6 @@ export interface Einrichtung {
 
 /** Zeitlimit je Datei (Dekodieren); der Auftrag bleibt so unter dem Wächter des Clients (60 s) */
 const ZEITLIMIT_MS = 30_000
-
-function mitZeitlimit<T>(p: Promise<T>, ms: number): Promise<T> {
-  let uhr: NodeJS.Timeout | undefined
-  const ablauf = new Promise<never>((_, reject) => {
-    uhr = setTimeout(() => reject(fehler('ZEITLIMIT')), ms)
-  })
-  return Promise.race([p, ablauf]).finally(() => clearTimeout(uhr))
-}
 
 const codeVon = (err: unknown, sonst: string): string =>
   (err as NodeJS.ErrnoException)?.code ?? sonst
