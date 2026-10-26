@@ -388,19 +388,29 @@ try {
       async () => {
         const log = readFileSync(join(userData, 'galeria-debug.log'), 'utf8')
         assert.match(log, /\[vorschau\]/, 'Gegenprobe: das Log enthält die Arbeit dieses Laufs')
-        const verboten = [
-          ...Object.values(bib.manifest.orte).flatMap((o) => [o.lat.toFixed(3), o.lon.toFixed(3)]),
-          'Altstadt am Abend',
-          'Tour Eiffel',
-          'Weihnachten',
-          'dubrovnik',
-          'ausrichtung-6',
-          'Übersicht'
+        // Koordinaten mit vier Nachkommastellen und ohne Ziffer davor: drei Stellen kollidierten
+        // mit den Millisekunden der Zeitstempel („…:02.295Z“ enthält 2.295 – Paris, Linux-CI)
+        const koordinate = (v) =>
+          new RegExp(`(?<![\\d.])${Math.abs(v).toFixed(4).replace('.', '\\.')}`)
+        // Gegenprobe des Musters: findet eine durchgesickerte Koordinate (auch negativ), aber nicht
+        // den Zeitstempel aus der Linux-CI und keine längere Zahl, die nur so endet
+        const paris = bib.manifest.orte.paris
+        const texas = bib.manifest.orte.parisTexas
+        assert.ok(koordinate(paris.lat).test(`GPS ${paris.lat}, ${paris.lon}`))
+        assert.ok(koordinate(texas.lon).test(`lon=${texas.lon}`))
+        assert.ok(!koordinate(paris.lon).test('[2026-10-26T06:03:02.295Z]'))
+        assert.ok(!koordinate(paris.lat).test('148.8584'))
+        const muster = [
+          ...Object.values(bib.manifest.orte).flatMap((o) => [
+            koordinate(o.lat),
+            koordinate(o.lon)
+          ]),
+          ...['Altstadt am Abend', 'Tour Eiffel', 'Weihnachten', 'dubrovnik', 'ausrichtung-6'].map(
+            (t) => new RegExp(t)
+          ),
+          /Übersicht/
         ]
-        assert.deepEqual(
-          verboten.filter((v) => log.includes(v)),
-          []
-        )
+        assert.deepEqual(muster.filter((m) => m.test(log)).map(String), [])
       }
     ],
     [

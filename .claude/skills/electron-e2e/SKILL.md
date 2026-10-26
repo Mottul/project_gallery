@@ -72,6 +72,8 @@ try {
 - **Cache und Log prüfen:** Cache-Dateien rekursiv unter `<userData>/lokal` suchen (Windows und
   Linux liegen verschieden); Log `<userData>/galeria-debug.log` auf Koordinaten, Titel und
   Dateinamen der Testbibliothek prüfen – mit Gegenprobe, dass das Log den Lauf überhaupt enthält.
+  Koordinaten mit vier Nachkommastellen und ohne Ziffer davor suchen: Mit drei Stellen fand der
+  Test „2.295“ (Paris) in einem Zeitstempel „…:02.295Z“ (Linux-CI, 1.3).
 - **`paket`** nimmt die neueste entpackte App unter `dist/` (auch `dist/<name>/win-unpacked`).
 - **Watcher:** nach einer Änderung von außen mit `waitFor` auf das Ergebnis warten (Debounce),
   nie feste Pausen.
