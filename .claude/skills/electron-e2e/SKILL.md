@@ -75,6 +75,14 @@ try {
   Koordinaten mit vier Nachkommastellen und ohne Ziffer davor suchen: Mit drei Stellen fand der
   Test „2.295“ (Paris) in einem Zeitstempel „…:02.295Z“ (Linux-CI, 1.3).
 - **`paket`** nimmt die neueste entpackte App unter `dist/` (auch `dist/<name>/win-unpacked`).
+- **Drag & Drop aus dem Explorer** nachstellen: `page.context().newCDPSession(page)` und
+  `Input.dispatchDragEvent` (`dragEnter`, `dragOver`, `drop`) mit `data.files: [pfad]` – die Seite
+  bekommt echte Datei-Objekte mit Pfad, auch für Ordner (Muster `ablegen` in `e2e/galerie.mjs`).
+  Ein per `new File()` in der Seite erzeugtes Objekt hat dagegen keinen Pfad.
+- **Virtualisiert:** Raster und Liste enthalten nur die gezeigten Kacheln/Zeilen – Reihenfolge am
+  Anfang prüfen (`zeigtAnfang` in `sortieren.mjs`), für „alle“ die Brücke fragen. `getByRole('option')`
+  immer auf die Bilderliste eingrenzen (`getByRole('listbox', { name: 'Bilder' })`) – sonst trifft
+  es die Einträge der Sortier-Auswahl.
 - **Watcher:** nach einer Änderung von außen mit `waitFor` auf das Ergebnis warten (Debounce),
   nie feste Pausen.
 

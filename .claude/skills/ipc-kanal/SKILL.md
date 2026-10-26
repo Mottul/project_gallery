@@ -27,7 +27,9 @@ Vollständigkeit – `npm run typecheck` zeigt vergessene Stellen.
   Längen, Anzahl (eine Auswahl von 100.000 Kennungen ist erlaubt, 10 Mio. nicht). Ungültig =
   Fehler, nie still „korrigiert“ weiterarbeiten.
 - **Pfade:** Der Renderer schickt **Bild-Kennungen**, keine Pfade. main löst sie über den Index
-  auf. Ziel-Pfade für neue Dateien (Export, Kopie) stammen aus einem Dialog des main
+  auf. Einzige Ausnahme: gezogene Ordner (Drag & Drop) – die Seite reicht nur die Datei-Objekte
+  weiter, den Pfad liest der **Preload** (`webUtils.getPathForFile`; ein in der Seite erzeugtes File
+  hat keinen), der main prüft ihn wie einen Dialog-Pfad (`library.addDropped`). Ziel-Pfade für neue Dateien (Export, Kopie) stammen aus einem Dialog des main
   (`services/fileDialogs.ts`) oder aus einem Bibliotheksordner (+ von main erzeugter Name). Kein
   ungeprüfter Pfad an ExifTool, sharp, `shell.openPath` oder `shell.trashItem`.
 - **Große Daten nie über IPC:** Bilder gehen über `thumb://`/`bild://` (Skill `bildschutz`,

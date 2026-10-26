@@ -2,9 +2,35 @@ import { describe, expect, it } from 'vitest'
 import {
   pruefeKennung,
   pruefeKennungen,
+  pruefeOrdnerFilterStreng,
   pruefeOrdnerModus,
+  pruefePfade,
   pruefeSortierungStreng
 } from './eingaben'
+
+describe('pruefePfade (gezogene Ordner)', () => {
+  it('nimmt Listen von Pfaden bis zur Höchstzahl', () => {
+    expect(pruefePfade([], 2)).toEqual([])
+    expect(pruefePfade(['D:\\Bilder', '\\\\nas\\fotos', 'C:\\Ü 🌞'], 3)).toHaveLength(3)
+  })
+
+  it('lehnt zu viele, Nicht-Texte, leere und Steuerzeichen ab', () => {
+    expect(() => pruefePfade(['a', 'b', 'c'], 2)).toThrow(/Pfade/)
+    for (const v of [null, 'D:\\Bilder', [1], [''], ['a\u0000b'], ['a\nb'], ['x'.repeat(32_768)]]) {
+      expect(() => pruefePfade(v, 5), JSON.stringify(v)).toThrow(/Pfad/)
+    }
+  })
+})
+
+describe('pruefeOrdnerFilterStreng', () => {
+  it('wirft bei ungültigem Filter statt still zu korrigieren', () => {
+    expect(pruefeOrdnerFilterStreng({ ordner: 2, pfad: 'Urlaub' })).toEqual({
+      ordner: 2,
+      pfad: 'Urlaub'
+    })
+    expect(() => pruefeOrdnerFilterStreng({ ordner: 2, pfad: '../x' })).toThrow(/Filter/)
+  })
+})
 
 describe('pruefeKennung', () => {
   it('nimmt ganze Zahlen ab 1', () => {

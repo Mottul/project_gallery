@@ -46,6 +46,10 @@ Ergebnisse nur bei unveränderter Datei eingetragen (sonst Cache-Dateien wieder 
 Neuer Schlüssel beim Start (kein sicherer Speicher wie Linux ohne Schlüsselbund, oder DPAPI
 entschlüsselt nicht mehr): Der Cache ist leer – alle `ok` werden wieder offen und entstehen im
 Hintergrund neu, nicht nur auf Abruf (`library.test.ts`, gefunden über die Linux-CI).
+Umgesetzt in 1.4: Abfrage mit Ordner-Filter (`sortFilter.ts`: Unterordner als Bereich auf
+`rel_key`, nutzt den Index `folder_id, rel_key`), Verzeichnisse mit Anzahl für den Ordnerbaum,
+Größensumme einer Auswahl, Vorschau-Vorrang für den gemeldeten Ausschnitt (`library.visible`:
+sichtbar + nächste Seite, vor dem übrigen Hintergrund; `vorschauOffenUnter`).
 
 ## Regeln
 
@@ -122,7 +126,8 @@ Hintergrund neu, nicht nur auf Abruf (`library.test.ts`, gefunden über die Linu
   meldet den Ausschnitt (gedrosselt); die Warteschlange priorisiert neu, statt Aufträge
   abzubrechen und neu anzulegen. **Stand 1.3:** Signal ist der Abruf selbst – `<img
   loading="lazy">` fragt nur, was (fast) sichtbar ist, und ein Abruf über `thumb://` kommt vor
-  dem Hintergrund dran; das Melden des Ausschnitts kommt mit dem Raster (1.4).
+  dem Hintergrund dran. **Seit 1.4** meldet das virtualisierte Raster zusätzlich den Ausschnitt
+  samt nächster Seite (gedrosselt); er kommt vor dem übrigen Hintergrund.
 - Platzhalter in Bildfarbe (Durchschnittsfarbe im Index, Spalte `color`) statt leerer Kachel.
 - Ordner „privat“: Vorschau nur auf Abruf und nur im Arbeitsspeicher (höchstens 256 MB, älteste
   zuerst heraus); der Hintergrund lässt ihn aus. Wechsel nach „privat“ und Entfernen löschen die

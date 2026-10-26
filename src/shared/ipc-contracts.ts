@@ -2,12 +2,13 @@
 // bereitstellt. Einzige Quelle für main (Handler) und renderer (Aufruf); neue Fläche nach Skill
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
-import type { Sortierung } from './sortFilter'
+import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
   AddFolderResult,
   AppSettings,
   FolderMode,
   ImageInfo,
+  LibraryDirs,
   LibraryState,
   SettingsPatch
 } from './types'
@@ -25,6 +26,10 @@ export const Channels = {
   libraryRescan: 'library:rescan',
   libraryQuery: 'library:query',
   libraryDetails: 'library:details',
+  libraryDirs: 'library:dirs',
+  librarySize: 'library:size',
+  libraryVisible: 'library:visible', // Renderer -> main, Einweg: sichtbare Kennungen
+  libraryAddDropped: 'library:addDropped',
   libraryChanged: 'library:changed' // Event: LibraryState (Ordner, Anzahl, Einlesen)
 } as const
 
@@ -48,10 +53,22 @@ export interface GalerieApi {
     setFolderMode(id: number, mode: FolderMode): Promise<void>
     /** Ordner neu einlesen (Abgleich) */
     rescan(id: number): Promise<void>
-    /** Kennungen aller vorhandenen Dateien, geordnet (einmal je Sortierung) */
-    query(sortierung: Sortierung): Promise<number[]>
+    /** Kennungen aller vorhandenen Dateien, geordnet (einmal je Sortierung); wahlweise nur ein
+     *  Bibliotheksordner bzw. ein Unterordner samt allem darunter */
+    query(sortierung: Sortierung, filter?: OrdnerFilter): Promise<number[]>
     /** Details zu höchstens 1000 Kennungen (sichtbarer Ausschnitt), ohne Pfade */
     details(ids: number[]): Promise<ImageInfo[]>
+    /** Unterordner je Bibliotheksordner mit Anzahl (Ordnerbaum) */
+    dirs(): Promise<LibraryDirs[]>
+    /** Summe der Dateigrößen einer Auswahl (Statusleiste) */
+    size(ids: number[]): Promise<number>
+    /** Was gerade sichtbar ist (gedrosselt, höchstens 1000): dort entstehen Vorschaubilder zuerst */
+    visible(ids: number[]): void
+    /**
+     * Gezogene Ordner aufnehmen (Drag & Drop). Übergeben werden die Datei-Objekte des Drops; den
+     * Pfad liest erst der Preload daraus – die Seite selbst kann keinen Pfad vorgeben (Schicht C).
+     */
+    addDropped(files: File[]): Promise<AddFolderResult[]>
     /** Änderungen (auch Fortschritt beim Einlesen); Rückgabe = Abmelden */
     onChanged(cb: (state: LibraryState) => void): () => void
   }

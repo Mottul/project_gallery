@@ -11,7 +11,7 @@ import { dateiDatum } from '@shared/dates'
 import type { Grundfelder } from '@shared/grundfelder'
 import { pfadSchluessel } from '@shared/ordnerPruefen'
 import { unterUnlesbarem } from '@shared/scanRegeln'
-import { orderBy, type Sortierung } from '@shared/sortFilter'
+import { orderBy, unterordnerBereich, type OrdnerFilter, type Sortierung } from '@shared/sortFilter'
 import { nameSortKey } from '@shared/sortKey'
 import type { FolderMode, ImageInfo } from '@shared/types'
 import type { DB } from '../db'
@@ -272,11 +272,61 @@ export function metaSchreiben(
  * Geordnete Kennungen aller vorhandenen Dateien (Skill bibliothek-index, „Abfragen“): einmal je
  * Sortierung, Details holt der Renderer nur für den sichtbaren Ausschnitt.
  */
-export function kennungen(db: DB, sortierung: Sortierung): number[] {
+export function kennungen(
+  db: DB,
+  sortierung: Sortierung,
+  filter?: OrdnerFilter,
+  windows = process.platform === 'win32'
+): number[] {
+  if (!filter) {
+    return db
+      .prepare(`SELECT id FROM images WHERE status != 'fehlt' ORDER BY ${orderBy(sortierung)}`)
+      .pluck()
+      .all() as number[]
+  }
+  if (!filter.pfad) {
+    return db
+      .prepare(
+        `SELECT id FROM images WHERE status != 'fehlt' AND folder_id = ?
+          ORDER BY ${orderBy(sortierung)}`
+      )
+      .pluck()
+      .all(filter.ordner) as number[]
+  }
+  // Unterordner: Bereich auf dem Vergleichsschlüssel (Index folder_id, rel_key), ohne Groß/Klein
+  const [von, bis] = unterordnerBereich(pfadSchluessel(filter.pfad, windows))
   return db
-    .prepare(`SELECT id FROM images WHERE status != 'fehlt' ORDER BY ${orderBy(sortierung)}`)
+    .prepare(
+      `SELECT id FROM images WHERE status != 'fehlt' AND folder_id = ?
+          AND rel_key >= ? AND rel_key < ?
+        ORDER BY ${orderBy(sortierung)}`
+    )
     .pluck()
-    .all() as number[]
+    .all(filter.ordner, von, bis) as number[]
+}
+
+/** Unterordner je Bibliotheksordner mit der Zahl ihrer (direkten) Dateien – für den Ordnerbaum. */
+export function verzeichnisse(db: DB): { folder_id: number; pfad: string; anzahl: number }[] {
+  return db
+    .prepare(
+      `SELECT folder_id,
+              substr(rel_path, 1, length(rel_path) - length(name) - 1) AS pfad,
+              count(*) AS anzahl
+         FROM images WHERE status != 'fehlt'
+        GROUP BY folder_id, pfad ORDER BY folder_id, pfad`
+    )
+    .all() as { folder_id: number; pfad: string; anzahl: number }[]
+}
+
+/** Summe der Dateigrößen (Statusleiste: Auswahl); unbekannte Kennungen zählen nicht. */
+export function groesseSumme(db: DB, ids: readonly number[]): number {
+  return (
+    db
+      .prepare(
+        'SELECT coalesce(sum(size), 0) AS s FROM images WHERE id IN (SELECT value FROM json_each(?))'
+      )
+      .get(JSON.stringify(ids)) as { s: number }
+  ).s
 }
 
 /** Höchstens so viele Details je Anfrage (sichtbarer Ausschnitt plus Vorrat) */
@@ -387,6 +437,23 @@ export function vorschauOffen(
         ORDER BY i.id LIMIT ?`
     )
     .all(nachId, JSON.stringify(ohneOrdner), limit) as VorschauZeile[]
+}
+
+/**
+ * Offene Vorschaubilder unter diesen Kennungen (der sichtbare Ausschnitt, in seiner Reihenfolge),
+ * ohne „privat“ und ohne fehlende Dateien.
+ */
+export function vorschauOffenUnter(db: DB, ids: readonly number[]): VorschauZeile[] {
+  const zeilen = db
+    .prepare(
+      `SELECT ${VORSCHAU_SPALTEN}
+         FROM images i JOIN folders f ON f.id = i.folder_id
+        WHERE i.id IN (SELECT value FROM json_each(?))
+          AND i.thumb_state IS NULL AND i.status != 'fehlt' AND f.mode != 'privat'`
+    )
+    .all(JSON.stringify(ids)) as VorschauZeile[]
+  const rang = new Map(ids.map((id, i) => [id, i]))
+  return zeilen.sort((a, b) => (rang.get(a.id) ?? 0) - (rang.get(b.id) ?? 0))
 }
 
 /** Zahl der Dateien, deren Vorschaubild noch entsteht (für die Statusleiste). */

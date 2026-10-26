@@ -50,6 +50,15 @@ const BLEIBEND = new Map<string, repo.VorschauZustand>([
 /** So lange wartet ein Abruf höchstens auf sein Vorschaubild */
 const ABRUF_MS = 60_000
 
+/** Zuletzt gemeldeter sichtbarer Ausschnitt (samt nächster Seite) – kommt vor dem übrigen Hintergrund */
+let ausschnitt: number[] = []
+
+/** Die Seite meldet, was sichtbar ist (gedrosselt); ersetzt den vorigen Ausschnitt. */
+export function vorschauAusschnitt(ids: readonly number[]): void {
+  ausschnitt = [...ids]
+  vorschauenAnstossen()
+}
+
 /** Wartende Abrufe je Kennung – kommen vor dem Hintergrund dran */
 const vorrang = new Map<number, ((ok: boolean) => void)[]>()
 /** Abstürze des Bilddienstes je Datei; beim zweiten gilt sie als defekt */
@@ -105,6 +114,8 @@ async function runde(): Promise<void> {
   const t0 = Date.now()
   const n = vorschauParallel()
   let nachId = 0
+  /** in dieser Runde schon versucht (Ausschnitt): eine gerade gesperrte Datei nicht im Kreis */
+  const versucht = new Set<number>()
   let erzeugt = 0
   for (;;) {
     if (!u || u.beendet()) return
@@ -116,9 +127,21 @@ async function runde(): Promise<void> {
       for (const id of ids) if (!da.has(id)) freigeben(id, false)
       if (!zeilen.length) continue
     } else {
-      zeilen = repo.vorschauOffen(u.db(), n, nachId, u.nichtErreichbar())
-      if (!zeilen.length) break
-      nachId = zeilen[zeilen.length - 1].id
+      // sichtbarer Ausschnitt vor dem übrigen Hintergrund (Skill bibliothek-index)
+      const sichtbar = ausschnitt.length
+        ? repo
+            .vorschauOffenUnter(u.db(), ausschnitt)
+            .filter((z) => !versucht.has(z.id))
+            .slice(0, n)
+        : []
+      if (sichtbar.length) {
+        zeilen = sichtbar
+        for (const z of zeilen) versucht.add(z.id)
+      } else {
+        zeilen = repo.vorschauOffen(u.db(), n, nachId, u.nichtErreichbar())
+        if (!zeilen.length) break
+        nachId = zeilen[zeilen.length - 1].id
+      }
     }
     erzeugt += await bearbeiten(zeilen)
     u?.melden(false)

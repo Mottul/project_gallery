@@ -157,6 +157,14 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   der Hintergrund) und liefert über `thumb://id/<kennung>/<stufe>` (`services/protocols/thumb.ts`,
   in Netzsperre und CSP eingetragen). Den Schlüssel bekommt der Bilddienst als erste Nachricht,
   nie als Argument.
+- **Galerie-Oberfläche:** Der Renderer holt je gewähltem Knoten (alle Bilder, Bibliotheksordner,
+  Unterordner) die geordneten Kennungen (`library.query` mit Ordner-Filter) und Details nur für
+  das Sichtbare (`lib/bildliste.ts`); das Raster und die Liste sind virtualisiert
+  (`@tanstack/react-virtual`) und melden den sichtbaren Ausschnitt (`library.visible`), dort
+  entstehen Vorschaubilder zuerst. Ansicht, Größe und Sortierung je Bibliotheksordner merkt
+  `lib/ansicht.ts` (localStorage, geprüft), die Auswahl (Kennungen, nie Positionen) `lib/auswahl.ts`.
+  Ordner per Drag & Drop: Die Seite reicht die Datei-Objekte an `library.addDropped`, der Preload
+  liest den Pfad (`webUtils.getPathForFile`); ein in der Seite erzeugtes File hat keinen.
 
 ## Konventionen
 

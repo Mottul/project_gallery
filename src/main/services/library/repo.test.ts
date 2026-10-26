@@ -440,3 +440,78 @@ describe('Vorschaubilder im Index', () => {
     expect(plan).not.toMatch(/TEMP B-TREE/)
   })
 })
+
+describe('Ordner-Filter, Ordnerbaum, Summen (1.4)', () => {
+  function bibliothek(): { zweiter: number; name: (id: number) => string } {
+    const zweiter = repo.ordnerAnlegen(db, 'E:\\Zweiter', true, 1)
+    scan(db, id, [
+      datei('a.jpg', 10),
+      datei('Urlaub/b.jpg', 20),
+      datei('Urlaub/2024/c.jpg', 30),
+      datei('Urlaub 2/d.jpg', 40),
+      datei('Urlaub-x/e.jpg', 50),
+      datei('urlaubx/f.jpg', 60)
+    ])
+    scan(db, zweiter, [datei('Urlaub/z.jpg', 70)])
+    const namen = new Map(
+      (
+        db.prepare('SELECT id, rel_path FROM images').all() as { id: number; rel_path: string }[]
+      ).map((r) => [r.id, r.rel_path])
+    )
+    return { zweiter, name: (i) => namen.get(i) as string }
+  }
+  const nachName = { feld: 'name', richtung: 'auf' } as const
+
+  it('Filter: ganzer Ordner; Unterordner samt allem darunter, ohne Groß/Klein, ohne Geschwister', () => {
+    const { zweiter, name } = bibliothek()
+    expect(repo.kennungen(db, nachName, { ordner: zweiter, pfad: '' }).map(name)).toEqual([
+      'Urlaub/z.jpg'
+    ])
+    expect(repo.kennungen(db, nachName, { ordner: id, pfad: '' })).toHaveLength(6)
+    expect(
+      repo.kennungen(db, nachName, { ordner: id, pfad: 'urlaub' }, true).map(name).sort()
+    ).toEqual(['Urlaub/2024/c.jpg', 'Urlaub/b.jpg'])
+    expect(
+      repo.kennungen(db, nachName, { ordner: id, pfad: 'Urlaub/2024' }, true).map(name)
+    ).toEqual(['Urlaub/2024/c.jpg'])
+    expect(repo.kennungen(db, nachName, { ordner: id, pfad: 'gibts-nicht' }, true)).toEqual([])
+    // ohne Filter alles, absteigend genau rückwärts auch mit Filter
+    expect(repo.kennungen(db, nachName)).toHaveLength(7)
+    const auf = repo.kennungen(db, nachName, { ordner: id, pfad: 'Urlaub' }, true)
+    expect(
+      repo.kennungen(db, { feld: 'name', richtung: 'ab' }, { ordner: id, pfad: 'Urlaub' }, true)
+    ).toEqual([...auf].reverse())
+  })
+
+  it('Verzeichnisse mit Anzahl je Ordner (direkte Dateien; fehlende zählen nicht)', () => {
+    const { zweiter } = bibliothek()
+    scan(db, zweiter, []) // z.jpg fehlt jetzt
+    expect(repo.verzeichnisse(db)).toEqual([
+      { folder_id: id, pfad: '', anzahl: 1 },
+      { folder_id: id, pfad: 'Urlaub', anzahl: 1 },
+      { folder_id: id, pfad: 'Urlaub 2', anzahl: 1 },
+      { folder_id: id, pfad: 'Urlaub-x', anzahl: 1 },
+      { folder_id: id, pfad: 'Urlaub/2024', anzahl: 1 },
+      { folder_id: id, pfad: 'urlaubx', anzahl: 1 }
+    ])
+  })
+
+  it('Größensumme einer Auswahl; unbekannte Kennungen zählen nicht', () => {
+    bibliothek()
+    const alle = repo.kennungen(db, nachName)
+    expect(repo.groesseSumme(db, alle)).toBe(10 + 20 + 30 + 40 + 50 + 60 + 70)
+    expect(repo.groesseSumme(db, [...alle.slice(0, 1), 99999])).toBeGreaterThan(0)
+    expect(repo.groesseSumme(db, [])).toBe(0)
+  })
+
+  it('offene Vorschaubilder im Ausschnitt in dessen Reihenfolge, ohne fertige', () => {
+    bibliothek()
+    const alle = repo.kennungen(db, nachName)
+    const [erste] = repo.vorschauOffen(db, 1)
+    repo.vorschauSchreiben(db, [{ ...erste, zustand: 'ok', farbe: null }])
+    const ausschnitt = [...alle].reverse()
+    expect(repo.vorschauOffenUnter(db, ausschnitt).map((z) => z.id)).toEqual(
+      ausschnitt.filter((i) => i !== erste.id)
+    )
+  })
+})

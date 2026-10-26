@@ -1,51 +1,19 @@
-// Sortierung und geordnete Bildliste im Renderer. Die Sortierung ist Bedienzustand (localStorage,
-// nicht settings.json) – ab 1.4 je Ordner. Die Liste holt einmal je Sortierung die Kennungen und
-// Details nur für den Anfang (vorläufige Tabelle; das virtualisierte Raster kommt mit 1.4).
-// Ändert sich die Bibliothek (Einlesen, Metadaten), wird höchstens einmal je Sekunde neu gefragt.
+// Daten für Raster und Liste: die geordneten Kennungen des gewählten Knotens (einmal je
+// Sortierung, Filter, Änderung der Bibliothek) und Details nur für das Sichtbare – nie 100.000
+// Objekte über IPC (Skill bibliothek-index, „Abfragen“). Ändert sich die Bibliothek (Einlesen,
+// Metadaten, Vorschaubilder), wird höchstens einmal je Sekunde neu gefragt.
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
-import { pruefeSortierung, STANDARD_SORTIERUNG, type Sortierung } from '@shared/sortFilter'
-import type { ImageInfo, LibraryState } from '@shared/types'
+import type { Sortierung } from '@shared/sortFilter'
+import type { ImageInfo, LibraryDirs, LibraryState } from '@shared/types'
+import type { Knoten } from './ansicht'
 import { api } from './api'
 import { errorText } from './utils'
 
-const STORAGE_KEY = 'galerie.sortierung'
-/** So viele Zeilen zeigt die vorläufige Tabelle */
-export const LISTE_MAX = 500
 const NEU_FRAGEN_MS = 1000
-
-function gemerkt(): Sortierung {
-  try {
-    const roh = localStorage.getItem(STORAGE_KEY)
-    return (roh && pruefeSortierung(JSON.parse(roh))) || STANDARD_SORTIERUNG
-  } catch {
-    return STANDARD_SORTIERUNG
-  }
-}
-
-const useSortStore = create<{ sortierung: Sortierung }>(() => ({ sortierung: gemerkt() }))
-
-export function useSortierung(): Sortierung {
-  return useSortStore((s) => s.sortierung)
-}
-
-export function sortierungSetzen(s: Sortierung): void {
-  useSortStore.setState({ sortierung: s })
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-  } catch {
-    // localStorage nicht verfügbar -> nur für diese Sitzung
-  }
-}
-
-export interface Bildliste {
-  /** Kennungen aller Dateien in Reihenfolge */
-  ids: number[]
-  /** Details der ersten LISTE_MAX */
-  bilder: ImageInfo[]
-  fehler: string | null
-}
+/** Höchstens so viele Details je Anfrage (wie DETAILS_MAX im main) */
+const DETAILS_STAPEL = 1000
 
 /** Schlüssel, der sich ändert, wenn sich am Inhalt der Bibliothek etwas getan hat. */
 function inhaltsSchluessel(lib: LibraryState | null): string {
@@ -54,45 +22,166 @@ function inhaltsSchluessel(lib: LibraryState | null): string {
     lib.total,
     lib.metaPending,
     lib.thumbPending,
-    ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}`)
-  ]
-    .map(String)
-    .join('|')
+    ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}:${f.missing}:${f.mode}`)
+  ].join('|')
 }
 
-/** Geordnete Liste für die aktuelle Sortierung; null, solange sie lädt. */
-export function useBildliste(lib: LibraryState | null): Bildliste | null {
-  const sortierung = useSortierung()
-  const schluessel = inhaltsSchluessel(lib)
-  const [liste, setListe] = useState<Bildliste | null>(null)
+/**
+ * Wie useEffect auf `schluessel`, aber höchstens einmal je Sekunde – außer `sofort` hat sich
+ * geändert (Sortierung, Filter: das will der Nutzer gleich sehen).
+ */
+function useGedrosselt(fn: () => void, schluessel: string, sofort: string, aktiv: boolean): void {
   const letzte = useRef(0)
-  const anfrage = useRef(0)
-  const vorigeSortierung = useRef(sortierung)
-
+  const vorigesSofort = useRef(sofort)
+  const fnRef = useRef(fn)
+  fnRef.current = fn
   useEffect(() => {
-    if (!lib) return
-    // Sortierwechsel sofort, Änderungen der Bibliothek gedrosselt
-    const sofort = vorigeSortierung.current !== sortierung
-    vorigeSortierung.current = sortierung
-    const warten = sofort ? 0 : Math.max(0, letzte.current + NEU_FRAGEN_MS - Date.now())
-    const timer = setTimeout(() => {
-      const nr = ++anfrage.current
+    if (!aktiv) return
+    const jetztSofort = vorigesSofort.current !== sofort
+    vorigesSofort.current = sofort
+    const warten = jetztSofort ? 0 : Math.max(0, letzte.current + NEU_FRAGEN_MS - Date.now())
+    const t = setTimeout(() => {
       letzte.current = Date.now()
-      void (async () => {
-        try {
-          const ids = await api.library.query(sortierung)
-          const bilder = await api.library.details(ids.slice(0, LISTE_MAX))
-          // eine neuere Anfrage hat Vorrang
-          if (nr === anfrage.current) setListe({ ids, bilder, fehler: null })
-        } catch (err) {
-          if (nr === anfrage.current) setListe({ ids: [], bilder: [], fehler: errorText(err) })
-        }
-      })()
+      fnRef.current()
     }, warten)
-    return () => clearTimeout(timer)
-    // lib selbst ändert sich bei jedem Ereignis; maßgeblich ist der Inhaltsschlüssel
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortierung, schluessel])
+    return () => clearTimeout(t)
+  }, [schluessel, sofort, aktiv])
+}
 
-  return liste
+export interface Kennungen {
+  ids: number[]
+  /** zählt jede neue Antwort – Details älterer Stände gelten als veraltet */
+  stand: number
+  fehler: string | null
+}
+
+/** Geordnete Kennungen des Knotens; null, solange sie das erste Mal laden. */
+export function useKennungen(
+  lib: LibraryState | null,
+  knoten: Knoten,
+  sortierung: Sortierung
+): Kennungen | null {
+  const [k, setK] = useState<Kennungen | null>(null)
+  const anfrage = useRef(0)
+  const sofort = JSON.stringify([knoten, sortierung])
+  useGedrosselt(
+    () => {
+      const nr = ++anfrage.current
+      api.library
+        .query(sortierung, knoten ?? undefined)
+        .then(
+          (ids) => ({ ids, fehler: null }),
+          (err) => ({ ids: [] as number[], fehler: errorText(err) })
+        )
+        .then((r) => {
+          // eine neuere Anfrage hat Vorrang
+          if (nr === anfrage.current) setK({ ...r, stand: nr })
+        })
+    },
+    inhaltsSchluessel(lib),
+    sofort,
+    lib !== null
+  )
+  return k
+}
+
+/**
+ * Details zwischengespeichert: `anfordern` holt, was im sichtbaren Bereich fehlt oder zu einem
+ * älteren Stand gehört; bis dahin bleibt das Alte stehen (kein Flackern beim Einlesen).
+ */
+export function useDetails(stand: number): {
+  get: (id: number) => ImageInfo | undefined
+  anfordern: (ids: readonly number[]) => void
+} {
+  const cache = useRef(new Map<number, { info: ImageInfo; stand: number }>())
+  const unterwegs = useRef(new Set<number>())
+  const [, setTick] = useState(0)
+  const standRef = useRef(stand)
+  standRef.current = stand
+
+  const anfordern = useCallback((ids: readonly number[]) => {
+    const fehlt = ids.filter(
+      (id) => !unterwegs.current.has(id) && cache.current.get(id)?.stand !== standRef.current
+    )
+    for (let i = 0; i < fehlt.length; i += DETAILS_STAPEL) {
+      const teil = fehlt.slice(i, i + DETAILS_STAPEL)
+      const s = standRef.current
+      for (const id of teil) unterwegs.current.add(id)
+      api.library
+        .details(teil)
+        .then((infos) => {
+          for (const info of infos) cache.current.set(info.id, { info, stand: s })
+          setTick((t) => t + 1)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          for (const id of teil) unterwegs.current.delete(id)
+        })
+    }
+  }, [])
+
+  const get = useCallback((id: number) => cache.current.get(id)?.info, [])
+  return { get, anfordern }
+}
+
+/** Ordnerbaum-Daten: Unterordner je Bibliotheksordner (gedrosselt neu bei Änderungen). */
+export function useVerzeichnisse(lib: LibraryState | null): LibraryDirs[] {
+  const [dirs, setDirs] = useState<LibraryDirs[]>([])
+  useGedrosselt(
+    () => {
+      api.library.dirs().then(setDirs, () => undefined)
+    },
+    inhaltsSchluessel(lib),
+    '',
+    lib !== null
+  )
+  return dirs
+}
+
+/** Summe der Dateigrößen einer Auswahl (kurz verzögert, die Auswahl ändert sich beim Ziehen). */
+export function useAuswahlGroesse(auswahl: ReadonlySet<number>): number | null {
+  const [summe, setSumme] = useState<number | null>(null)
+  useEffect(() => {
+    if (!auswahl.size) {
+      setSumme(null)
+      return
+    }
+    let gilt = true
+    const t = setTimeout(() => {
+      api.library.size([...auswahl]).then(
+        (s) => gilt && setSumme(s),
+        () => gilt && setSumme(null)
+      )
+    }, 150)
+    return () => {
+      gilt = false
+      clearTimeout(t)
+    }
+  }, [auswahl])
+  return summe
+}
+
+/** Wie viele Bilder die Galerie gerade zeigt (gewählter Knoten) – für die Statusleiste. */
+const useAngezeigtStore = create<{ anzahl: number | null }>(() => ({ anzahl: null }))
+export const angezeigtMelden = (anzahl: number | null): void =>
+  useAngezeigtStore.setState({ anzahl })
+export const useAngezeigt = (): number | null => useAngezeigtStore((s) => s.anzahl)
+
+/** Sichtbare Kennungen an den main melden (Vorschau-Vorrang), gedrosselt. */
+export function useSichtbarMelden(): (ids: readonly number[]) => void {
+  const letzte = useRef('')
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  return useCallback((ids: readonly number[]) => {
+    const s = ids.join(',')
+    if (s === letzte.current) return
+    letzte.current = s
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => api.library.visible(ids.slice(0, 1000)), 200)
+  }, [])
 }
