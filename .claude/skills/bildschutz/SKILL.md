@@ -51,7 +51,7 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 ## C – Renderer ohne Dateizugriff
 
 - [ ] Kein `file://`, keine Pfade im Renderer-Zustand außer zur Anzeige (Pfad als Text).
-- [ ] Bilder nur über `thumb://<id>/<stufe>` und `bild://<id>`; der Handler schlägt die Kennung im
+- [ ] Bilder nur über `thumb://id/<kennung>/<stufe>` und `bild://…`; der Handler schlägt die Kennung im
       Index nach, prüft `realpath` innerhalb eines Bibliotheksordners (Symlinks/Junctions nach
       außen!) und dass die Datei zum Index passt.
 - [ ] Jeder IPC-Eingang geprüft: Typ, Allowlist, Grenzen (Skill `ipc-kanal`). Pfade, in die

@@ -17,6 +17,10 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 | Index-Zugriffe (Ordner, Stapel, Abgleich, Metadaten-Warteschlange, Abfragen) – nur SQL | `src/main/services/library/repo.ts` + Test |
 | Ordner hinzufügen/entfernen, Modus, Warteschlangen (Einlesen, Metadaten), Zustand für den Renderer | `src/main/services/library/library.ts` |
 | Grundfelder aus ExifTool-Tags prüfen (rein) | `src/shared/grundfelder.ts` + Test |
+| Vorschaubilder erzeugen (Datei prüfen, sharp, BMP über ffmpeg, verschlüsselt ablegen) – im Bilddienst | `src/main/services/bilddienst/vorschau.ts` + `vorschau.lab.test.ts` |
+| Warteschlange der Vorschaubilder, Abruf für `thumb://`, Ordner „privat“/entfernen | `src/main/services/library/vorschauen.ts` (Test in `library.test.ts`) |
+| Cache: Ablage, AES-256-GCM, Schlüssel (`safeStorage`), Arbeitsspeicher für „privat“ | `src/main/services/cache/` + Tests |
+| `thumb://`-Adressen, Stufen, Version des Verfahrens (rein); Protokoll-Handler | `src/shared/vorschau.ts` + Test; `src/main/services/protocols/thumb.ts` |
 | Bilddienst: Einstieg, Scan, Nachrichten, Client mit Neustart | `src/main/services/bilddienst/` (`einstieg.ts`, `scan.ts`, `protokoll.ts`, `client.ts`) |
 | Formate, Scan-Regeln, Pfad-Schlüssel, Namens-Sortierschlüssel (rein) | `src/shared/bildFormate.ts`, `scanRegeln.ts`, `ordnerPruefen.ts`, `sortKey.ts` |
 | Sortieren/Filtern/Gruppieren → SQL-Bausteine (rein; 1.2: Sortieren) | `src/shared/sortFilter.ts` + Test |
@@ -33,6 +37,12 @@ auch allein scheitert, gilt als gelesen mit Dateidatum; ein nicht erreichbarer O
 Test `library.test.ts`), Abfrage der Kennungen und
 Details. ExifTool beendet sich selbst, wenn der Bilddienst stirbt (stdin endet; geprüft mit
 hartem Kill) – es bleiben keine verwaisten Prozesse.
+Umgesetzt in 1.3: Schema 3 (`color`, Teilindex `images_thumb_offen`), Vorschaubilder im Bilddienst
+(halbe Thread-Zahl parallel, Datei erst in den Speicher gelesen, Zeitlimit 30 s je Datei),
+`thumb_state` (NULL = offen, `ok`, sonst Grund: `defekt`, `zu-gross`, `abgelehnt`,
+`kein-werkzeug`), Warteschlange mit Vorrang für Abrufe und Cursor je Runde (eine gerade
+gesperrte Datei kommt erst in der nächsten Runde wieder), zweiter Absturz an einer Datei = defekt,
+Ergebnisse nur bei unveränderter Datei eingetragen (sonst Cache-Dateien wieder gelöscht).
 
 ## Regeln
 
@@ -107,8 +117,13 @@ hartem Kill) – es bleiben keine verwaisten Prozesse.
 
 - Reihenfolge: sichtbarer Ausschnitt → nächste Seiten in Scrollrichtung → Rest. Der Renderer
   meldet den Ausschnitt (gedrosselt); die Warteschlange priorisiert neu, statt Aufträge
-  abzubrechen und neu anzulegen.
-- Platzhalter in Bildfarbe (Durchschnittsfarbe im Index) statt leerer Kachel.
+  abzubrechen und neu anzulegen. **Stand 1.3:** Signal ist der Abruf selbst – `<img
+  loading="lazy">` fragt nur, was (fast) sichtbar ist, und ein Abruf über `thumb://` kommt vor
+  dem Hintergrund dran; das Melden des Ausschnitts kommt mit dem Raster (1.4).
+- Platzhalter in Bildfarbe (Durchschnittsfarbe im Index, Spalte `color`) statt leerer Kachel.
+- Ordner „privat“: Vorschau nur auf Abruf und nur im Arbeitsspeicher (höchstens 256 MB, älteste
+  zuerst heraus); der Hintergrund lässt ihn aus. Wechsel nach „privat“ und Entfernen löschen die
+  Cache-Dateien sofort (Kennungen vor dem Löschen der Zeilen merken).
 - Cache-Schlüssel aus Bild-Kennung + Größe + Änderungszeit + Stufe + Version des Verfahrens;
   ändert sich das Verfahren (Qualität, Farbraum), Version erhöhen.
 

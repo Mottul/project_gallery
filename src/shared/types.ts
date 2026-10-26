@@ -70,6 +70,8 @@ export interface LibraryState {
   total: number
   /** Dateien, deren Grundfelder noch gelesen werden (0 = fertig) */
   metaPending: number
+  /** Dateien, deren Vorschaubild noch entsteht (ohne Ordner „privat“; 0 = fertig) */
+  thumbPending: number
 }
 
 /** Eine Datei für Raster und Liste – ohne Pfad (der Renderer liest keine Dateien, Schicht C). */
@@ -101,6 +103,8 @@ export interface ImageInfo {
   status: 'ok' | 'defekt'
   /** Metadaten gelesen (sonst: Datum vorläufig aus der Datei) */
   metaRead: boolean
+  /** Durchschnittsfarbe „#rrggbb“ für den Platzhalter, sobald das Vorschaubild entstand */
+  color: string | null
 }
 
 export type AddFolderResult =

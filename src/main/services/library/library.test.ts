@@ -1,9 +1,17 @@
-// Metadaten-Warteschlange der Bibliothek mit echter Index-Datenbank (im Speicher) und einem
-// nachgebauten Bilddienst: Fehler treffen nur die Datei, die sie auslöst; ein nicht erreichbarer
-// Ordner bleibt offen; ohne ExifTool hört die Warteschlange auf, statt endlos zu versuchen.
+// Warteschlangen der Bibliothek (Metadaten, Vorschaubilder) mit echter Index-Datenbank (im
+// Speicher) und einem nachgebauten Bilddienst: Fehler treffen nur die Datei, die sie auslöst; ein
+// nicht erreichbarer Ordner bleibt offen; ohne ExifTool hört die Warteschlange auf, statt endlos
+// zu versuchen; „privat“ bleibt im Arbeitsspeicher, Entfernen löscht die Cache-Dateien.
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MetaDatei, MetaErgebnis } from '../bilddienst/protokoll'
+import type {
+  MetaDatei,
+  MetaErgebnis,
+  VorschauDatei,
+  VorschauErgebnis
+} from '../bilddienst/protokoll'
 import type { GefundeneDatei } from './repo'
 
 const h = vi.hoisted(() => ({
@@ -11,21 +19,30 @@ const h = vi.hoisted(() => ({
   dateien: [] as GefundeneDatei[],
   /** Antwort von isDirReachable, je Aufruf gefragt */
   erreichbar: (() => true) as () => boolean,
-  meta: (async () => []) as (d: MetaDatei[]) => Promise<MetaErgebnis[]>
+  meta: (async () => []) as (d: MetaDatei[]) => Promise<MetaErgebnis[]>,
+  vorschau: (async () => []) as (d: VorschauDatei[]) => Promise<VorschauErgebnis[]>,
+  /** lokaler Datenordner des Tests (Cache der Vorschaubilder) */
+  tmp: ''
 }))
 
 vi.mock('electron', () => ({
   app: { getPath: () => 'C:\\Profil' },
   BrowserWindow: { fromWebContents: () => null },
-  dialog: {}
+  // Rückfrage „Ordner entfernen“: bestätigt
+  dialog: { showMessageBox: async () => ({ response: 0 }) }
 }))
 vi.mock('../log', () => ({ logLine: vi.fn() }))
 vi.mock('../broadcast', () => ({ broadcast: vi.fn() }))
 vi.mock('../fileDialogs', () => ({ showOpenDialog: vi.fn() }))
 vi.mock('../lokaleDaten', () => ({
-  lokalerOrdner: () => 'C:\\Lokal',
-  lokalerUnterordner: () => 'C:\\Lokal\\index'
+  lokalerOrdner: () => h.tmp,
+  lokalerUnterordner: (name: string) => {
+    const d = join(h.tmp, name)
+    mkdirSync(d, { recursive: true })
+    return d
+  }
 }))
+vi.mock('../cache/schluessel', () => ({ vorschauSchluessel: () => Buffer.alloc(32, 7) }))
 vi.mock('../reachableDir', () => ({ isDirReachable: async () => h.erreichbar() }))
 vi.mock('../db', async (original) => ({
   ...(await original<typeof import('../db')>()),
@@ -43,6 +60,7 @@ vi.mock('../bilddienst/client', () => ({
       }
     },
     meta: vi.fn((d: MetaDatei[]) => h.meta(d)),
+    vorschau: vi.fn((d: VorschauDatei[]) => h.vorschau(d)),
     beenden: vi.fn()
   }
 }))
@@ -51,6 +69,8 @@ const { oeffneIndex } = await import('../db')
 const repo = await import('./repo')
 const { bilddienst } = await import('../bilddienst/client')
 const meta = vi.mocked(bilddienst.meta)
+const vorschau = vi.mocked(bilddienst.vorschau)
+const { vorschauPfad } = await import('../cache/ablage')
 
 const datei = (name: string): GefundeneDatei => ({
   rel: `sub/${name}`,
@@ -71,20 +91,51 @@ const zeilen = (): Record<string, Omit<Zeile, 'name'>> =>
     )
   )
 
+/** Vorschaubilder: alles gelingt; „speicher“ bekommt die Bytes zurück */
+const allesOk = async (d: VorschauDatei[]): Promise<VorschauErgebnis[]> =>
+  d.map((x) => ({
+    id: x.id,
+    ok: true as const,
+    farbe: '#102030',
+    ...(x.ziel === 'speicher'
+      ? { gross: Buffer.from(`G${x.id}`), klein: Buffer.from(`K${x.id}`) }
+      : {})
+  }))
+
 let lib: typeof import('./library')
+let vorschauen: typeof import('./vorschauen')
 beforeEach(async () => {
   vi.resetModules()
   meta.mockClear()
+  vorschau.mockClear()
+  h.tmp = mkdtempSync(join(tmpdir(), 'galeria-lib-'))
+  h.vorschau = allesOk
   h.db = oeffneIndex(':memory:')
   h.erreichbar = () => true
   h.dateien = ['a.jpg', 'gift.jpg', 'c.jpg'].map(datei)
   repo.ordnerAnlegen(h.db, 'D:\\Bilder', true, 1)
   lib = await import('./library')
+  vorschauen = await import('./vorschauen')
 })
 afterEach(() => {
   lib.bibliothekBeenden()
   h.db.close()
+  rmSync(h.tmp, { recursive: true, force: true, maxRetries: 5 })
 })
+
+type VZeile = {
+  name: string
+  id: number
+  thumb_state: string | null
+  status: string
+  color: string | null
+}
+const vzeilen = (): Record<string, Omit<VZeile, 'name'>> =>
+  Object.fromEntries(
+    (h.db.prepare('SELECT name, id, thumb_state, status, color FROM images').all() as VZeile[]).map(
+      ({ name: n, ...r }) => [n, r]
+    )
+  )
 
 describe('Metadaten-Warteschlange', () => {
   it('Stapel scheitert: einzeln nachlesen – nur die auslösende Datei bekommt das Dateidatum', async () => {
@@ -132,5 +183,94 @@ describe('Metadaten-Warteschlange', () => {
     expect(meta).toHaveBeenCalledTimes(1)
     expect(Object.values(zeilen()).every((z) => z.meta_read_at === null)).toBe(true)
     expect(lib.zustand().metaPending).toBe(0)
+  })
+})
+
+describe('Vorschaubilder-Warteschlange', () => {
+  const eingelesen = (): Promise<void> => vi.waitFor(() => expect(lib.zustand().total).toBe(3))
+
+  it('Hintergrund: jede Datei bekommt ihr Vorschaubild auf die Platte, mit Farbe', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+    expect(Object.values(vzeilen()).map((z) => [z.thumb_state, z.color])).toEqual([
+      ['ok', '#102030'],
+      ['ok', '#102030'],
+      ['ok', '#102030']
+    ])
+    expect(vorschau.mock.calls.flatMap(([d]) => d.map((x) => x.ziel))).not.toContain('speicher')
+  })
+
+  it('Absturz: einzeln nachfragen; beim zweiten Absturz an derselben Datei gilt sie als defekt', async () => {
+    h.vorschau = async (d) => {
+      if (d.length > 1 || name(d[0].pfad) === 'gift.jpg') throw fehler('DIENST_BEENDET')
+      return allesOk(d)
+    }
+    lib.bibliothekStarten()
+    await eingelesen()
+    await vi.waitFor(() => {
+      const z = vzeilen()
+      expect([z['a.jpg'].thumb_state, z['c.jpg'].thumb_state]).toEqual(['ok', 'ok'])
+    })
+    // ein Abruf (thumb://) versucht es noch einmal – spätestens dann der zweite Absturz
+    expect(await vorschauen.vorschauHolen(vzeilen()['gift.jpg'].id, 256)).toBe('keins')
+    await vi.waitFor(() =>
+      expect(vzeilen()['gift.jpg']).toMatchObject({ thumb_state: 'defekt', status: 'defekt' })
+    )
+    const allein = vorschau.mock.calls.filter(
+      ([d]) => d.length === 1 && name(d[0].pfad) === 'gift.jpg'
+    )
+    expect(allein).toHaveLength(2)
+    expect(lib.zustand().thumbPending).toBe(0)
+  })
+
+  it('„privat“: nichts auf der Platte, Vorschau auf Abruf aus dem Arbeitsspeicher', async () => {
+    await lib.modusSetzen(1, 'privat')
+    lib.bibliothekStarten()
+    await eingelesen()
+    // der Hintergrund lässt „privat“ aus
+    await new Promise((r) => setTimeout(r, 50))
+    expect(vorschau).not.toHaveBeenCalled()
+    expect(lib.zustand().thumbPending).toBe(0)
+    const a = vzeilen()['a.jpg']
+    const gross = await vorschauen.vorschauHolen(a.id, 768)
+    expect(Buffer.from(gross as Uint8Array).toString()).toBe(`G${a.id}`)
+    expect(vorschau.mock.calls.flatMap(([d]) => d.map((x) => x.ziel))).toEqual(['speicher'])
+    // zweiter Abruf aus dem Speicher, ohne Bilddienst; die Platte bleibt leer
+    const klein = await vorschauen.vorschauHolen(a.id, 256)
+    expect(Buffer.from(klein as Uint8Array).toString()).toBe(`K${a.id}`)
+    expect(vorschau).toHaveBeenCalledTimes(1)
+    expect(vzeilen()['a.jpg']).toMatchObject({ thumb_state: null, color: '#102030' })
+    expect(existsSync(vorschauPfad(join(h.tmp, 'vorschau'), a.id, 256))).toBe(false)
+  })
+
+  it('„privat“ schalten und Ordner entfernen löschen die Cache-Dateien sofort', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+    const cache = join(h.tmp, 'vorschau')
+    const ids = Object.values(vzeilen()).map((z) => z.id)
+    const anlegen = (): void => {
+      for (const id of ids) {
+        for (const stufe of [256, 768] as const) {
+          mkdirSync(join(vorschauPfad(cache, id, stufe), '..'), { recursive: true })
+          writeFileSync(vorschauPfad(cache, id, stufe), 'x')
+        }
+      }
+    }
+    const vorhanden = (): number =>
+      ids
+        .flatMap((id) => [256, 768].map((s) => vorschauPfad(cache, id, s as 256 | 768)))
+        .filter((p) => existsSync(p)).length
+    anlegen()
+    expect(vorhanden()).toBe(6)
+    await lib.modusSetzen(1, 'privat')
+    expect(vorhanden()).toBe(0)
+    // zurück auf „normal“: wieder offen, der Hintergrund legt den Cache neu an
+    await lib.modusSetzen(1, 'normal')
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+    anlegen()
+    expect(await lib.ordnerEntfernen(null, 1)).toBe(true)
+    expect(vorhanden()).toBe(0)
   })
 })

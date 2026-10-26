@@ -9,8 +9,8 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 **Phase 0 abgeschlossen** (25.10.2026): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests,
 CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen, Installer und Abnahme in der
 Windows-Sandbox. **Phase 1 läuft** (Bibliothek und Galerie) in den Teilschritten 1.1–1.6 aus dem
-Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner) und 1.2 (Grundfelder per ExifTool,
-Sortieren) sind umgesetzt. Grundlage ist
+Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfelder per ExifTool,
+Sortieren) und 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`) sind umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -71,6 +71,10 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   (`lokaleDaten.ts`, `%LOCALAPPDATA%`), nur main schreibt (`services/library/`); Nutzerordner liest
   nur der **Bilddienst** (eigener Prozess, `services/bilddienst/`). Der Renderer schickt Kennungen,
   nie Pfade; Ordner kommen aus dem Dialog des main. Skill `bibliothek-index`.
+- **Vorschaubilder:** erzeugt im Bilddienst (`bilddienst/vorschau.ts`), Warteschlange im main
+  (`library/vorschauen.ts`), nur AES-256-GCM-verschlüsselt im Cache (`services/cache/`, Schlüssel
+  per `safeStorage`), ausgeliefert über `thumb://id/<kennung>/<stufe>`
+  (`services/protocols/thumb.ts`); Ordner „privat“ nur im Arbeitsspeicher.
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
   Hell = `.light` am `<html>`, Standard „wie Windows“.
 

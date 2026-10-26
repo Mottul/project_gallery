@@ -76,6 +76,15 @@ const MIGRATIONEN: readonly string[] = [
   CREATE INDEX images_taken ON images (taken_at, id);
   CREATE INDEX images_typ ON images (ext, name_sort, id);
   CREATE INDEX images_meta_offen ON images (id) WHERE meta_read_at IS NULL;
+  `,
+  // 3 – Phase 1.3: Vorschaubilder. thumb_state: NULL = offen, 'ok' = beide Stufen im Cache,
+  // sonst ein Grund, es nicht wieder zu versuchen, bis sich die Datei ändert ('defekt',
+  // 'zu-gross', 'abgelehnt', 'kein-werkzeug'). color = Durchschnittsfarbe für den Platzhalter.
+  // Teilindex für die Warteschlange; alle als offen vormerken (bisher gab es keine Vorschaubilder).
+  `
+  ALTER TABLE images ADD COLUMN color TEXT;
+  UPDATE images SET thumb_state = NULL;
+  CREATE INDEX images_thumb_offen ON images (id) WHERE thumb_state IS NULL;
   `
 ]
 

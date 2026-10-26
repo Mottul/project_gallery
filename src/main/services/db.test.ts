@@ -126,4 +126,25 @@ describe('Index-Datenbank', () => {
     ])
     db.close()
   })
+
+  it('Version 2 → 3: alle Dateien warten auf ihr Vorschaubild, Farbe leer', () => {
+    const db = new Database(':memory:')
+    migrieren(db, 2)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    db.prepare(
+      "INSERT INTO images (folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime, thumb_state) VALUES (1, 'a.jpg', 'a.jpg', 'a.jpg', 'a.jpg', 'jpg', 1, 1, 'irgendwas')"
+    ).run()
+    migrieren(db)
+    expect(db.prepare('SELECT thumb_state, color FROM images').get()).toEqual({
+      thumb_state: null,
+      color: null
+    })
+    const plan = db
+      .prepare('EXPLAIN QUERY PLAN SELECT id FROM images WHERE thumb_state IS NULL ORDER BY id')
+      .all() as { detail: string }[]
+    expect(plan.map((r) => r.detail).join(' ')).toMatch(/images_thumb_offen/)
+    db.close()
+  })
 })

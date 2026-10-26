@@ -99,6 +99,39 @@ const ORTE = {
   parisTexas: { lat: 33.6609, lon: -95.5555, ort: 'Paris', land: 'Vereinigte Staaten' }
 }
 
+/** Farben des BMP-Testbilds: oben/unten verschieden – eine falsch herum gelesene Datei fällt auf */
+export const BMP_FARBEN = { oben: [8, 145, 178], unten: [245, 158, 11] }
+
+/**
+ * Unkomprimiertes 24-Bit-BMP, obere Hälfte `oben`, untere `unten`. Von Hand, weil sharp BMP weder
+ * schreiben noch lesen kann. BMP speichert die Zeilen von unten nach oben, je auf 4 Byte aufgefüllt.
+ */
+function bmpBild(breite, hoehe, { oben, unten }) {
+  const zeile = Math.ceil((breite * 3) / 4) * 4
+  const daten = zeile * hoehe
+  const buf = Buffer.alloc(54 + daten)
+  buf.write('BM', 0, 'ascii')
+  buf.writeUInt32LE(54 + daten, 2)
+  buf.writeUInt32LE(54, 10) // Beginn der Pixel
+  buf.writeUInt32LE(40, 14) // BITMAPINFOHEADER
+  buf.writeInt32LE(breite, 18)
+  buf.writeInt32LE(hoehe, 22) // positiv = Zeilen von unten
+  buf.writeUInt16LE(1, 26)
+  buf.writeUInt16LE(24, 28)
+  buf.writeUInt32LE(daten, 34)
+  for (let y = 0; y < hoehe; y++) {
+    // y = 0 ist die UNTERSTE Zeile
+    const [r, g, b] = y < hoehe / 2 ? unten : oben
+    for (let x = 0; x < breite; x++) {
+      const o = 54 + y * zeile + x * 3
+      buf[o] = b
+      buf[o + 1] = g
+      buf[o + 2] = r
+    }
+  }
+  return buf
+}
+
 const KAMERA_A = { hersteller: 'Galeria', modell: 'Testkamera A' }
 const KAMERA_B = { hersteller: 'Galeria', modell: 'Testkamera B' }
 
@@ -340,6 +373,10 @@ export async function erzeugeTestbilder(ziel, { gross = false, videos = true } =
   await f('formate/png-als.jpg', 'png', 120, 90, flaeche(120, 90, '#475569').png())
   // ohne Metadaten und ohne Datum
   await f('formate/ohne-metadaten.png', 'png', 120, 90, flaeche(120, 90, '#334155').png())
+  // BMP: Vorschaubild per ffmpeg (sharp liest es nicht), Anzeige in Chromium
+  mkdirSync(join(ziel, 'formate'), { recursive: true })
+  writeFileSync(pfad('formate/bild.bmp'), bmpBild(400, 300, BMP_FARBEN))
+  eintraege.push({ datei: 'formate/bild.bmp', art: 'bild', format: 'bmp', breite: 400, hoehe: 300 })
 
   if (gross) {
     await f(

@@ -3,20 +3,39 @@
 // gebündelten Programme (extraResources: ExifTool, ffmpeg). Muster: e2e/paket.mjs der Mottulbox.
 // Nicht im Standardlauf; vorher `npm run package:dir`, dann `npm run e2e:run -- paket`.
 //
-// Solange die App sharp, SQLite, ExifTool und ffmpeg noch nicht selbst nutzt (Phase 1), lädt bzw.
-// startet dieser Test sie im main-Prozess der gepackten App – genau dort, wo sie später laufen.
+// Die ersten Schritte laden die Module im main der gepackten App; der Bibliotheks-Schritt prüft
+// sie dort, wo sie wirklich laufen: im Bilddienst (utilityProcess) – ExifTool liest, sharp erzeugt
+// Vorschaubilder, ffmpeg wandelt BMP (seit 1.3).
 
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { launchApp, root, runSteps } from './harness.mjs'
+import {
+  erwarteteBilder,
+  launchApp,
+  root,
+  runSteps,
+  stubConfirm,
+  stubOrdnerDialog,
+  testbibliothek,
+  waitFor
+} from './harness.mjs'
 
-const exe =
+// Die neueste entpackte App unter dist/ – auch in einem Unterordner (gebaut mit
+// `-c.directories.output=dist/<name>`, wenn dist/win-unpacked gesperrt ist, docs/ENTWICKLUNG.md)
+const [entpackt, programm] =
   process.platform === 'win32'
-    ? join(root, 'dist', 'win-unpacked', 'Galeria Beata.exe')
-    : join(root, 'dist', 'linux-unpacked', 'galeria-beata')
-if (!existsSync(exe))
-  throw new Error(`Keine gepackte App unter ${exe} – vorher npm run package:dir`)
+    ? ['win-unpacked', 'Galeria Beata.exe']
+    : ['linux-unpacked', 'galeria-beata']
+const dist = join(root, 'dist')
+const exe = [
+  join(dist, entpackt, programm),
+  ...(existsSync(dist) ? readdirSync(dist) : []).map((d) => join(dist, d, entpackt, programm))
+]
+  .filter((p) => existsSync(p))
+  .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
+if (!exe) throw new Error(`Keine gepackte App unter ${dist} – vorher npm run package:dir`)
+console.log(`  [paket] ${exe}`)
 
 const ctx = await launchApp({ executablePath: exe })
 const { app, page } = ctx
@@ -107,6 +126,51 @@ try {
         assert.match(r.exiftool, /^\d+\.\d+$/)
         assert.match(r.ffmpeg, /^ffmpeg version n\d/)
         assert.match(r.ffprobe, /^ffprobe version n\d/)
+      }
+    ],
+    [
+      'Bilddienst im Paket: ExifTool liest, sharp erzeugt Vorschaubilder, BMP über ffmpeg',
+      async () => {
+        const bib = await testbibliothek()
+        try {
+          await stubOrdnerDialog(app, bib.dir)
+          await page.evaluate(() => window.api.library.addFolder())
+          const erwartet = erwarteteBilder(bib.manifest)
+          const s = await waitFor(async () => {
+            const z = await page.evaluate(() => window.api.library.state())
+            const [o] = z.folders
+            return o?.status === 'bereit' &&
+              o.count === erwartet &&
+              z.metaPending === 0 &&
+              z.thumbPending === 0
+              ? z
+              : null
+          }, 50_000)
+          assert.ok(s, 'Bibliothek im Paket nicht fertig')
+          const bilder = await page.evaluate(async () =>
+            window.api.library.details(
+              await window.api.library.query({ feld: 'name', richtung: 'auf' })
+            )
+          )
+          const status = async (name) => {
+            const b = bilder.find((x) => x.name === name)
+            return app.evaluate(
+              async ({ net }, url) => (await net.fetch(url)).status,
+              `thumb://id/${b.id}/256`
+            )
+          }
+          assert.deepEqual(
+            [await status('dubrovnik.jpg'), await status('bild.bmp'), await status('bild.avif')],
+            [200, 200, 200]
+          )
+          assert.equal(bilder.find((x) => x.name === 'dubrovnik.jpg').format, 'jpeg')
+          // Ordner wieder weg, damit das Beenden nichts mehr zu tun hat
+          await stubConfirm(app, true)
+          const [o] = s.folders
+          assert.equal(await page.evaluate((id) => window.api.library.removeFolder(id), o.id), true)
+        } finally {
+          bib.aufraeumen()
+        }
       }
     ],
     [

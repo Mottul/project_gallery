@@ -98,7 +98,9 @@ Projektordner – etwa die Claude-Desktop-App –, öffnet dessen Dateisystem
 weder löschen noch neu paketieren („Device or resource busy“, gemessen am 25.10.2026, Restart
 Manager nannte die Claude-App). Abhilfe: das Programm neu starten, oder in einen neuen Ordner
 bauen: `npx --yes electron-builder@26.17.0 --publish never -c.directories.output=dist/frisch`
-(die Sandbox-Abnahme nimmt den neuesten Installer unter `dist/`).
+(die Sandbox-Abnahme nimmt den neuesten Installer unter `dist/`, `e2e:run -- paket` die neueste
+entpackte App). Seit 1.3 schließt `electron-builder.yml` ganz `dist/` aus – vorher kamen beim
+Bauen in einen Unterordner Binaries früherer Builds mit ins Paket.
 
 Abnahme in der **Windows-Sandbox ohne Netz** (Voraussetzung oben): `npm run abnahme:sandbox`
 öffnet die Sandbox; darin installiert `scripts/sandbox/abnahme.ps1` still, startet die App, prüft
@@ -148,6 +150,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   (`shared/grundfelder.ts`, `dates.ts`). Der Renderer fragt geordnete Kennungen ab
   (`library.query`, Sortierung aus `shared/sortFilter.ts`) und Details nur für das Sichtbare.
   Skill `bibliothek-index`.
+- **Vorschaubilder:** Der Bilddienst prüft die Datei (passt zum Index, echter Pfad im Ordner),
+  erzeugt mit sharp 768/256 px (BMP über ffmpeg) und legt sie AES-256-GCM-verschlüsselt im
+  lokalen Datenordner ab (`services/cache/`: Ablage, Verschlüsselung, Schlüssel per
+  `safeStorage`). Der main führt die Warteschlange (`library/vorschauen.ts`: Abrufe zuerst, dann
+  der Hintergrund) und liefert über `thumb://id/<kennung>/<stufe>` (`services/protocols/thumb.ts`,
+  in Netzsperre und CSP eingetragen). Den Schlüssel bekommt der Bilddienst als erste Nachricht,
+  nie als Argument.
 
 ## Konventionen
 
@@ -164,9 +173,12 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   Regeln im main (`windowPolicy`, `netzRegel`).
 - **E2E** (`e2e/`): `smoke` (Start, Design-Umschalter), `security` (Sandbox, CSP, Navigation,
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
-  Gegenprobe), `galerie` (Ordner, Abgleich, Neustart, Entfernen), `sortieren` (Grundfelder,
-  Reihenfolgen, Oberfläche, kein ExifTool nach dem Beenden), `originale` (Prüfsummen vorher/
-  nachher). Jeder Schritt hat ein Zeitlimit von 60 s.
+  Gegenprobe), `galerie` (Ordner, Abgleich, Vorschaubilder samt Cache und „privat“, Neustart,
+  Entfernen, Log ohne Inhalte), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
+  nach dem Beenden), `originale` (Prüfsummen vorher/nachher); `paket` nur auf Wunsch (gepackte
+  App samt Bilddienst). Jeder Schritt hat ein Zeitlimit von 60 s. Pixel aus `thumb://` prüft ein
+  Test im main über `net.fetch` (derselbe Handler) – eine Canvas in der Seite dürfte sie nicht
+  lesen (anderer Ursprung).
 - **Labortests** (`*.lab.test.*`) mit den echten Werkzeugen auf synthetischen Dateien; sie laufen
   mit `npm test`, sobald ExifTool und ffmpeg geladen sind.
 - **CI** (`.github/workflows/ci.yml`): Prüfungen unter Linux mit Node 22 und 24 (samt

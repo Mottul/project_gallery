@@ -50,7 +50,12 @@ export interface Bildliste {
 /** Schlüssel, der sich ändert, wenn sich am Inhalt der Bibliothek etwas getan hat. */
 function inhaltsSchluessel(lib: LibraryState | null): string {
   if (!lib) return ''
-  return [lib.total, lib.metaPending, ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}`)]
+  return [
+    lib.total,
+    lib.metaPending,
+    lib.thumbPending,
+    ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}`)
+  ]
     .map(String)
     .join('|')
 }

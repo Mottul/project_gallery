@@ -62,7 +62,17 @@ try {
 - **Zustand über die Brücke abfragen** (`window.api.library.state()`) und mit `waitFor` auf
   „fertig eingelesen“ warten (`status === 'bereit'` und `lastScan`), nie feste Pausen.
 - **Bilder prüfen:** Ob ein Vorschaubild erscheint, an `naturalWidth > 0` des `<img>` erkennen,
-  nicht an der Existenz des Elements; Pixel per Canvas `getImageData` (Farbe des Testmotivs).
+  nicht an der Existenz des Elements. **Pixel nicht per Canvas:** `thumb:` ist ein anderer
+  Ursprung, die Canvas wäre „tainted“. Stattdessen im main holen – `app.evaluate(({ net }) =>
+  net.fetch('thumb://id/…'))` geht durch denselben Handler wie die Seite – und mit sharp prüfen
+  (Muster `e2e/galerie.mjs`).
+- **Eigene Protokolle und die Konsole:** Jede 4xx-Antwort auf ein `<img>` erscheint in der Seite
+  als Konsolenfehler (gemessen 1.3), 204 nicht. Erwartete Lücken (defektes Bild) also mit 204
+  beantworten, sonst wird „keine Konsolenfehler“ zufällig rot – je nachdem, ob die Zeile sichtbar war.
+- **Cache und Log prüfen:** Cache-Dateien rekursiv unter `<userData>/lokal` suchen (Windows und
+  Linux liegen verschieden); Log `<userData>/galeria-debug.log` auf Koordinaten, Titel und
+  Dateinamen der Testbibliothek prüfen – mit Gegenprobe, dass das Log den Lauf überhaupt enthält.
+- **`paket`** nimmt die neueste entpackte App unter `dist/` (auch `dist/<name>/win-unpacked`).
 - **Watcher:** nach einer Änderung von außen mit `waitFor` auf das Ergebnis warten (Debounce),
   nie feste Pausen.
 

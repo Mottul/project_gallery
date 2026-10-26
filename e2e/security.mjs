@@ -205,6 +205,48 @@ try {
       }
     ],
     [
+      'thumb://: nur gültige Adressen und Kennungen aus dem Index, nur GET – sonst kein Bild',
+      async () => {
+        // im main über denselben Handler wie die Seite (net.fetch kennt eigene Protokolle)
+        const status = (url, method = 'GET') =>
+          app.evaluate(
+            async ({ net }, [u, m]) => (await net.fetch(u, { method: m })).status,
+            [url, method]
+          )
+        assert.equal(await status('thumb://id/999999/256'), 404, 'erfundene Kennung')
+        for (const url of [
+          'thumb://id/1/512',
+          'thumb://id/0/256',
+          'thumb://id/abc/256',
+          'thumb://id/1/256/x',
+          'thumb://anders/1/256',
+          'thumb://id/1/..%2f..%2fx',
+          // Ziffern als Rechnername liest Chromium als IP-Adresse – darum der feste Name „id“
+          'thumb://42/256'
+        ]) {
+          assert.equal(await status(url), 400, url)
+        }
+        assert.equal(await status('thumb://id/1/256', 'POST'), 405)
+        // in der Seite: kein <img> lädt etwas
+        const geladen = await page.evaluate(
+          (urls) =>
+            Promise.all(
+              urls.map(
+                (u) =>
+                  new Promise((res) => {
+                    const i = new Image()
+                    i.onload = () => res(u)
+                    i.onerror = () => res(false)
+                    i.src = u
+                  })
+              )
+            ),
+          ['thumb://id/999999/256', 'thumb://id/1/../../../windows/win.ini', 'thumb://42/256']
+        )
+        assert.deepEqual(geladen, [false, false, false])
+      }
+    ],
+    [
       'keine unbehandelten Fehler im Hauptfenster',
       async () => {
         // abgewiesene Ladeversuche erscheinen absichtlich als Konsolenfehler; Abstürze nicht

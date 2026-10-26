@@ -17,7 +17,7 @@ export function pfadSchluessel(pfad: string, windows: boolean): string {
 }
 
 /** Liegt `innen` in `aussen` (oder ist gleich)? Beide als Vergleichsschlüssel. */
-function liegtIn(innen: string, aussen: string): boolean {
+export function liegtIn(innen: string, aussen: string): boolean {
   if (innen === aussen) return true
   const praefix = aussen.endsWith('/') ? aussen : aussen + '/'
   return innen.startsWith(praefix)

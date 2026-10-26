@@ -26,6 +26,14 @@ import { lokalerOrdner, lokalerUnterordner } from '../lokaleDaten'
 import { logLine } from '../log'
 import { isDirReachable } from '../reachableDir'
 import * as repo from './repo'
+import {
+  ordnerNichtMehrPrivat,
+  ordnerWirdPrivat,
+  vorschauenAnstossen,
+  vorschauenBeenden,
+  vorschauenEinrichten,
+  vorschauVerwerfen
+} from './vorschauen'
 
 const WINDOWS = process.platform === 'win32'
 /** Höchstens so oft während eines Scans den Zustand melden */
@@ -48,6 +56,14 @@ let beendet = false
 function db(): DB {
   return getDb(lokalerUnterordner('index'))
 }
+
+// Vorschaubilder (vorschauen.ts) arbeiten auf demselben Index und melden über denselben Weg
+vorschauenEinrichten({
+  db: () => db(),
+  melden: (sofort) => melden(sofort),
+  nichtErreichbar: () => nichtErreichbar(),
+  beendet: () => beendet
+})
 
 /** Anzeigename: letzter Pfadteil, bei einer Wurzel („D:\“) der Pfad selbst. */
 function anzeigeName(pfad: string): string {
@@ -75,7 +91,8 @@ export function zustand(): LibraryState {
   return {
     folders,
     total: folders.reduce((s, f) => s + f.count, 0),
-    metaPending: ohneExiftool ? 0 : repo.metaOffenAnzahl(db(), nichtErreichbar())
+    metaPending: ohneExiftool ? 0 : repo.metaOffenAnzahl(db(), nichtErreichbar()),
+    thumbPending: repo.vorschauOffenAnzahl(db(), nichtErreichbar())
   }
 }
 
@@ -125,6 +142,7 @@ async function einlesen(id: number): Promise<void> {
     lz.found += dateien.length
     melden(false)
     metadatenAnstossen()
+    vorschauenAnstossen()
   })
   try {
     const r = await lz.auftrag.fertig
@@ -136,6 +154,7 @@ async function einlesen(id: number): Promise<void> {
     )
     setzeStatus(id, 'bereit')
     metadatenAnstossen()
+    vorschauenAnstossen()
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code ?? ''
     if (code === 'ABGEBROCHEN') return
@@ -296,10 +315,12 @@ export function bildDetails(ids: readonly number[]): ImageInfo[] {
 export function bibliothekStarten(): void {
   for (const o of repo.ordnerListe(db())) einreihen(o.id)
   metadatenAnstossen()
+  vorschauenAnstossen()
 }
 
 export function bibliothekBeenden(): void {
   beendet = true
+  vorschauenBeenden()
   // eine gedrosselte Meldung öffnete den Index sonst nach schliesseDb() wieder
   if (meldeTimer) clearTimeout(meldeTimer)
   meldeTimer = null
@@ -358,14 +379,22 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
   laufzeit.delete(id)
   const i = warteschlange.indexOf(id)
   if (i >= 0) warteschlange.splice(i, 1)
+  // Kennungen vorher merken – nach dem Löschen der Zeilen fände sie niemand mehr
+  const ids = repo.ordnerKennungen(db(), id)
   const ok = repo.ordnerEntfernen(db(), id)
   logLine('[bibliothek] Ordner entfernt:', id)
+  // Vorschaubilder gleich mit (Schicht D: keine Reste)
+  await vorschauVerwerfen(ids)
   melden()
   return ok
 }
 
-export function modusSetzen(id: number, mode: FolderMode): void {
+export async function modusSetzen(id: number, mode: FolderMode): Promise<void> {
+  const vorher = repo.ordnerHolen(db(), id)?.mode
   if (!repo.modusSetzen(db(), id, mode)) throw new Error('Ordner gibt es nicht')
+  // „privat“: keine Vorschaubilder auf der Platte – vorhandene sofort löschen (Schicht D)
+  if (mode === 'privat' && vorher !== 'privat') await ordnerWirdPrivat(db(), id)
+  else if (mode !== 'privat' && vorher === 'privat') ordnerNichtMehrPrivat(db(), id)
   melden()
 }
 
