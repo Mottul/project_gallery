@@ -59,19 +59,37 @@ const MIGRATIONEN: readonly string[] = [
   CREATE INDEX images_mtime ON images (mtime, id);
   CREATE INDEX images_size ON images (size, id);
   CREATE INDEX images_folder_seen ON images (folder_id, seen_scan);
+  `,
+  // 2 – Phase 1.2: Grundfelder und Sortieren. Format nach Inhalt (kann von der Endung abweichen);
+  // vorläufiges Aufnahmedatum aus den Dateizeiten (die ältere – dates.ts), bis ExifTool gelesen
+  // hat – so ist taken_at nie leer und „nach Datum“ sortiert ohne Sonderfall; Indizes für die
+  // Sortierungen, Teilindex für die Warteschlange „Metadaten noch nicht gelesen“.
+  `
+  ALTER TABLE images ADD COLUMN format TEXT;
+  UPDATE images SET
+    taken_at = strftime('%Y-%m-%dT%H:%M:%S',
+      (CASE WHEN btime > 0 AND btime < mtime THEN btime ELSE mtime END) / 1000.0,
+      'unixepoch', 'localtime'),
+    taken_offset = NULL,
+    taken_source = CASE WHEN btime > 0 AND btime < mtime THEN 'datei-erstellt' ELSE 'datei-geaendert' END
+  WHERE taken_at IS NULL;
+  CREATE INDEX images_taken ON images (taken_at, id);
+  CREATE INDEX images_typ ON images (ext, name_sort, id);
+  CREATE INDEX images_meta_offen ON images (id) WHERE meta_read_at IS NULL;
   `
 ]
 
 export const SCHEMA_VERSION = MIGRATIONEN.length
 
 /** Fehlende Migrationen ausführen – jede in einer Transaktion zusammen mit der neuen Version. */
-export function migrieren(db: DB): void {
+export function migrieren(db: DB, bis = SCHEMA_VERSION): void {
   const ist = db.pragma('user_version', { simple: true }) as number
   if (ist > SCHEMA_VERSION) {
     // eine neuere App hat die Datei angelegt – nicht anfassen, sonst gehen Daten verloren
     throw new Error(`Index ist neuer (Version ${ist}) als diese App (${SCHEMA_VERSION})`)
   }
-  for (let v = ist; v < SCHEMA_VERSION; v++) {
+  // `bis` nur für Tests („alte DB → neue DB“)
+  for (let v = ist; v < Math.min(bis, SCHEMA_VERSION); v++) {
     db.transaction(() => {
       db.exec(MIGRATIONEN[v])
       db.pragma(`user_version = ${v + 1}`)

@@ -237,9 +237,12 @@ kommen mit Phase 1 dazu).
 ### Sortieren, Filtern, Gruppieren, Suchen
 
 - **Aufnahmedatum** mit fester Rangfolge: EXIF `DateTimeOriginal` (+ `SubSecTimeOriginal`,
-  `OffsetTimeOriginal`) → `CreateDate` → XMP `photoshop:DateCreated` → Dateierstellung →
-  Änderungsdatum. Die Quelle wird gespeichert und im Info-Panel genannt („Datum aus Datei, nicht
-  aus der Kamera“). Videos siehe [Videos](#videos).
+  `OffsetTimeOriginal`) → `CreateDate` → XMP `photoshop:DateCreated` → die **ältere** von
+  Dateierstellung und Änderungszeit (entschieden in 1.2: Beim Kopieren setzt Windows die
+  Erstellzeit neu und behält die Änderungszeit, beim Bearbeiten umgekehrt – die ältere liegt
+  näher an der Aufnahme). Bis ExifTool gelesen hat, steht dieses Dateidatum schon im Index, so
+  sortiert „nach Datum“ ohne Lücken. Die Quelle wird gespeichert und im Info-Panel genannt
+  („Datum aus Datei, nicht aus der Kamera“). Videos siehe [Videos](#videos).
 - **Name** natürlich sortiert („Bild 2“ vor „Bild 10“), ohne Groß/Klein, Umlaute richtig.
 - **GPS = Orte alphabetisch (entschieden):** sortiert und gruppiert nach Ortsname A–Z, das Land
   als Zusatz („Dubrovnik · Kroatien“); innerhalb eines Ortes nach Aufnahmedatum. Der Ortsname
@@ -572,7 +575,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | | Inhalt | E2E |
 |---|---|---|
 | 1.1 ✅ | **Bibliothek-Fundament:** Index-DB (better-sqlite3, Migrationen, lokaler Datenordner unter `%LOCALAPPDATA%`), Bilddienst als utilityProcess mit Neustart, Scan (rekursiv, Ausschlüsse, Abgleich, „fehlt“/„nicht erreichbar“), Ordner hinzufügen/entfernen/neu einlesen, Ordner-Modi, Ordnerliste mit Anzahl | `galerie` (Ordner, Anzahl, Neustart), `originale`; Sandbox: Index lokal, nach Deinstallation weg |
-| 1.2 | **Grundfelder und Sortieren:** Maße, Ausrichtung, Aufnahmedatum (Rangfolge, `dates.ts`) per ExifTool im Bilddienst; `sortFilter.ts`; Abfrage liefert Kennungslisten | `sortieren` (Name, Datum, Dateidatum, Größe, Typ) |
+| 1.2 ✅ | **Grundfelder und Sortieren:** Maße (aufgerichtet), Ausrichtung, Format nach Inhalt, Kamera, Aufnahmedatum (Rangfolge, `dates.ts`, `grundfelder.ts`) per ExifTool-Pool im Bilddienst (bis 4 Prozesse, Stapel zu 200, Warteschlange `meta_read_at IS NULL`); Migration 2 (vorläufiges Dateidatum, Indizes je Sortierung); `sortFilter.ts`; `library.query` liefert Kennungen, `library.details` höchstens 1000; vorläufige Tabelle mit „Sortieren nach“ | `sortieren` (Name, Datum, Dateidatum, Größe, Typ; kein ExifTool nach dem Beenden), `originale` (nach dem Lesen aller Metadaten) |
 | 1.3 | **Vorschaubilder:** sharp im Bilddienst (Gleichzeitigkeit nach Labor), BMP per ffmpeg, AES-256-GCM-Cache mit Schlüssel über `safeStorage`, `thumb://`, sichtbare zuerst, Ordner „privat“ nur im Speicher | `galerie` (Bilder erscheinen), `security` (`thumb://`), Cache ohne JPEG-Signatur |
 | 1.4 | **Galerie-Oberfläche:** virtualisiertes Raster mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste | `galerie` |
 | 1.5 | **Betrachter:** `bild://` (mit Range, TIFF umgerechnet), Vollbild, Zoom, Vor/Zurück, Filmstreifen, Diashow, Papierkorb | `galerie`, `originale` |

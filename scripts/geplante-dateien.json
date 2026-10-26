@@ -2,9 +2,7 @@
   "_hinweis": "Für npm run check:refs. geplant: Dateien, die Plan und Skills nennen und die in späteren Schritten hier entstehen – Eintrag streichen, sobald es sie gibt (die Prüfung meldet das). anderswo: Verweise auf Dateien, die es hier nie geben wird (Vorbilder in der Mottulbox, Dateien nur im Release).",
   "geplant": [
     "args.test.ts",
-    "dates.ts",
     "editor.mjs",
-    "exiftool/binPath.ts",
     "ffmpeg/ffmpegPath.ts",
     "ffmpeg/mediaInfoParse.ts",
     "ffmpeg/probe.ts",
@@ -17,18 +15,13 @@
     "shared/editPlan.ts",
     "shared/metaFields.ts",
     "shared/updatePlan.ts",
-    "sortFilter.ts",
-    "sortieren.mjs",
     "src/main/ipc/meta.handlers.ts",
     "src/main/services/exiftool/args.ts",
-    "src/main/services/exiftool/exiftool.ts",
     "src/main/services/jobs/queue.ts",
     "src/shared/batchPlan.ts",
-    "src/shared/dates.ts",
     "src/shared/geo.ts",
     "src/shared/metaFields.ts",
     "src/shared/renamePattern.ts",
-    "src/shared/sortFilter.ts",
     "stapel.mjs"
   ],
   "anderswo": [

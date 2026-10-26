@@ -142,7 +142,12 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   unter `%LOCALAPPDATA%\Galeria Beata\index`; nur main schreibt (`services/library/`). Alles, was
   Nutzerordner liest, läuft im **Bilddienst** – einem eigenen Prozess (`utilityProcess`,
   `services/bilddienst/`, Build-Einstieg bilddienst.js in out/main); er meldet Ergebnisse in
-  Stapeln, main schreibt je Stapel eine Transaktion. Skill `bibliothek-index`.
+  Stapeln, main schreibt je Stapel eine Transaktion. Im Bilddienst läuft auch der ExifTool-Pool
+  (`services/exiftool/`, `-stay_open`); main reicht ihm Stapel der Dateien ohne gelesene
+  Metadaten (`meta_read_at IS NULL`) und trägt die geprüften Grundfelder ein
+  (`shared/grundfelder.ts`, `dates.ts`). Der Renderer fragt geordnete Kennungen ab
+  (`library.query`, Sortierung aus `shared/sortFilter.ts`) und Details nur für das Sichtbare.
+  Skill `bibliothek-index`.
 
 ## Konventionen
 
@@ -159,7 +164,9 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   Regeln im main (`windowPolicy`, `netzRegel`).
 - **E2E** (`e2e/`): `smoke` (Start, Design-Umschalter), `security` (Sandbox, CSP, Navigation,
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
-  Gegenprobe). Jeder Schritt hat ein Zeitlimit von 60 s.
+  Gegenprobe), `galerie` (Ordner, Abgleich, Neustart, Entfernen), `sortieren` (Grundfelder,
+  Reihenfolgen, Oberfläche, kein ExifTool nach dem Beenden), `originale` (Prüfsummen vorher/
+  nachher). Jeder Schritt hat ein Zeitlimit von 60 s.
 - **Labortests** (`*.lab.test.*`) mit den echten Werkzeugen auf synthetischen Dateien; sie laufen
   mit `npm test`, sobald ExifTool und ffmpeg geladen sind.
 - **CI** (`.github/workflows/ci.yml`): Prüfungen unter Linux mit Node 22 und 24 (samt

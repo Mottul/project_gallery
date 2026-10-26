@@ -1,5 +1,7 @@
 // Domain-Typen, die main, preload und renderer teilen. Rein, ohne Electron.
 
+import type { DatumQuelle } from './dates'
+
 /** Design: folgt Windows (Standard) oder fest hell/dunkel. */
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -66,6 +68,39 @@ export interface LibraryState {
   folders: LibraryFolder[]
   /** Summe der vorhandenen Dateien aller Ordner */
   total: number
+  /** Dateien, deren Grundfelder noch gelesen werden (0 = fertig) */
+  metaPending: number
+}
+
+/** Eine Datei für Raster und Liste – ohne Pfad (der Renderer liest keine Dateien, Schicht C). */
+export interface ImageInfo {
+  id: number
+  folderId: number
+  name: string
+  /** Endung klein, ohne Punkt */
+  ext: string
+  /** Format nach Inhalt (jpeg, png …), null bis gelesen */
+  format: string | null
+  /** Bytes */
+  size: number
+  /** Änderungszeit (ms) */
+  mtime: number
+  /** Aufgerichtete Maße (Ausrichtung schon berücksichtigt) */
+  width: number | null
+  height: number | null
+  /** EXIF-Ausrichtung 1–8 */
+  orientation: number | null
+  /** Aufnahme, lokale Zeit „YYYY-MM-DDTHH:MM:SS[.fff]“ */
+  takenAt: string
+  /** Zeitzone „+02:00“, wenn bekannt */
+  takenOffset: string | null
+  /** Herkunft des Datums (Rangfolge in dates.ts) */
+  takenSource: DatumQuelle
+  cameraMake: string | null
+  cameraModel: string | null
+  status: 'ok' | 'defekt'
+  /** Metadaten gelesen (sonst: Datum vorläufig aus der Datei) */
+  metaRead: boolean
 }
 
 export type AddFolderResult =

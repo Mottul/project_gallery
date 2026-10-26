@@ -13,7 +13,7 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 | Was | Ort |
 |---|---|
 | Bearbeitbare Felder: Name, Typ, Grenzen, Prüfung, Tags je Feld | `src/shared/metaFields.ts` + Test |
-| ExifTool-Prozess (`-stay_open`), Warteschlange je Prozess, Zeitlimit, Neustart | `src/main/services/exiftool/exiftool.ts` |
+| ExifTool-Prozess (`-stay_open`), Pool, Warteschlange je Prozess, Zeitlimit, Neustart (Lesen läuft im Bilddienst, ab 1.2) | `src/main/services/exiftool/exiftool.ts` |
 | Argumentdatei bauen (rein, getestet) | `src/main/services/exiftool/args.ts` |
 | Lesen → Index, Schreiben, Journal, Sidecars | `src/main/services/metadata/` |
 | IPC | `src/main/ipc/meta.handlers.ts` (Skill `ipc-kanal`) |
