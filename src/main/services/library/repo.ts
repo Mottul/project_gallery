@@ -459,6 +459,11 @@ export function ordnerKennungen(db: DB, folderId: number): number[] {
     .all(folderId) as number[]
 }
 
+/** Alle fertigen Vorschaubilder als offen markieren (neuer Schlüssel: der Cache ist leer). */
+export function vorschauAlleOffen(db: DB): number {
+  return db.prepare("UPDATE images SET thumb_state = NULL WHERE thumb_state = 'ok'").run().changes
+}
+
 /** Vorschaubilder eines Ordners als offen markieren (Wechsel nach/aus „privat“). */
 export function vorschauZuruecksetzen(db: DB, folderId: number): void {
   db.prepare("UPDATE images SET thumb_state = NULL WHERE folder_id = ? AND thumb_state = 'ok'").run(

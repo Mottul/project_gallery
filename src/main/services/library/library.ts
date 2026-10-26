@@ -25,6 +25,7 @@ import { showOpenDialog } from '../fileDialogs'
 import { lokalerOrdner, lokalerUnterordner } from '../lokaleDaten'
 import { logLine } from '../log'
 import { isDirReachable } from '../reachableDir'
+import { vorschauSchluesselLaden } from '../cache/vorschauCache'
 import * as repo from './repo'
 import {
   ordnerNichtMehrPrivat,
@@ -313,6 +314,11 @@ export function bildDetails(ids: readonly number[]): ImageInfo[] {
 
 /** Beim Start: Index öffnen, alle Ordner im Hintergrund abgleichen, offene Metadaten lesen. */
 export function bibliothekStarten(): void {
+  // neuer Schlüssel (kein sicherer Speicher, Konto gewechselt): Cache leer – neu erzeugen lassen
+  if (vorschauSchluesselLaden()) {
+    const n = repo.vorschauAlleOffen(db())
+    if (n) logLine(`[vorschau] neuer Schlüssel – ${n} Vorschaubilder entstehen neu`)
+  }
   for (const o of repo.ordnerListe(db())) einreihen(o.id)
   metadatenAnstossen()
   vorschauenAnstossen()

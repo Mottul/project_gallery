@@ -22,11 +22,14 @@ const h = vi.hoisted(() => ({
   meta: (async () => []) as (d: MetaDatei[]) => Promise<MetaErgebnis[]>,
   vorschau: (async () => []) as (d: VorschauDatei[]) => Promise<VorschauErgebnis[]>,
   /** lokaler Datenordner des Tests (Cache der Vorschaubilder) */
-  tmp: ''
+  tmp: '',
+  /** meldet der Schlüssel beim Start „neu“ (Cache geleert)? */
+  schluesselNeu: false
 }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => 'C:\\Profil' },
+  // getAppPath: ffmpeg wird dort gesucht (ffmpegPath.ts) – im Test gibt es keins
+  app: { getPath: () => 'C:\\Profil', getAppPath: () => h.tmp, isPackaged: false },
   BrowserWindow: { fromWebContents: () => null },
   // Rückfrage „Ordner entfernen“: bestätigt
   dialog: { showMessageBox: async () => ({ response: 0 }) }
@@ -42,7 +45,9 @@ vi.mock('../lokaleDaten', () => ({
     return d
   }
 }))
-vi.mock('../cache/schluessel', () => ({ vorschauSchluessel: () => Buffer.alloc(32, 7) }))
+vi.mock('../cache/schluessel', () => ({
+  vorschauSchluessel: () => ({ schluessel: Buffer.alloc(32, 7), neu: h.schluesselNeu })
+}))
 vi.mock('../reachableDir', () => ({ isDirReachable: async () => h.erreichbar() }))
 vi.mock('../db', async (original) => ({
   ...(await original<typeof import('../db')>()),
@@ -110,6 +115,7 @@ beforeEach(async () => {
   vorschau.mockClear()
   h.tmp = mkdtempSync(join(tmpdir(), 'galeria-lib-'))
   h.vorschau = allesOk
+  h.schluesselNeu = false
   h.db = oeffneIndex(':memory:')
   h.erreichbar = () => true
   h.dateien = ['a.jpg', 'gift.jpg', 'c.jpg'].map(datei)
@@ -272,5 +278,21 @@ describe('Vorschaubilder-Warteschlange', () => {
     anlegen()
     expect(await lib.ordnerEntfernen(null, 1)).toBe(true)
     expect(vorhanden()).toBe(0)
+  })
+
+  it('Neustart mit neuem Schlüssel (Cache geleert): alles entsteht im Hintergrund neu', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+    expect(vorschau.mock.calls.flatMap(([d]) => d)).toHaveLength(3)
+    // „Neustart“: frische Module, derselbe Index; der Schlüssel ist neu
+    lib.bibliothekBeenden()
+    vi.resetModules()
+    h.schluesselNeu = true
+    lib = await import('./library')
+    lib.bibliothekStarten()
+    await vi.waitFor(() => expect(vorschau.mock.calls.flatMap(([d]) => d)).toHaveLength(6))
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+    expect(Object.values(vzeilen()).map((z) => z.thumb_state)).toEqual(['ok', 'ok', 'ok'])
   })
 })

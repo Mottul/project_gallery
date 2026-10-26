@@ -13,6 +13,8 @@ import { vorschauSchluessel } from './schluessel'
 import { entschluesseln, zusatzdaten } from './verschluesselung'
 
 let schluessel: Buffer | null = null
+/** Beim Laden entstand ein neuer Schlüssel (Cache geleert) */
+let schluesselNeu = false
 
 export function cacheOrdner(): string {
   return lokalerUnterordner('vorschau')
@@ -20,8 +22,17 @@ export function cacheOrdner(): string {
 
 /** Was der Bilddienst zum Erzeugen braucht (Schlüssel einmal je Start geladen). */
 export function vorschauEinrichtung(): Einrichtung {
-  schluessel ??= vorschauSchluessel(cacheOrdner())
+  if (!schluessel) ({ schluessel, neu: schluesselNeu } = vorschauSchluessel(cacheOrdner()))
   return { schluessel, cacheOrdner: cacheOrdner(), ffmpeg: ffmpegPfad() }
+}
+
+/**
+ * Beim Start: Schlüssel laden. true, wenn er neu ist – dann ist der Cache leer, und alles, was
+ * der Index als fertig führt, muss neu entstehen.
+ */
+export function vorschauSchluesselLaden(): boolean {
+  vorschauEinrichtung()
+  return schluesselNeu
 }
 
 /** Inhaltstyp nach den ersten Bytes (die Vorschau ist WebP, wenn das Bild Transparenz hat). */

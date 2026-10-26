@@ -43,6 +43,9 @@ Umgesetzt in 1.3: Schema 3 (`color`, Teilindex `images_thumb_offen`), Vorschaubi
 `kein-werkzeug`), Warteschlange mit Vorrang für Abrufe und Cursor je Runde (eine gerade
 gesperrte Datei kommt erst in der nächsten Runde wieder), zweiter Absturz an einer Datei = defekt,
 Ergebnisse nur bei unveränderter Datei eingetragen (sonst Cache-Dateien wieder gelöscht).
+Neuer Schlüssel beim Start (kein sicherer Speicher wie Linux ohne Schlüsselbund, oder DPAPI
+entschlüsselt nicht mehr): Der Cache ist leer – alle `ok` werden wieder offen und entstehen im
+Hintergrund neu, nicht nur auf Abruf (`library.test.ts`, gefunden über die Linux-CI).
 
 ## Regeln
 

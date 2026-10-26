@@ -27,17 +27,20 @@ function cacheLeeren(cacheOrdner: string): void {
   }
 }
 
-/** Schlüssel laden oder anlegen (einmal je Start, im main nach `ready`). */
-export function vorschauSchluessel(cacheOrdner: string): Buffer {
+/**
+ * Schlüssel laden oder anlegen (einmal je Start, im main nach `ready`). `neu`: Der Cache wurde
+ * dabei geleert – der Index muss seine Vorschaubilder wieder als offen führen.
+ */
+export function vorschauSchluessel(cacheOrdner: string): { schluessel: Buffer; neu: boolean } {
   if (!sichererSpeicher()) {
     logLine('[vorschau] kein sicherer Schlüsselspeicher – Schlüssel nur für diese Sitzung')
     cacheLeeren(cacheOrdner)
-    return randomBytes(SCHLUESSEL_LAENGE)
+    return { schluessel: randomBytes(SCHLUESSEL_LAENGE), neu: true }
   }
   const pfad = join(cacheOrdner, DATEI)
   try {
     const k = Buffer.from(safeStorage.decryptString(readFileSync(pfad)), 'base64')
-    if (k.length === SCHLUESSEL_LAENGE) return k
+    if (k.length === SCHLUESSEL_LAENGE) return { schluessel: k, neu: false }
     logLine('[vorschau] Schlüssel unbrauchbar – neuer Schlüssel, Cache wird geleert')
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
@@ -53,5 +56,5 @@ export function vorschauSchluessel(cacheOrdner: string): Buffer {
   const tmp = `${pfad}.${process.pid}.tmp`
   writeFileSync(tmp, safeStorage.encryptString(neu.toString('base64')))
   renameSync(tmp, pfad)
-  return neu
+  return { schluessel: neu, neu: true }
 }

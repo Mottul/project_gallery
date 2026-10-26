@@ -322,12 +322,34 @@ try {
         assert.ok(!readdirSync(userData).includes('galerie.db'))
         const d = (await alleBilder()).find((b) => b.name === 'dubrovnik.jpg')
         assert.equal((await thumb(d.id, 256)).status, 200)
-        assert.ok(await waitFor(async () => (await zustand()).thumbPending === 0, 30_000))
-        assert.deepEqual(
-          new Map(cacheDateien().map((f) => [f, statSync(f).mtimeMs])),
-          stempel,
-          'Cache nach dem Neustart neu erzeugt (Schlüssel verloren?)'
+        assert.ok(await waitFor(async () => (await zustand()).thumbPending === 0, 50_000))
+        const nachher = new Map(cacheDateien().map((f) => [f, statSync(f).mtimeMs]))
+        // Mit sicherem Schlüsselspeicher (Windows: DPAPI) übersteht der Cache den Neustart. Ohne
+        // (Linux ohne Schlüsselbund, CI) gilt der Schlüssel nur je Sitzung: Der Cache entsteht
+        // vollständig neu – im Hintergrund, nicht nur auf Abruf.
+        const sicher = await ctx.app.evaluate(
+          ({ safeStorage }) =>
+            safeStorage.isEncryptionAvailable() &&
+            (process.platform !== 'linux' ||
+              safeStorage.getSelectedStorageBackend() !== 'basic_text')
         )
+        if (sicher) {
+          assert.deepEqual(
+            nachher,
+            stempel,
+            'Cache nach dem Neustart neu erzeugt (Schlüssel verloren?)'
+          )
+        } else {
+          assert.deepEqual([...nachher.keys()].sort(), [...stempel.keys()].sort())
+          assert.ok(
+            [...nachher].every(([f, t]) => t !== stempel.get(f)),
+            'ohne sicheren Speicher hätte der Cache neu entstehen müssen'
+          )
+          assert.match(
+            readFileSync(join(userData, 'galeria-debug.log'), 'utf8'),
+            /kein sicherer Schlüsselspeicher/
+          )
+        }
       }
     ],
     [
