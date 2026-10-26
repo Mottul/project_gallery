@@ -340,7 +340,18 @@ try {
             'Cache nach dem Neustart neu erzeugt (Schlüssel verloren?)'
           )
         } else {
-          assert.deepEqual([...nachher.keys()].sort(), [...stempel.keys()].sort())
+          // neu für jedes vorhandene, lesbare Bild – eine inzwischen fehlende Datei (paris.jpg)
+          // bekommt keins mehr, ihre alten Cache-Dateien sind mit dem alten Schlüssel weg
+          const kennung = (f) => Number(/(\d+)-(?:256|768)\.gbv$/.exec(f)[1])
+          const lesbar = (await alleBilder())
+            .filter((b) => b.status === 'ok')
+            .map((b) => b.id)
+            .sort((a, b) => a - b)
+          assert.deepEqual(
+            [...new Set([...nachher.keys()].map(kennung))].sort((a, b) => a - b),
+            lesbar
+          )
+          assert.equal(nachher.size, 2 * lesbar.length)
           assert.ok(
             [...nachher].every(([f, t]) => t !== stempel.get(f)),
             'ohne sicheren Speicher hätte der Cache neu entstehen müssen'
