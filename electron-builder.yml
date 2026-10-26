@@ -18,7 +18,11 @@ files:
   - '!**/node_modules/better-sqlite3/{deps,src}/**'
   - '!**/node_modules/better-sqlite3/binding.gyp'
   - '!**/node_modules/better-sqlite3/prebuilds/**'
-  - '**/node_modules/better-sqlite3/prebuilds/${platform}-${arch}.node'
+  # verankert (nicht **/…): sonst holte das Muster Binaries aus alten Builds unter dist/<name>/
+  # zurück ins Paket (gefunden in 1.3 beim Bauen mit -c.directories.output=dist/<name>)
+  - 'node_modules/better-sqlite3/prebuilds/${platform}-${arch}.node'
+  # frühere Pakete nie mit einpacken (electron-builder schließt nur den eigenen Ausgabeordner aus)
+  - '!dist{,/**}'
 
 # sharp und better-sqlite3 bringen fertige N-API-Binaries mit: kein Neubau, keine node-gyp-Kette.
 npmRebuild: false

@@ -7,7 +7,7 @@ description: Windows-Installer von Galeria Beata bauen und prüfen – NSIS One-
 
 Ziel aus `docs/PLAN.md`: **eine Datei, Doppelklick, ohne Administratorrechte, ohne Fragen, ohne
 Netz.** Die Konfiguration steht in `electron-builder.yml` (Kommentare dort lesen), Symbole
-erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0, gemessen).
+erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0), 187 MB (1.3).
 
 ## electron-builder.yml – Galeria-Beata-spezifisch
 
@@ -17,7 +17,9 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0, geme
   die sharp-Doku für electron-builder), `**/node_modules/better-sqlite3/**`.
 - Nur die Binaries der Zielplattform ins Paket (Muster Mottulbox für better-sqlite3:
   `prebuilds/**` ausschließen, `${platform}-${arch}` einschließen; für `@img/sharp-*` prüfen,
-  dass nur `win32-x64` mitkommt).
+  dass nur `win32-x64` mitkommt). **Einschließende Muster nie mit `**/` beginnen:** das holte in
+  1.1/1.2 Binaries alter Builds aus `dist/<name>/` ins Paket; dazu `!dist{,/**}` (electron-builder
+  schließt nur den eigenen Ausgabeordner aus).
 - `productName: Galeria Beata`, `artifactName: Galeria-Beata-${version}-setup.${ext}` (ohne
   Leerzeichen im Dateinamen).
 - `extraResources`: `resources/exiftool/win` → `exiftool`, `resources/ffmpeg/win` → `ffmpeg`,
@@ -61,8 +63,12 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0, geme
 
 1. `npm run package:dir` und `npm run e2e:run -- paket`: gepackte App startet aus `app.asar`,
    sharp lädt aus `app.asar.unpacked`, ExifTool aus `resources/exiftool`, ein Vorschaubild
-   entsteht, ein Metadaten-Schreiben gelingt. **Gegenprobe:** ohne `asarUnpack` für `@img`
-   muss der Schritt rot werden (so geprüft in Phase 0). Scheitert das Paketieren mit „Device or
+   entsteht (seit 1.3 im Bilddienst: ExifTool liest, sharp erzeugt, BMP über ffmpeg), ein
+   Metadaten-Schreiben gelingt. **Gegenprobe:** ohne `asarUnpack` für `@img` wird der
+   sharp-Schritt rot (Phase 0) – aber nur an der Ordnerprüfung: electron-builder packt native
+   Teile per `smartUnpack` ohnehin aus, sharp rechnet weiter (gemessen 1.3; `smartUnpack` lässt
+   sich in 26.17 nicht abschalten). Echte Gegenprobe: in einer Kopie des Pakets
+   `app.asar.unpacked/node_modules/@img` löschen – dann wird auch der Bilddienst-Schritt rot. Scheitert das Paketieren mit „Device or
    resource busy“, hält ein anderes Electron-Programm `app.asar` offen (`docs/ENTWICKLUNG.md`,
    „Paket und Abnahme“).
 2. Größe des Installers notieren (Plan: Phase 0) – Sprünge erklären können.

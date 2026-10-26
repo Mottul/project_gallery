@@ -60,7 +60,7 @@ const api = {
 const liste = async (feld, richtung = 'auf') => api.details(await api.query(feld, richtung))
 /** Namen der Tabellenzeilen in der Oberfläche */
 const tabelle = () =>
-  ctx.page.$$eval('table[aria-label="Bilder"] tbody tr td:first-child', (td) =>
+  ctx.page.$$eval('table[aria-label="Bilder"] tbody tr td:nth-child(2)', (td) =>
     td.map((x) => x.textContent)
   )
 const zeilenUeber = new Map()

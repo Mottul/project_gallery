@@ -325,7 +325,8 @@ describe('Abfragen', () => {
       cameraMake: null,
       cameraModel: null,
       status: 'ok',
-      metaRead: false
+      metaRead: false,
+      color: null
     })
     expect(JSON.stringify(d)).not.toMatch(/Bilder/)
     expect(repo.details(db, [])).toEqual([])
@@ -335,5 +336,107 @@ describe('Abfragen', () => {
         Array.from({ length: 1001 }, (_, i) => i)
       )
     ).toThrow(/Höchstens/)
+  })
+})
+
+describe('Vorschaubilder im Index', () => {
+  const zustand = (): Record<string, { thumb_state: string | null; status: string }> =>
+    Object.fromEntries(
+      (
+        db.prepare('SELECT name, thumb_state, status FROM images ORDER BY name').all() as {
+          name: string
+          thumb_state: string | null
+          status: string
+        }[]
+      ).map(({ name, ...r }) => [name, r])
+    )
+
+  it('Warteschlange: offene Dateien nach der Kennung, ohne „privat“, fehlende und ausgeschlossene', () => {
+    const privat = repo.ordnerAnlegen(db, 'E:\\Privat', true, 1)
+    const stick = repo.ordnerAnlegen(db, 'F:\\Stick', true, 1)
+    scan(db, id, [datei('a.jpg'), datei('b.jpg'), datei('weg.jpg')])
+    scan(db, id, [datei('a.jpg'), datei('b.jpg')]) // weg.jpg fehlt
+    scan(db, privat, [datei('p.jpg')])
+    scan(db, stick, [datei('s.jpg')])
+    repo.modusSetzen(db, privat, 'privat')
+    const offen = repo.vorschauOffen(db, 10)
+    expect(offen.map((z) => [z.ordner, z.rel_path, z.mode])).toEqual([
+      ['D:\\Bilder', 'a.jpg', 'normal'],
+      ['D:\\Bilder', 'b.jpg', 'normal'],
+      ['F:\\Stick', 's.jpg', 'normal']
+    ])
+    expect(repo.vorschauOffen(db, 10, offen[0].id).map((z) => z.rel_path)).toEqual([
+      'b.jpg',
+      's.jpg'
+    ])
+    expect(repo.vorschauOffen(db, 10, 0, [stick]).map((z) => z.rel_path)).toEqual([
+      'a.jpg',
+      'b.jpg'
+    ])
+    expect(repo.vorschauOffenAnzahl(db)).toBe(3)
+    expect(repo.vorschauOffenAnzahl(db, [stick])).toBe(2)
+    // auf Abruf auch „privat“, nie fehlende
+    const alle = (db.prepare('SELECT id FROM images ORDER BY id').pluck().all() as number[]).slice()
+    expect(
+      repo
+        .vorschauZeilen(db, alle)
+        .map((z) => z.rel_path)
+        .sort()
+    ).toEqual(['a.jpg', 'b.jpg', 'p.jpg', 's.jpg'])
+  })
+
+  it('Ergebnisse eintragen: ok mit Farbe, defekt setzt den Status; geänderte Datei bleibt offen', () => {
+    scan(db, id, [datei('a.jpg'), datei('kaputt.jpg'), datei('neu.jpg')])
+    const [a, kaputt, neu] = repo.vorschauOffen(db, 10)
+    scan(db, id, [datei('a.jpg'), datei('kaputt.jpg'), datei('neu.jpg', 555)]) // neu geändert
+    const geschrieben = repo.vorschauSchreiben(db, [
+      { ...a, zustand: 'ok', farbe: '#112233' },
+      { ...kaputt, zustand: 'defekt', farbe: null },
+      { ...neu, zustand: 'ok', farbe: '#445566' }
+    ])
+    expect([...geschrieben].sort()).toEqual([a.id, kaputt.id].sort())
+    expect(zustand()).toEqual({
+      'a.jpg': { thumb_state: 'ok', status: 'ok' },
+      'kaputt.jpg': { thumb_state: 'defekt', status: 'defekt' },
+      'neu.jpg': { thumb_state: null, status: 'ok' }
+    })
+    expect(repo.details(db, [a.id])[0].color).toBe('#112233')
+    // geänderte Datei: Vorschaubild wieder offen, Farbe bleibt bis dahin als Platzhalter
+    scan(db, id, [datei('a.jpg', 777), datei('kaputt.jpg'), datei('neu.jpg', 555)])
+    expect(zustand()['a.jpg'].thumb_state).toBeNull()
+    expect(repo.details(db, [a.id])[0].color).toBe('#112233')
+    // „defekt“ bleibt, solange die Datei gleich bleibt
+    expect(zustand()['kaputt.jpg']).toEqual({ thumb_state: 'defekt', status: 'defekt' })
+  })
+
+  it('Ordner: Kennungen für das Löschen, Zurücksetzen nur der fertigen', () => {
+    scan(db, id, [datei('a.jpg'), datei('b.jpg')])
+    const [a, b] = repo.vorschauOffen(db, 10)
+    repo.vorschauSchreiben(db, [
+      { ...a, zustand: 'ok', farbe: null },
+      { ...b, zustand: 'defekt', farbe: null }
+    ])
+    expect(repo.ordnerKennungen(db, id)).toEqual([a.id, b.id])
+    repo.vorschauZuruecksetzen(db, id)
+    expect(zustand()).toEqual({
+      'a.jpg': { thumb_state: null, status: 'ok' },
+      'b.jpg': { thumb_state: 'defekt', status: 'defekt' }
+    })
+  })
+
+  it('Warteschlange nutzt den Teilindex', () => {
+    const plan = (
+      db
+        .prepare(
+          `EXPLAIN QUERY PLAN SELECT i.id FROM images i JOIN folders f ON f.id = i.folder_id
+            WHERE i.thumb_state IS NULL AND i.status != 'fehlt' AND f.mode != 'privat'
+              AND i.id > 0 ORDER BY i.id LIMIT 6`
+        )
+        .all() as { detail: string }[]
+    )
+      .map((r) => r.detail)
+      .join(' | ')
+    expect(plan).toMatch(/images_thumb_offen/)
+    expect(plan).not.toMatch(/TEMP B-TREE/)
   })
 })

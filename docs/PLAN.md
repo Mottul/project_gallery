@@ -176,7 +176,7 @@ resources/ffmpeg/win/             # gebündeltes ffmpeg/ffprobe (nicht im Git, p
 5. **Überwachen:** `fs.watch` rekursiv (lokal), Abgleich beim Start und bei Fokus; Netzlaufwerke
    periodisch mit Zeitlimit. Bei Überlauf der Ereignisse: Ordner neu abgleichen.
 6. **Renderer** fragt `library.query({ sortierung, filter, gruppierung })` → geordnete Liste der
-   Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://<id>/<stufe>`.
+   Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://id/<kennung>/<stufe>`.
 
 ### Index (Skizze)
 
@@ -201,7 +201,7 @@ Indizes auf jede Sortierspalte (mit `folder_id`), `taken_at` mit Rückfall-Reihe
 
 | Protokoll | Liefert | Prüfung |
 |---|---|---|
-| `thumb://<id>/<stufe>` | Vorschaubild (Stufe 256 oder 768 px, entschlüsselt) | Kennung ganzzahlig, Stufe aus Allowlist, nur aus dem Cache |
+| `thumb://id/<kennung>/<stufe>` | Vorschaubild (Stufe 256 oder 768 px, entschlüsselt); 404 = Kennung unbekannt, 204 = Bild bekannt, aber ohne Vorschau (defekt) – so entsteht in der Seite kein Konsolenfehler | Kennung ganzzahlig, Stufe aus Allowlist, nur GET, nur aus dem Cache (bzw. Arbeitsspeicher bei „privat“). Fester Rechnername „id“: Chromium liest bei einem Standard-Protokoll einen Rechnernamen aus Ziffern als IP-Adresse („42“ → „0.0.0.42“) – gilt ebenso für `bild://` |
 | `bild://<id>` | Original, wenn Chromium es darstellen kann (JPEG, PNG, WebP, GIF, AVIF, BMP; Videos MP4/WebM …, mit **Range-Anfragen** fürs Spulen); sonst eine bildschirmgroße Umrechnung (TIFF, später HEIC/RAW) | Kennung muss im Index stehen, Pfad liegt (nach `realpath`) in einem Bibliotheksordner, Datei unverändert seit dem Index |
 
 CSP der Seite: `img-src 'self' data: blob: thumb: bild:`, `media-src bild:`, `connect-src 'self'`,
@@ -491,7 +491,17 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
     „Defekt“ entscheidet der Bilddienst mit sharp (`failOn: 'truncated'`), nicht der Scan per ExifTool.
   - HEVC-Testvideos lassen sich nur mit einem Encoder des Rechners erzeugen (Media Foundation);
     auf dem Entwickler-Laptop fehlt er – HEVC-Abspielen wird mit einer fremden Testdatei geprüft (Phase 6).
-  - Testbibliothek (31 Bilder, 5 Videos, 4 defekte Dateien): 3,8 s.
+  - Testbibliothek (31 Bilder, 5 Videos, 4 defekte Dateien): 3,8 s. Seit 1.3 mit einem BMP
+    (von Hand geschrieben – sharp kann BMP weder schreiben noch lesen; ffprobe liest es).
+  - **Vorschaubilder (1.3, `vorschau.lab.test.ts`):** alle acht Ausrichtungen pixelgenau in
+    beiden Stufen; Display-P3-Rot bleibt nach sRGB kräftig (255/0/0), ohne Profil gelesen wäre es
+    blasser (Gegenprobe); CMYK nah am Original; BMP über ffmpeg richtig herum; jede kaputte
+    Testdatei lehnt sharp ab. **GIF hat bei sharp immer einen Alpha-Kanal** und wird darum als
+    WebP abgelegt (Transparenz bleibt). Eine „BMP“-Datei, die in Wahrheit eine Playlist auf einen
+    lokalen Spion-Server ist, löst bei ffmpeg mit `-protocol_whitelist file` keine Anfrage aus.
+  - **thumb:// und die Konsole (1.3, E2E):** Jede Antwort 404 auf ein `<img>` erscheint in der
+    Seite als Konsolenfehler; 204 nicht (gemessen mit lauter 204). Darum 204 für „bekannt, aber
+    ohne Vorschau“.
 - ✅ **Labor-Messungen** (Skripte in `scripts/labor/`, wiederholbar; alle unter Electrons Node
   wie später im Bilddienst bzw. main):
   - **sharp – Vorschaubilder** (`sharp-durchsatz.mjs`, 24-MP-JPEG 6,2 MB → 768 px, daraus 256 px):
@@ -576,7 +586,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 |---|---|---|
 | 1.1 ✅ | **Bibliothek-Fundament:** Index-DB (better-sqlite3, Migrationen, lokaler Datenordner unter `%LOCALAPPDATA%`), Bilddienst als utilityProcess mit Neustart, Scan (rekursiv, Ausschlüsse, Abgleich, „fehlt“/„nicht erreichbar“), Ordner hinzufügen/entfernen/neu einlesen, Ordner-Modi, Ordnerliste mit Anzahl | `galerie` (Ordner, Anzahl, Neustart), `originale`; Sandbox: Index lokal, nach Deinstallation weg |
 | 1.2 ✅ | **Grundfelder und Sortieren:** Maße (aufgerichtet), Ausrichtung, Format nach Inhalt, Kamera, Aufnahmedatum (Rangfolge, `dates.ts`, `grundfelder.ts`) per ExifTool-Pool im Bilddienst (bis 4 Prozesse, Stapel zu 200, Warteschlange `meta_read_at IS NULL`); Migration 2 (vorläufiges Dateidatum, Indizes je Sortierung); `sortFilter.ts`; `library.query` liefert Kennungen, `library.details` höchstens 1000; vorläufige Tabelle mit „Sortieren nach“ | `sortieren` (Name, Datum, Dateidatum, Größe, Typ; kein ExifTool nach dem Beenden), `originale` (nach dem Lesen aller Metadaten) |
-| 1.3 | **Vorschaubilder:** sharp im Bilddienst (Gleichzeitigkeit nach Labor), BMP per ffmpeg, AES-256-GCM-Cache mit Schlüssel über `safeStorage`, `thumb://`, sichtbare zuerst, Ordner „privat“ nur im Speicher | `galerie` (Bilder erscheinen), `security` (`thumb://`), Cache ohne JPEG-Signatur |
+| 1.3 ✅ | **Vorschaubilder:** sharp im Bilddienst (halbe Thread-Zahl parallel, `concurrency(1)`, `UV_THREADPOOL_SIZE` passend; Datei erst in den Speicher gelesen – klare Fehlercodes, keine offene Datei), 768 px und daraus 256 px, JPEG 80 bzw. WebP bei Alpha-Kanal, EXIF-Ausrichtung, sRGB; BMP per ffmpeg (`-protocol_whitelist file`); vor dem Lesen: Datei passt zum Index, echter Pfad im Bibliotheksordner; AES-256-GCM-Cache (Zusatzdaten: Bild, Stufe, Größe, Änderungszeit, Verfahren) mit Schlüssel über `safeStorage`; Migration 3 (`color`, Teilindex); Warteschlange mit Vorrang für Abrufe über `thumb://` (lazy geladene Bilder = sichtbare zuerst), zweiter Absturz an einer Datei = defekt; Ordner „privat“ nur im Speicher, Wechsel nach „privat“ und Entfernen löschen die Cache-Dateien sofort | `galerie` (Bilder erscheinen, Ausrichtung pixelgenau, Cache verschlüsselt, „privat“, Neustart ohne Neuerzeugen, Entfernen ohne Reste, Log ohne Inhalte), `security` (`thumb://`), `paket` (Bilddienst im Paket); Labortest `vorschau.lab.test.ts` |
 | 1.4 | **Galerie-Oberfläche:** virtualisiertes Raster mit Größenregler, Liste/Details, Ordnerbaum, Auswahl, Statusleiste | `galerie` |
 | 1.5 | **Betrachter:** `bild://` (mit Range, TIFF umgerechnet), Vollbild, Zoom, Vor/Zurück, Filmstreifen, Diashow, Papierkorb | `galerie`, `originale` |
 | 1.6 | **Überwachen und Abnahme:** `fs.watch` mit Abgleich, Netzlaufwerke periodisch; Messung mit 50.000 Bildern; Sandbox-Abnahme mit Testbildern | alle |

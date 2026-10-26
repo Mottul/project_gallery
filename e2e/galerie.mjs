@@ -1,11 +1,15 @@
-// Bibliothek in der echten App (Phase 1.1): Ordner hinzufügen über den Dialog des main, Einlesen
-// im Bilddienst, Ablehnung überlappender Ordner, Modus, Abgleich nach Änderungen von außen,
-// Neustart mit vorhandenem Index, Entfernen mit Rückfrage. Testbibliothek aus scripts/testbilder.mjs.
+// Bibliothek in der echten App (Phase 1.1, 1.3): Ordner hinzufügen über den Dialog des main,
+// Einlesen im Bilddienst, Ablehnung überlappender Ordner, Modus, Vorschaubilder (thumb://,
+// verschlüsselter Cache, „privat“ nur im Speicher), Abgleich nach Änderungen von außen, Neustart
+// mit vorhandenem Index und Cache, Entfernen mit Rückfrage (keine Reste). Testbibliothek aus
+// scripts/testbilder.mjs.
 
 import assert from 'node:assert/strict'
-import { copyFileSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import sharp from 'sharp'
+import { QUADRANTEN } from '../scripts/testbilder.mjs'
 import {
   erwarteteBilder,
   launchApp,
@@ -33,6 +37,34 @@ async function eingelesen(pruef = () => true, ms = 30_000) {
   assert.ok(f, `nicht fertig eingelesen: ${JSON.stringify(await ordner())}`)
   return f
 }
+/** Alle Bilder mit Details (über die Brücke, wie die Oberfläche) */
+const alleBilder = () =>
+  ctx.page.evaluate(async () =>
+    window.api.library.details(await window.api.library.query({ feld: 'name', richtung: 'auf' }))
+  )
+/** Vorschau über thumb:// holen – im main: net.fetch geht durch denselben Handler wie die Seite */
+const thumb = async (id, stufe) => {
+  const r = await ctx.app.evaluate(async ({ net }, url) => {
+    const a = await net.fetch(url)
+    return {
+      status: a.status,
+      typ: a.headers.get('content-type'),
+      daten: Buffer.from(await a.arrayBuffer()).toString('base64')
+    }
+  }, `thumb://id/${id}/${stufe}`)
+  return { ...r, daten: Buffer.from(r.daten, 'base64') }
+}
+/** Dateien des Vorschau-Caches im lokalen Datenordner des Laufs */
+const cacheDateien = () =>
+  readdirSync(join(userData, 'lokal'), { recursive: true })
+    .map(String)
+    .filter((p) => p.endsWith('.gbv'))
+    .map((p) => join(userData, 'lokal', p))
+const defektErwartet = bib.manifest.eintraege
+  .filter((e) => e.art === 'defekt')
+  .map((e) => e.datei.split('/').pop())
+  .sort()
+
 const menue = async (eintrag) => {
   await ctx.page.getByRole('button', { name: 'Aktionen für „bib“' }).click()
   await ctx.page
@@ -68,6 +100,83 @@ try {
         await ctx.page
           .getByRole('heading', { name: `${erwartet} Bilder` })
           .waitFor({ timeout: 5_000 })
+      }
+    ],
+    [
+      'Vorschaubilder erscheinen (thumb://), aufgerichtet; kaputte Dateien gelten als defekt',
+      async () => {
+        assert.ok(
+          await waitFor(async () => (await zustand()).thumbPending === 0, 50_000),
+          `noch offen: ${(await zustand()).thumbPending}`
+        )
+        // in der Tabelle geladen (nicht nur das Element da)
+        const geladen = await waitFor(async () => {
+          const n = await ctx.page.$$eval(
+            'table[aria-label="Bilder"] tbody img',
+            (imgs) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length
+          )
+          return n >= 5 ? n : null
+        }, 15_000)
+        assert.ok(geladen, 'keine Vorschaubilder in der Tabelle')
+        const bilder = await alleBilder()
+        // Ausrichtung 6 (gespeichert gedreht): aufgerichtet 256 × 171, Motiv richtig herum
+        const a6 = bilder.find((b) => b.name === 'ausrichtung-6.jpg')
+        const r = await thumb(a6.id, 256)
+        assert.equal(r.status, 200)
+        assert.equal(r.typ, 'image/jpeg')
+        const { data, info } = await sharp(r.daten).raw().toBuffer({ resolveWithObject: true })
+        assert.deepEqual([info.width, info.height], [256, 171])
+        const px = (fx, fy) => {
+          const o = (Math.floor(fy * info.height) * info.width + Math.floor(fx * info.width)) * 3
+          return [data[o], data[o + 1], data[o + 2]]
+        }
+        const nah = (ist, soll) => ist.every((v, i) => Math.abs(v - soll[i]) <= 40)
+        for (const [ecke, fx, fy] of [
+          ['obenLinks', 0.25, 0.25],
+          ['obenRechts', 0.75, 0.25],
+          ['untenLinks', 0.25, 0.75],
+          ['untenRechts', 0.75, 0.75]
+        ]) {
+          assert.ok(nah(px(fx, fy), QUADRANTEN[ecke]), `${ecke}: ${px(fx, fy)}`)
+        }
+        // 768 = längste Kante (Bild 640 × 480 bleibt 640: nie vergrößert)
+        const d = bilder.find((b) => b.name === 'dubrovnik.jpg')
+        const gross = await sharp((await thumb(d.id, 768)).daten).metadata()
+        assert.deepEqual([gross.width, gross.height], [640, 480])
+        // kaputte Dateien: defekt, kein Vorschaubild; alle anderen mit Platzhalterfarbe
+        assert.deepEqual(
+          bilder
+            .filter((b) => b.status === 'defekt')
+            .map((b) => b.name)
+            .sort(),
+          defektErwartet
+        )
+        // bekannt, aber ohne Vorschau: 204 (kein Konsolenfehler in der Seite), unbekannt wäre 404
+        const kaputt = bilder.find((b) => b.status === 'defekt')
+        assert.equal((await thumb(kaputt.id, 256)).status, 204)
+        const ohneFarbe = bilder.filter((b) => b.status === 'ok' && !/^#[0-9a-f]{6}$/.test(b.color))
+        assert.deepEqual(ohneFarbe, [])
+      }
+    ],
+    [
+      'Cache nur verschlüsselt: keine JPEG-/WebP-Signatur, nichts im Roaming-Profil',
+      async () => {
+        const dateien = cacheDateien()
+        assert.equal(dateien.length, 2 * (erwartet - defektErwartet.length))
+        for (const f of dateien) {
+          const b = readFileSync(f)
+          assert.equal(b.subarray(0, 4).toString('latin1'), 'GBV1', f)
+          assert.ok(!b.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])), f)
+          for (const marke of ['JFIF', 'Exif', 'WEBP', 'RIFF']) {
+            assert.ok(!b.includes(marke, 0, 'latin1'), `${marke} in ${f}`)
+          }
+        }
+        // im lokalen Datenordner, nicht in userData (Roaming)
+        assert.ok(
+          !readdirSync(userData, { recursive: true })
+            .map(String)
+            .some((p) => p.endsWith('.gbv') && !p.startsWith('lokal'))
+        )
       }
     ],
     [
@@ -135,6 +244,47 @@ try {
       }
     ],
     [
+      'Modus „privat“: Cache-Dateien sofort weg, Vorschau aus dem Arbeitsspeicher, Platte bleibt leer',
+      async () => {
+        const vorher = cacheDateien().length
+        assert.ok(vorher > 0)
+        const [o] = await ordner()
+        const modus = (m) =>
+          ctx.page.evaluate(([id, mm]) => window.api.library.setFolderMode(id, mm), [o.id, m])
+        await modus('privat')
+        assert.deepEqual(cacheDateien(), [])
+        const d = (await alleBilder()).find((b) => b.name === 'dubrovnik.jpg')
+        const r = await thumb(d.id, 768)
+        assert.equal(r.status, 200)
+        assert.deepEqual(
+          [(await sharp(r.daten).metadata()).width, (await thumb(d.id, 256)).status],
+          [640, 200]
+        )
+        // die Tabelle zeigt weiter Bilder – aus dem Speicher
+        await ctx.page.reload()
+        assert.ok(
+          await waitFor(async () => {
+            const n = await ctx.page.$$eval(
+              'table[aria-label="Bilder"] tbody img',
+              (imgs) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length
+            )
+            return n >= 5
+          }, 30_000),
+          'keine Vorschaubilder aus dem Speicher'
+        )
+        assert.deepEqual(cacheDateien(), [], 'unter „privat“ entstand etwas auf der Platte')
+        // zurück auf „nur lesen“: der Cache entsteht neu
+        await modus('nur-lesen')
+        assert.ok(
+          await waitFor(
+            async () => (await zustand()).thumbPending === 0 && cacheDateien().length === vorher,
+            50_000
+          ),
+          `Cache nicht neu angelegt: ${cacheDateien().length} von ${vorher}`
+        )
+      }
+    ],
+    [
       'Datei von außen dazu, eine weg: „Neu einlesen“ gleicht ab (1 fehlt)',
       async () => {
         copyFileSync(join(bib.dir, 'orte', 'muenchen.jpg'), join(bib.dir, 'neu von außen.jpg'))
@@ -152,6 +302,9 @@ try {
       'Neustart: Ordner, Anzahl, Modus bleiben; der Index liegt im lokalen Datenordner',
       async () => {
         const vorher = await ordner()
+        // Vorschaubilder überstehen den Neustart (Schlüssel per safeStorage): nichts neu erzeugt
+        assert.ok(await waitFor(async () => (await zustand()).thumbPending === 0, 30_000))
+        const stempel = new Map(cacheDateien().map((f) => [f, statSync(f).mtimeMs]))
         await ctx.close()
         ctx = await launchApp({ userData })
         await ctx.page.getByRole('listitem', { name: 'bib' }).waitFor({ timeout: 15_000 })
@@ -167,6 +320,47 @@ try {
         )
         // nicht im Roaming-Profil
         assert.ok(!readdirSync(userData).includes('galerie.db'))
+        const d = (await alleBilder()).find((b) => b.name === 'dubrovnik.jpg')
+        assert.equal((await thumb(d.id, 256)).status, 200)
+        assert.ok(await waitFor(async () => (await zustand()).thumbPending === 0, 50_000))
+        const nachher = new Map(cacheDateien().map((f) => [f, statSync(f).mtimeMs]))
+        // Mit sicherem Schlüsselspeicher (Windows: DPAPI) übersteht der Cache den Neustart. Ohne
+        // (Linux ohne Schlüsselbund, CI) gilt der Schlüssel nur je Sitzung: Der Cache entsteht
+        // vollständig neu – im Hintergrund, nicht nur auf Abruf.
+        const sicher = await ctx.app.evaluate(
+          ({ safeStorage }) =>
+            safeStorage.isEncryptionAvailable() &&
+            (process.platform !== 'linux' ||
+              safeStorage.getSelectedStorageBackend() !== 'basic_text')
+        )
+        if (sicher) {
+          assert.deepEqual(
+            nachher,
+            stempel,
+            'Cache nach dem Neustart neu erzeugt (Schlüssel verloren?)'
+          )
+        } else {
+          // neu für jedes vorhandene, lesbare Bild – eine inzwischen fehlende Datei (paris.jpg)
+          // bekommt keins mehr, ihre alten Cache-Dateien sind mit dem alten Schlüssel weg
+          const kennung = (f) => Number(/(\d+)-(?:256|768)\.gbv$/.exec(f)[1])
+          const lesbar = (await alleBilder())
+            .filter((b) => b.status === 'ok')
+            .map((b) => b.id)
+            .sort((a, b) => a - b)
+          assert.deepEqual(
+            [...new Set([...nachher.keys()].map(kennung))].sort((a, b) => a - b),
+            lesbar
+          )
+          assert.equal(nachher.size, 2 * lesbar.length)
+          assert.ok(
+            [...nachher].every(([f, t]) => t !== stempel.get(f)),
+            'ohne sicheren Speicher hätte der Cache neu entstehen müssen'
+          )
+          assert.match(
+            readFileSync(join(userData, 'galeria-debug.log'), 'utf8'),
+            /kein sicherer Schlüsselspeicher/
+          )
+        }
       }
     ],
     [
@@ -183,8 +377,40 @@ try {
           .getByRole('heading', { name: 'Noch keine Ordner' })
           .waitFor({ timeout: 5_000 })
         assert.equal((await zustand()).total, 0)
+        // keine Reste: auch die Vorschaubilder sind weg (Schicht D)
+        assert.deepEqual(cacheDateien(), [])
         assert.equal(readdirSync(bib.dir, { recursive: true }).length, dateienVorher)
         assert.ok(statSync(join(bib.dir, 'neu von außen.jpg')).isFile())
+      }
+    ],
+    [
+      'Log ohne Inhalte: keine Koordinate, kein Titel, kein Stichwort, kein Dateiname',
+      async () => {
+        const log = readFileSync(join(userData, 'galeria-debug.log'), 'utf8')
+        assert.match(log, /\[vorschau\]/, 'Gegenprobe: das Log enthält die Arbeit dieses Laufs')
+        // Koordinaten mit vier Nachkommastellen und ohne Ziffer davor: drei Stellen kollidierten
+        // mit den Millisekunden der Zeitstempel („…:02.295Z“ enthält 2.295 – Paris, Linux-CI)
+        const koordinate = (v) =>
+          new RegExp(`(?<![\\d.])${Math.abs(v).toFixed(4).replace('.', '\\.')}`)
+        // Gegenprobe des Musters: findet eine durchgesickerte Koordinate (auch negativ), aber nicht
+        // den Zeitstempel aus der Linux-CI und keine längere Zahl, die nur so endet
+        const paris = bib.manifest.orte.paris
+        const texas = bib.manifest.orte.parisTexas
+        assert.ok(koordinate(paris.lat).test(`GPS ${paris.lat}, ${paris.lon}`))
+        assert.ok(koordinate(texas.lon).test(`lon=${texas.lon}`))
+        assert.ok(!koordinate(paris.lon).test('[2026-10-26T06:03:02.295Z]'))
+        assert.ok(!koordinate(paris.lat).test('148.8584'))
+        const muster = [
+          ...Object.values(bib.manifest.orte).flatMap((o) => [
+            koordinate(o.lat),
+            koordinate(o.lon)
+          ]),
+          ...['Altstadt am Abend', 'Tour Eiffel', 'Weihnachten', 'dubrovnik', 'ausrichtung-6'].map(
+            (t) => new RegExp(t)
+          ),
+          /Übersicht/
+        ]
+        assert.deepEqual(muster.filter((m) => m.test(log)).map(String), [])
       }
     ],
     [

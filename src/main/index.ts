@@ -1,10 +1,12 @@
-// Lebenszyklus der App. Reihenfolge beim Start: Netzsperre und Wächter vor dem ersten Fenster,
-// dann IPC, dann das Hauptfenster.
+// Lebenszyklus der App. Reihenfolge beim Start: eigene Protokolle anmelden (vor ready), dann
+// Netzsperre und Wächter vor dem ersten Fenster, dann IPC, dann das Hauptfenster.
 import { app, BrowserWindow } from 'electron'
+import { THUMB_PROTOKOLL } from '@shared/vorschau'
 import { registerIpcHandlers } from './ipc/registry'
 import { bibliothekBeenden, bibliothekStarten } from './services/library/library'
 import { logLine } from './services/log'
 import { installNetzsperre } from './services/netzsperre'
+import { thumbProtokollBedienen, thumbSchemaAnmelden } from './services/protocols/thumb'
 import { appPages, createMainWindow } from './services/windows/appWindows'
 import { installWindowGuards } from './services/windows/windowGuards'
 
@@ -19,6 +21,9 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   logLine('[uncaughtException]', err.stack ?? err.message)
 })
+
+// Eigene Protokolle müssen vor `ready` angemeldet sein (Netzsperre und CSP kennen sie auch)
+thumbSchemaAnmelden()
 
 // Nur eine Galerie je Benutzerprofil: Index und Cache haben genau einen Schreiber. Ein zweiter
 // Start holt das vorhandene Fenster nach vorn.
@@ -43,7 +48,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     logLine('--- Start ---', `version=${app.getVersion()}`, `packaged=${app.isPackaged}`)
-    installNetzsperre(appPages)
+    installNetzsperre(appPages, [THUMB_PROTOKOLL])
+    thumbProtokollBedienen()
     installWindowGuards()
     registerIpcHandlers()
     openMainWindow()

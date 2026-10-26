@@ -23,6 +23,12 @@ function Statusleiste(): JSX.Element {
           liest Metadaten … noch {zahl.format(lib.metaPending)}
         </span>
       )}
+      {lib && lib.thumbPending > 0 && (
+        <span className="inline-flex items-center gap-1.5">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          erzeugt Vorschaubilder … noch {zahl.format(lib.thumbPending)}
+        </span>
+      )}
       <span className="ml-auto inline-flex items-center gap-1.5">
         <ShieldCheck className="size-3.5 text-success" aria-hidden />
         Offline

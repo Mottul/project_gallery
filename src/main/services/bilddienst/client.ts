@@ -6,15 +6,19 @@
 
 import { utilityProcess, type UtilityProcess } from 'electron'
 import { join } from 'node:path'
+import { vorschauEinrichtung } from '../cache/vorschauCache'
 import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
 import { logLine } from '../log'
 import {
   ARG_EXIFTOOL,
+  vorschauParallel,
   type AnDienst,
   type MetaDatei,
   type MetaErgebnis,
-  type VomDienst
+  type VomDienst,
+  type VorschauDatei,
+  type VorschauErgebnis
 } from './protokoll'
 
 /** So lange darf ein Auftrag ohne jede Nachricht bleiben (ein Stapel kommt sonst alle paar ms). */
@@ -49,12 +53,24 @@ class Bilddienst {
       [ARG_EXIFTOOL + (exiftoolPfad() ?? '')],
       {
         serviceName: 'Galeria Bilddienst',
-        stdio: 'pipe'
+        stdio: 'pipe',
+        // libuv-Threads: einer je paralleles Bild plus zwei für Dateizugriffe (Labor) – sonst
+        // verhungerte der Scan neben sharp
+        env: { ...process.env, UV_THREADPOOL_SIZE: String(vorschauParallel() + 2) }
       }
     )
     kind.stdout?.on('data', (d) => logLine('[bilddienst]', String(d).trimEnd()))
     kind.stderr?.on('data', (d) => logLine('[bilddienst!]', String(d).trimEnd()))
     kind.on('message', (n: VomDienst) => this.nachricht(n))
+    // als erste Nachricht: Schlüssel und Ablage des Vorschau-Caches (nie als Argument – die
+    // Befehlszeile eines Prozesses kann jedes Programm des Benutzers lesen)
+    const e = vorschauEinrichtung()
+    kind.postMessage({
+      typ: 'einrichten',
+      schluessel: e.schluessel,
+      cacheOrdner: e.cacheOrdner,
+      ffmpeg: e.ffmpeg
+    } satisfies AnDienst)
     kind.on('exit', (code) => {
       if (this.kind !== kind) return
       this.kind = null
@@ -90,7 +106,7 @@ class Bilddienst {
     }
     this.laufend.delete(n.auftrag)
     if (n.typ === 'fertig') l.resolve({ gefunden: n.gefunden, unlesbar: n.unlesbar })
-    else if (n.typ === 'meta-ergebnis') l.resolve(n.ergebnisse)
+    else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
     else l.reject(fehler(n.code, n.meldung))
   }
 
@@ -142,6 +158,12 @@ class Bilddienst {
   /** Grundfelder (rohe ExifTool-Tags) vieler Dateien lesen. */
   meta(dateien: MetaDatei[]): Promise<MetaErgebnis[]> {
     return this.auftrag<MetaErgebnis[]>((a) => ({ typ: 'meta', auftrag: a, dateien })).antwort
+  }
+
+  /** Vorschaubilder erzeugen (je Datei ein Ergebnis, auch bei Fehlern – dann mit Code). */
+  vorschau(dateien: VorschauDatei[]): Promise<VorschauErgebnis[]> {
+    return this.auftrag<VorschauErgebnis[]>((a) => ({ typ: 'vorschau', auftrag: a, dateien }))
+      .antwort
   }
 
   /** Beim Beenden der App: laufende Aufträge abbrechen, ExifTool sauber beenden, Prozess beenden. */

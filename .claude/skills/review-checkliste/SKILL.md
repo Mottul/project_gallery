@@ -56,6 +56,11 @@ Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
   (Stapel, Metadaten schreiben) fragt ein erster Handler ab, alle weiteren prüfen die Freigabe.
 - **Electron meldet `'closed'` asynchron** – `const self = win` im Handler, `if (win !== self) return`.
 - „Läuft gerade“-Anzeigen brauchen die Wahrheit aus dem main (Event), nicht den letzten Klick.
+- **Eigene Protokolle:** fester Rechnername (`thumb://id/…`) – Ziffern als Rechnername liest
+  Chromium bei Standard-Protokollen als IP-Adresse; erwartete Lücken mit 204, unbekannt mit 404
+  (jede 4xx ist in der Seite ein Konsolenfehler); `Cache-Control: no-store` für alles, was auf der
+  Platte nur verschlüsselt liegen darf; Statusanzeigen, die sich laufend ändern, ohne
+  `role="status"` (Screenreader läse jede Zahl vor).
 
 ## Bilder, Videos und Metadaten (Galeria Beata)
 

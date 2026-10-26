@@ -300,6 +300,7 @@ interface DetailZeile {
   camera_model: string | null
   status: ImageInfo['status']
   meta_read_at: number | null
+  color: string | null
 }
 
 /** Details zu Kennungen, in der Reihenfolge der Anfrage; unbekannte fehlen in der Antwort. */
@@ -308,7 +309,8 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
   const rows = db
     .prepare(
       `SELECT id, folder_id, name, ext, format, size, mtime, width, height, orientation,
-              taken_at, taken_offset, taken_source, camera_make, camera_model, status, meta_read_at
+              taken_at, taken_offset, taken_source, camera_make, camera_model, status, meta_read_at,
+              color
          FROM images WHERE id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as DetailZeile[]
@@ -334,8 +336,137 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
         cameraMake: r.camera_make,
         cameraModel: r.camera_model,
         status: r.status,
-        metaRead: r.meta_read_at !== null
+        metaRead: r.meta_read_at !== null,
+        color: r.color
       }
     ]
   })
+}
+
+// ── Vorschaubilder (ab 1.3) ───────────────────────────────────────────────────────────────────
+
+/** Zustand des Vorschaubilds: 'ok' = im Cache; sonst nicht wieder versuchen, bis die Datei sich ändert */
+export type VorschauZustand = 'ok' | 'defekt' | 'zu-gross' | 'abgelehnt' | 'kein-werkzeug'
+
+/** Was zum Erzeugen und Ausliefern einer Vorschau nötig ist. */
+export interface VorschauZeile {
+  id: number
+  folder_id: number
+  /** Ordnerpfad (absolut) */
+  ordner: string
+  mode: FolderMode
+  rel_path: string
+  ext: string
+  format: string | null
+  size: number
+  mtime: number
+  status: 'ok' | 'fehlt' | 'defekt'
+  thumb_state: VorschauZustand | null
+}
+
+const VORSCHAU_SPALTEN = `i.id, i.folder_id, f.path AS ordner, f.mode, i.rel_path, i.ext, i.format,
+  i.size, i.mtime, i.status, i.thumb_state`
+
+/**
+ * Die nächsten Dateien ohne Vorschaubild (Teilindex images_thumb_offen) nach `nachId` – so
+ * kommt eine Datei, die gerade nicht ging (gesperrt, Zeitlimit), erst in der nächsten Runde
+ * wieder. Ohne fehlende Dateien, ohne Ordner „privat“ (nie auf die Platte) und ohne `ohneOrdner`.
+ */
+export function vorschauOffen(
+  db: DB,
+  limit: number,
+  nachId = 0,
+  ohneOrdner: readonly number[] = []
+): VorschauZeile[] {
+  return db
+    .prepare(
+      `SELECT ${VORSCHAU_SPALTEN}
+         FROM images i JOIN folders f ON f.id = i.folder_id
+        WHERE i.thumb_state IS NULL AND i.status != 'fehlt' AND f.mode != 'privat'
+          AND i.id > ? AND i.folder_id NOT IN (SELECT value FROM json_each(?))
+        ORDER BY i.id LIMIT ?`
+    )
+    .all(nachId, JSON.stringify(ohneOrdner), limit) as VorschauZeile[]
+}
+
+/** Zahl der Dateien, deren Vorschaubild noch entsteht (für die Statusleiste). */
+export function vorschauOffenAnzahl(db: DB, ohneOrdner: readonly number[] = []): number {
+  return (
+    db
+      .prepare(
+        `SELECT count(*) AS n FROM images i JOIN folders f ON f.id = i.folder_id
+          WHERE i.thumb_state IS NULL AND i.status != 'fehlt' AND f.mode != 'privat'
+            AND i.folder_id NOT IN (SELECT value FROM json_each(?))`
+      )
+      .get(JSON.stringify(ohneOrdner)) as { n: number }
+  ).n
+}
+
+/** Zeilen zu Kennungen (jeder Zustand, auch „privat“), ohne fehlende Dateien. */
+export function vorschauZeilen(db: DB, ids: readonly number[]): VorschauZeile[] {
+  return db
+    .prepare(
+      `SELECT ${VORSCHAU_SPALTEN}
+         FROM images i JOIN folders f ON f.id = i.folder_id
+        WHERE i.id IN (SELECT value FROM json_each(?)) AND i.status != 'fehlt'`
+    )
+    .all(JSON.stringify(ids)) as VorschauZeile[]
+}
+
+/**
+ * Ergebnisse eintragen – in EINER Transaktion, nur wenn Größe und Änderungszeit noch stimmen
+ * (sonst gehört das Ergebnis zur alten Fassung). `defekt` setzt auch den Status der Datei.
+ * Liefert die Kennungen, die geschrieben wurden.
+ */
+export function vorschauSchreiben(
+  db: DB,
+  zeilen: readonly {
+    id: number
+    size: number
+    mtime: number
+    zustand: VorschauZustand | null
+    farbe: string | null
+  }[]
+): Set<number> {
+  const st = db.prepare(`
+    UPDATE images SET
+      thumb_state = @zustand,
+      color       = COALESCE(@farbe, color),
+      status      = CASE WHEN @zustand = 'defekt' THEN 'defekt' ELSE status END
+    WHERE id = @id AND size = @size AND mtime = @mtime
+  `)
+  const geschrieben = new Set<number>()
+  db.transaction(() => {
+    for (const z of zeilen) {
+      const r = st.run({
+        id: z.id,
+        size: z.size,
+        mtime: z.mtime,
+        zustand: z.zustand,
+        farbe: z.farbe
+      })
+      if (r.changes) geschrieben.add(z.id)
+    }
+  })()
+  return geschrieben
+}
+
+/** Kennungen aller Dateien eines Ordners (vor dem Entfernen: ihre Cache-Dateien löschen). */
+export function ordnerKennungen(db: DB, folderId: number): number[] {
+  return db
+    .prepare('SELECT id FROM images WHERE folder_id = ? ORDER BY id')
+    .pluck()
+    .all(folderId) as number[]
+}
+
+/** Alle fertigen Vorschaubilder als offen markieren (neuer Schlüssel: der Cache ist leer). */
+export function vorschauAlleOffen(db: DB): number {
+  return db.prepare("UPDATE images SET thumb_state = NULL WHERE thumb_state = 'ok'").run().changes
+}
+
+/** Vorschaubilder eines Ordners als offen markieren (Wechsel nach/aus „privat“). */
+export function vorschauZuruecksetzen(db: DB, folderId: number): void {
+  db.prepare("UPDATE images SET thumb_state = NULL WHERE folder_id = ? AND thumb_state = 'ok'").run(
+    folderId
+  )
 }

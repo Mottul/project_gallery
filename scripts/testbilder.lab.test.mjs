@@ -136,6 +136,13 @@ describe.skipIf(!bereit)('Testbibliothek (Labor)', () => {
   it('Formate: sharp erkennt Format, Maße, Farbraum, Tiefe und Einzelbilder', async () => {
     const formate = art('bild').filter((e) => e.datei.startsWith('formate/'))
     for (const e of formate) {
+      if (e.format === 'bmp') {
+        // Befund: die fertigen sharp-Binaries lesen kein BMP – ffmpeg schon (Vorschaubild)
+        await expect(sharp(pfad(e.datei)).metadata()).rejects.toThrow()
+        const video = probe(pfad(e.datei)).streams[0]
+        expect([video.codec_name, video.width, video.height]).toEqual(['bmp', e.breite, e.hoehe])
+        continue
+      }
       const m = await sharp(pfad(e.datei), { animated: true }).metadata()
       // AVIF meldet sharp als „heif“ mit AV1-Kompression
       expect(m.format === 'heif' ? 'avif' : m.format, e.datei).toBe(e.format)
