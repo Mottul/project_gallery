@@ -69,6 +69,16 @@ try {
 - **Eigene Protokolle und die Konsole:** Jede 4xx-Antwort auf ein `<img>` erscheint in der Seite
   als Konsolenfehler (gemessen 1.3), 204 nicht. Erwartete Lücken (defektes Bild) also mit 204
   beantworten, sonst wird „keine Konsolenfehler“ zufällig rot – je nachdem, ob die Zeile sichtbar war.
+- **Betrachter (1.5):** `shell.trashItem` per `app.evaluate` durch einen Stub ersetzen, der die
+  Datei in einen Temp-Ordner verschiebt (nie den echten Papierkorb). Chromium zeigt ein schon
+  geladenes `bild://`-Bild weiter, auch wenn die Datei inzwischen anders ist – „geändert“ mit
+  einem Bild prüfen, das in der Sitzung noch nicht offen war. Ein Schritt, der mit offenem
+  Betrachter scheitert, lässt den Dialog über der Galerie liegen: Folgeschritte beginnen mit
+  `betrachterZu()`. Ausrichtung lässt sich per CSS nicht abschalten (`image-orientation: none`
+  gilt nicht für Bilder fremder Herkunft wie `bild:`) – Gegenprobe über die angezeigten Maße.
+- **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter
+  Windows gelegentlich knapp unter der vollen Millisekunde (Sekunden als Kommazahl) – dann passt
+  die Datei nicht mehr zum Index. `(Math.trunc(st.mtimeMs) + 0.5) / 1000` übergeben.
 - **Cache und Log prüfen:** Cache-Dateien rekursiv unter `<userData>/lokal` suchen (Windows und
   Linux liegen verschieden); Log `<userData>/galeria-debug.log` auf Koordinaten, Titel und
   Dateinamen der Testbibliothek prüfen – mit Gegenprobe, dass das Log den Lauf überhaupt enthält.

@@ -59,6 +59,22 @@ try {
           return d.length === o.count && d.every((b) => b.metaRead)
         }, 60_000)
         assert.ok(gelesen, 'Metadaten nicht vollständig gelesen')
+        // jedes Bild einmal im Betrachter (bild://: Original lesen bzw. umrechnen) – nur lesend
+        const ids = await page.evaluate(() =>
+          window.api.library.query({ feld: 'name', richtung: 'auf' })
+        )
+        const status = await app.evaluate(
+          async ({ net }, liste) =>
+            Promise.all(
+              liste.map(async (id) => {
+                const r = await net.fetch(`bild://id/${id}`)
+                await r.arrayBuffer()
+                return r.status
+              })
+            ),
+          ids
+        )
+        assert.ok(status.filter((s) => s === 200).length > ids.length - 6, `bild://: ${status}`)
         for (const mode of ['privat', 'nur-lesen', 'normal']) {
           await page.evaluate(([id, m]) => window.api.library.setFolderMode(id, m), [o.id, mode])
         }

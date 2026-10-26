@@ -20,6 +20,8 @@ sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepte
 | Vorschaubilder erzeugen (Datei prüfen, sharp, BMP über ffmpeg, verschlüsselt ablegen) – im Bilddienst | `src/main/services/bilddienst/vorschau.ts` + `vorschau.lab.test.ts` |
 | Warteschlange der Vorschaubilder, Abruf für `thumb://`, Ordner „privat“/entfernen | `src/main/services/library/vorschauen.ts` (Test in `library.test.ts`) |
 | Cache: Ablage, AES-256-GCM, Schlüssel (`safeStorage`), Arbeitsspeicher für „privat“ | `src/main/services/cache/` + Tests |
+| Nutzerdatei vor dem Lesen prüfen (passt zum Index, echter Pfad im Ordner, Zeitlimit) – Bilddienst und main | `src/main/services/dateien/pruefeDatei.ts` (Test in `vorschau.lab.test.ts`) |
+| `bild://` nachschlagen: Pfad zum Streamen oder Umrechnung (TIFF) aus dem Bilddienst, Speicher-LRU | `src/main/services/library/anzeige.ts` + Test; Adresse/`Range` rein in `src/shared/bild.ts` |
 | `thumb://`-Adressen, Stufen, Version des Verfahrens (rein); Protokoll-Handler | `src/shared/vorschau.ts` + Test; `src/main/services/protocols/thumb.ts` |
 | Bilddienst: Einstieg, Scan, Nachrichten, Client mit Neustart | `src/main/services/bilddienst/` (`einstieg.ts`, `scan.ts`, `protokoll.ts`, `client.ts`) |
 | Formate, Scan-Regeln, Pfad-Schlüssel, Namens-Sortierschlüssel (rein) | `src/shared/bildFormate.ts`, `scanRegeln.ts`, `ordnerPruefen.ts`, `sortKey.ts` |
@@ -46,6 +48,11 @@ Ergebnisse nur bei unveränderter Datei eingetragen (sonst Cache-Dateien wieder 
 Neuer Schlüssel beim Start (kein sicherer Speicher wie Linux ohne Schlüsselbund, oder DPAPI
 entschlüsselt nicht mehr): Der Cache ist leer – alle `ok` werden wieder offen und entstehen im
 Hintergrund neu, nicht nur auf Abruf (`library.test.ts`, gefunden über die Linux-CI).
+Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF als Umrechnung
+`anzeigeFuer` im Bilddienst, höchstens 3840 px, nur im Arbeitsspeicher, 64 MB), Papierkorb
+(`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
+Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
+Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
 Umgesetzt in 1.4: Abfrage mit Ordner-Filter (`sortFilter.ts`: Unterordner als Bereich auf
 `rel_key`, nutzt den Index `folder_id, rel_key`), Verzeichnisse mit Anzahl für den Ordnerbaum,
 Größensumme einer Auswahl, Vorschau-Vorrang für den gemeldeten Ausschnitt (`library.visible`:

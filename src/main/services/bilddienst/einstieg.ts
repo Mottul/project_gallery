@@ -14,11 +14,12 @@ import {
   vorschauParallel,
   type AnDienst,
   type MetaDatei,
+  type AnzeigeDatei,
   type VomDienst,
   type VorschauDatei
 } from './protokoll'
 import { scanne } from './scan'
-import { vorschauFuer, type Einrichtung } from './vorschau'
+import { anzeigeFuer, vorschauFuer, type Einrichtung } from './vorschau'
 
 // sharp wie im Labor: Datei-Cache aus (Windows sperrte sonst gelesene Bilder), je Bild ein
 // libvips-Thread, mehrere Bilder parallel (UV_THREADPOOL_SIZE setzt der Client beim Start)
@@ -101,6 +102,13 @@ async function vorschau(auftrag: number, dateien: VorschauDatei[]): Promise<void
   }
 }
 
+async function anzeige(auftrag: number, datei: AnzeigeDatei): Promise<void> {
+  const ergebnis = await anzeigeFuer(datei)
+  if (abgebrochen.has(auftrag)) return
+  abgebrochen.delete(auftrag)
+  senden({ typ: 'anzeige-ergebnis', auftrag, ergebnis })
+}
+
 async function meta(auftrag: number, dateien: MetaDatei[]): Promise<void> {
   try {
     if (!exiftoolBin) throw Object.assign(new Error('ExifTool fehlt'), { code: 'KEIN_EXIFTOOL' })
@@ -130,6 +138,7 @@ port.on('message', (e: { data: AnDienst }) => {
   } else if (n.typ === 'scan') void scan(n.auftrag, n.wurzel)
   else if (n.typ === 'meta') void meta(n.auftrag, n.dateien)
   else if (n.typ === 'vorschau') void vorschau(n.auftrag, n.dateien)
+  else if (n.typ === 'anzeige') void anzeige(n.auftrag, n.datei)
   else if (n.typ === 'abbrechen') abgebrochen.add(n.auftrag)
   else if (n.typ === 'beenden') {
     // ExifTool-Prozesse sauber beenden (stay_open False). Stirbt der Dienst hart, enden sie von

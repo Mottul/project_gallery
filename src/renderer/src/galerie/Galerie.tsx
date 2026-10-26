@@ -3,7 +3,7 @@
 // Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
 // dabei nur die Datei-Objekte weiter, den Pfad liest der Preload (Schicht C).
 import { FolderInput, FolderPlus, Images, LayoutGrid, List } from 'lucide-react'
-import { useEffect, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import {
   ansichtAendern,
@@ -14,7 +14,7 @@ import {
   useKnoten,
   type AnsichtArt
 } from '@renderer/lib/ansicht'
-import { auswahlAbgleichen } from '@renderer/lib/auswahl'
+import { auswahlAbgleichen, auswahlNur } from '@renderer/lib/auswahl'
 import {
   angezeigtMelden,
   useDetails,
@@ -28,6 +28,7 @@ import {
   useLibrary
 } from '@renderer/lib/library'
 import { cn } from '@renderer/lib/utils'
+import { Betrachter } from './Betrachter'
 import { Liste } from './Liste'
 import { Raster } from './Raster'
 import { Sortierwahl } from './Sortierwahl'
@@ -74,6 +75,16 @@ export function Galerie(): JSX.Element | null {
   const details = useDetails(k?.stand ?? 0)
   const sichtbarMelden = useSichtbarMelden()
   const [ziehen, setZiehen] = useState(false)
+  /** offen im Betrachter: Startstelle in `k.ids`; danach das zuletzt gezeigte Bild */
+  const [betrachter, setBetrachter] = useState<number | null>(null)
+  const [fokusId, setFokusId] = useState<number | null>(null)
+  const schliessen = useCallback((id: number | null) => {
+    setBetrachter(null)
+    if (id !== null) {
+      auswahlNur(id)
+      setFokusId(id)
+    }
+  }, [])
 
   useEffect(() => {
     if (k) auswahlAbgleichen(k.ids)
@@ -195,6 +206,8 @@ export function Galerie(): JSX.Element | null {
             groesse={ansicht.groesse}
             onGroesse={(px) => ansichtAendern({ groesse: px })}
             onSichtbar={sichtbarMelden}
+            onOeffnen={setBetrachter}
+            fokusId={fokusId}
           />
         ) : (
           <Liste
@@ -203,9 +216,13 @@ export function Galerie(): JSX.Element | null {
             details={details}
             sortierung={ansicht.sortierung}
             onSichtbar={sichtbarMelden}
+            onOeffnen={setBetrachter}
           />
         ))}
       {ablage}
+      {betrachter !== null && k && k.ids.length > 0 && (
+        <Betrachter ids={k.ids} start={betrachter} details={details} onSchliessen={schliessen} />
+      )}
     </div>
   )
 }

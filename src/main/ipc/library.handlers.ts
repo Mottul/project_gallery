@@ -13,6 +13,7 @@ import {
   auswahlGroesse,
   bildDetails,
   fensterVon,
+  inPapierkorb,
   modusSetzen,
   neuEinlesen,
   ordnerEntfernen,
@@ -28,6 +29,8 @@ import { handle, on } from './handle'
 const AUSSCHNITT_MAX = 1000
 /** Höchstens so viele Kennungen für eine Summe (die ganze Bibliothek ausgewählt) */
 const SUMME_MAX = 200_000
+/** Höchstens so viele Bilder auf einmal in den Papierkorb */
+const PAPIERKORB_MAX = 10_000
 /** Höchstens so viele gezogene Ordner auf einmal */
 const GEZOGEN_MAX = 20
 
@@ -48,6 +51,9 @@ export function registerLibraryHandlers(): void {
   )
   handle(Channels.libraryDetails, (_e, ids) => bildDetails(pruefeKennungen(ids, DETAILS_MAX)))
   handle(Channels.libraryDirs, () => verzeichnisBaum())
+  handle(Channels.libraryTrash, (e, ids) =>
+    inPapierkorb(fensterVon(e.sender), pruefeKennungen(ids, PAPIERKORB_MAX))
+  )
   handle(Channels.librarySize, (_e, ids) => auswahlGroesse(pruefeKennungen(ids, SUMME_MAX)))
   on(Channels.libraryVisible, (_e, ids) => sichtbar(pruefeKennungen(ids, AUSSCHNITT_MAX)))
   // Pfade aus dem Preload (aus echten Datei-Objekten eines Drops), geprüft wie beim Dialog

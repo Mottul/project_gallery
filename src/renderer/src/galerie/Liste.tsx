@@ -4,7 +4,13 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Columns3 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ansichtAendern } from '@renderer/lib/ansicht'
-import { auswahlAlle, auswahlKlick, auswahlLeeren, useAuswahl } from '@renderer/lib/auswahl'
+import {
+  auswahlAlle,
+  auswahlKlick,
+  auswahlLeeren,
+  ersteGewaehlte,
+  useAuswahl
+} from '@renderer/lib/auswahl'
 import { datumText, groesseText, zahl } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import type { SortFeld, Sortierung } from '@shared/sortFilter'
@@ -143,7 +149,8 @@ export function Liste({
   ids,
   details,
   sortierung,
-  onSichtbar
+  onSichtbar,
+  onOeffnen
 }: {
   ids: number[]
   details: {
@@ -152,6 +159,7 @@ export function Liste({
   }
   sortierung: Sortierung
   onSichtbar: (ids: readonly number[]) => void
+  onOeffnen: (index: number) => void
 }): JSX.Element {
   const auswahl = useAuswahl()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -201,6 +209,10 @@ export function Liste({
             e.preventDefault()
             auswahlAlle(ids)
           } else if (e.key === 'Escape') auswahlLeeren()
+          else if (e.key === 'Enter') {
+            const i = ersteGewaehlte(ids)
+            if (i >= 0) onOeffnen(i)
+          }
         }}
       >
         <div
@@ -275,6 +287,7 @@ export function Liste({
                 onClick={(e) =>
                   auswahlKlick(ids, z.index, { strg: e.ctrlKey || e.metaKey, umschalt: e.shiftKey })
                 }
+                onDoubleClick={() => onOeffnen(z.index)}
               >
                 <span role="gridcell" className="py-1">
                   <Vorschaubild key={b?.mtime} bild={b} groesse={32} className="rounded-sm" />

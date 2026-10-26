@@ -19,7 +19,8 @@ import {
   type Manifest,
   type Rgb
 } from '../../../../scripts/testbilder.mjs'
-import { bmpAlsPng, erzeugeVorschau, pruefeDatei, type Vorschau } from './vorschau'
+import { pruefeDatei } from '../dateien/pruefeDatei'
+import { ANZEIGE_MAX, bmpAlsPng, erzeugeAnzeige, erzeugeVorschau, type Vorschau } from './vorschau'
 
 const ffmpeg = werkzeug('ffmpeg')
 const bereit = Boolean(werkzeug('exiftool') && ffmpeg)
@@ -121,6 +122,27 @@ describe.skipIf(!bereit)('Vorschaubilder (Labor)', () => {
   it('CMYK wird nach sRGB umgerechnet (Farbe nah am Original #e11d48)', async () => {
     const [mitte] = await pixel((await vorschau(eintrag('cmyk.jpg'))).klein, [[0.5, 0.5]])
     expect(nah(mitte, [225, 29, 72], 30), `${mitte}`).toBe(true)
+  })
+
+  it('Anzeige-Fassung (Betrachter): TIFF wird JPEG in voller Größe; Ausrichtung angewandt', async () => {
+    const tif = await erzeugeAnzeige(await readFile(pfad(eintrag('bild.tif').datei)))
+    const m = await sharp(tif).metadata()
+    expect([m.format, m.width, m.height]).toEqual(['jpeg', 400, 300])
+    const a6 = await erzeugeAnzeige(await readFile(pfad(eintrag('ausrichtung-6.jpg').datei)))
+    const [ol, ur] = await pixel(a6, [
+      [0.25, 0.25],
+      [0.75, 0.75]
+    ])
+    expect((await sharp(a6).metadata()).width).toBe(300)
+    expect(nah(ol, QUADRANTEN.obenLinks, 40), `${ol}`).toBe(true)
+    expect(nah(ur, QUADRANTEN.untenRechts, 40), `${ur}`).toBe(true)
+    // nie größer als bildschirmgroß
+    const riesig = await erzeugeAnzeige(
+      await sharp({ create: { width: 6000, height: 1000, channels: 3, background: '#888' } })
+        .png()
+        .toBuffer()
+    )
+    expect((await sharp(riesig).metadata()).width).toBe(ANZEIGE_MAX)
   })
 
   it('BMP per ffmpeg: richtig herum (oben/unten), Maße stimmen', async () => {

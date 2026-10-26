@@ -9,6 +9,7 @@ import {
   auswahlKlick,
   auswahlLeeren,
   auswahlRahmen,
+  ersteGewaehlte,
   useAuswahl
 } from '@renderer/lib/auswahl'
 import { tagText } from '@renderer/lib/format'
@@ -36,7 +37,9 @@ export function Raster({
   details,
   groesse,
   onGroesse,
-  onSichtbar
+  onSichtbar,
+  onOeffnen,
+  fokusId
 }: {
   ids: number[]
   details: {
@@ -46,6 +49,10 @@ export function Raster({
   groesse: number
   onGroesse: (px: number) => void
   onSichtbar: (ids: readonly number[]) => void
+  /** Doppelklick oder Eingabetaste: Bild an dieser Stelle im Betrachter öffnen */
+  onOeffnen: (index: number) => void
+  /** dorthin scrollen (nach dem Betrachter: das zuletzt gezeigte Bild) */
+  fokusId: number | null
 }): JSX.Element {
   const auswahl = useAuswahl()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -80,6 +87,13 @@ export function Raster({
   useEffect(() => {
     virt.measure()
   }, [virt, zeilenHoehe, spalten])
+
+  useEffect(() => {
+    const i = fokusId === null ? -1 : ids.indexOf(fokusId)
+    if (i >= 0) virt.scrollToIndex(Math.floor(i / spalten), { align: 'auto' })
+    // nur wenn sich der Fokus ändert, nicht bei jeder neuen Liste
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fokusId, spalten > 0])
 
   const items = virt.getVirtualItems()
   const von = (items[0]?.index ?? 0) * spalten
@@ -173,6 +187,10 @@ export function Raster({
           e.preventDefault()
           auswahlAlle(ids)
         } else if (e.key === 'Escape') auswahlLeeren()
+        else if (e.key === 'Enter') {
+          const i = ersteGewaehlte(ids)
+          if (i >= 0) onOeffnen(i)
+        }
       }}
     >
       <div className="relative w-full" style={{ height: virt.getTotalSize() }}>
@@ -204,6 +222,7 @@ export function Raster({
                       umschalt: e.shiftKey
                     })
                   }
+                  onDoubleClick={() => onOeffnen(index)}
                 >
                   <Vorschaubild
                     key={bild?.mtime}

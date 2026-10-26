@@ -34,6 +34,20 @@ export type VorschauErgebnis =
   | { id: number; ok: true; farbe: string; gross?: Uint8Array; klein?: Uint8Array }
   | { id: number; ok: false; code: string }
 
+/** Datei für die Anzeige-Umrechnung (Betrachter, TIFF) */
+export interface AnzeigeDatei {
+  pfad: string
+  ordner: string
+  size: number
+  mtime: number
+}
+
+/** Umgerechnetes Bild (JPEG/WebP, höchstens 3840 px) oder der Grund, warum nicht */
+export interface AnzeigeErgebnis {
+  daten: Uint8Array | null
+  code: string | null
+}
+
 /** main → Bilddienst */
 export type AnDienst =
   | {
@@ -46,6 +60,7 @@ export type AnDienst =
   | { typ: 'scan'; auftrag: number; wurzel: string }
   | { typ: 'meta'; auftrag: number; dateien: MetaDatei[] }
   | { typ: 'vorschau'; auftrag: number; dateien: VorschauDatei[] }
+  | { typ: 'anzeige'; auftrag: number; datei: AnzeigeDatei }
   | { typ: 'abbrechen'; auftrag: number }
   | { typ: 'beenden' }
 
@@ -55,6 +70,7 @@ export type VomDienst =
   | { typ: 'fertig'; auftrag: number; gefunden: number; unlesbar: string[] }
   | { typ: 'meta-ergebnis'; auftrag: number; ergebnisse: MetaErgebnis[] }
   | { typ: 'vorschau-ergebnis'; auftrag: number; ergebnisse: VorschauErgebnis[] }
+  | { typ: 'anzeige-ergebnis'; auftrag: number; ergebnis: AnzeigeErgebnis }
   | { typ: 'fehler'; auftrag: number; code: string; meldung: string }
   | { typ: 'log'; text: string }
 

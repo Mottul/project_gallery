@@ -1,28 +1,34 @@
-// Bibliothek in der echten App (Phase 1.1–1.4): Ordner hinzufügen über den Dialog des main und per
+// Bibliothek in der echten App (Phase 1.1–1.5): Ordner hinzufügen über den Dialog des main und per
 // Drag & Drop, Einlesen im Bilddienst, Ablehnung überlappender Ordner, Modus, Vorschaubilder
 // (thumb://, verschlüsselter Cache, „privat“ nur im Speicher), Ordnerbaum, Raster und Liste
-// (virtualisiert, Größe, Spalten, Ansicht je Ordner), Auswahl wie im Explorer, Abgleich nach
-// Änderungen von außen, Neustart mit vorhandenem Index und Cache, Entfernen mit Rückfrage (keine
-// Reste). Testbibliothek aus scripts/testbilder.mjs.
+// (virtualisiert, Größe, Spalten, Ansicht je Ordner), Auswahl wie im Explorer, Betrachter (bild://,
+// Zoom, Filmstreifen, Diashow), Papierkorb, Abgleich nach Änderungen von außen, Neustart mit
+// vorhandenem Index und Cache, Entfernen mit Rückfrage (keine Reste). Testbibliothek aus
+// scripts/testbilder.mjs.
 
 import assert from 'node:assert/strict'
 import {
+  appendFileSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
-  statSync
+  statSync,
+  truncateSync,
+  utimesSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import sharp from 'sharp'
 import { QUADRANTEN } from '../scripts/testbilder.mjs'
 import {
   erwarteteBilder,
   launchApp,
   runSteps,
+  sleep,
   stubConfirm,
   stubConfirmSequence,
   stubOrdnerDialog,
@@ -80,6 +86,50 @@ const gewaehlteNamen = () =>
     .locator('[role="option"][aria-selected="true"]')
     .evaluateAll((el) => el.map((e) => e.getAttribute('aria-label')))
 const statusText = () => ctx.page.locator('footer').innerText()
+/** Betrachter: Dialog, angezeigter Name, Original geladen */
+const betrachter = () => ctx.page.getByRole('dialog', { name: 'Betrachter' })
+const angezeigt = () => betrachter().getByRole('heading', { level: 2 }).innerText()
+const geladen = (name) =>
+  betrachter()
+    .locator(`img[alt="${name}"]`)
+    .evaluate((i) => i.complete && i.naturalWidth > 0)
+    .catch(() => false)
+/** Nach einem Schritt mit Betrachter: ist er (nach einem Fehlschlag) noch offen, schließen –
+ *  sonst lägen er über der Galerie und alle weiteren Schritte schlügen mit fehl */
+async function betrachterZu() {
+  if (await betrachter().count()) await ctx.page.keyboard.press('Escape')
+  await waitFor(async () => (await betrachter().count()) === 0, 3_000)
+}
+/** Namen in der Reihenfolge, die die Oberfläche gerade zeigt (Sortieren nach / Richtung) */
+async function reihenfolge() {
+  const feld = await ctx.page.getByRole('combobox', { name: 'Sortieren nach' }).inputValue()
+  const ab =
+    (await ctx.page.getByRole('button', { name: 'Absteigend' }).getAttribute('aria-pressed')) ===
+    'true'
+  const bilder = await ctx.page.evaluate(
+    async (s) => window.api.library.details(await window.api.library.query(s)),
+    { feld, richtung: ab ? 'ab' : 'auf' }
+  )
+  return bilder.map((b) => b.name)
+}
+/** bild:// im main holen (net.fetch geht durch denselben Handler wie die Seite) */
+async function bild(id, kopf = {}) {
+  const r = await ctx.app.evaluate(
+    async ({ net }, [url, h]) => {
+      const a = await net.fetch(url, { headers: h })
+      return {
+        status: a.status,
+        typ: a.headers.get('content-type'),
+        bereich: a.headers.get('content-range'),
+        daten: Buffer.from(await a.arrayBuffer()).toString('base64')
+      }
+    },
+    [`bild://id/${id}`, kopf]
+  )
+  return { ...r, daten: Buffer.from(r.daten, 'base64') }
+}
+/** Ersatz für den Papierkorb des Systems (Temp-Ordner, synthetische Testdateien) */
+const papierkorbDir = mkdtempSync(join(tmpdir(), 'galeria-papierkorb-'))
 /** Ordner für Drag & Drop (600 Kopien eines Testbilds, synthetisch) */
 const vieleDir = join(mkdtempSync(join(tmpdir(), 'galeria-viele-')), 'viele')
 /**
@@ -443,8 +493,147 @@ try {
       }
     ],
     [
+      'Betrachter: Doppelklick öffnet, Pfeiltasten und Filmstreifen blättern, Esc zurück – das Bild bleibt gewählt',
+      async () => {
+        const namen = await reihenfolge()
+        const erste = (await kachelNamen())[0]
+        const i = namen.indexOf(erste)
+        await raster().getByRole('option', { name: erste, exact: true }).dblclick()
+        await betrachter().waitFor({ timeout: 5_000 })
+        assert.equal(await angezeigt(), erste)
+        assert.equal(
+          await betrachter().getByLabel('Position').innerText(),
+          `${i + 1} / ${namen.length}`
+        )
+        await ctx.page.keyboard.press('ArrowRight')
+        assert.ok(await waitFor(async () => (await angezeigt()) === namen[i + 1], 3_000))
+        assert.ok(await waitFor(() => geladen(namen[i + 1]), 5_000), 'Original nicht geladen')
+        await ctx.page.keyboard.press('ArrowLeft')
+        assert.ok(await waitFor(async () => (await angezeigt()) === namen[i], 3_000))
+        await betrachter()
+          .getByRole('listbox', { name: 'Filmstreifen' })
+          .getByRole('option', { name: namen[i + 3], exact: true })
+          .click()
+        assert.ok(await waitFor(async () => (await angezeigt()) === namen[i + 3], 3_000))
+        await ctx.page.keyboard.press('Escape')
+        assert.ok(await waitFor(async () => (await betrachter().count()) === 0, 3_000))
+        assert.deepEqual(await gewaehlteNamen(), [namen[i + 3]])
+      }
+    ],
+    [
+      'bild://: Original byte-gleich, Range (206), TIFF umgerechnet, Typ nach Inhalt; geänderte Datei 409; Zoom und Info',
+      async () => {
+        await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
+        const alle = await alleBilder()
+        const kennung = (n) => alle.find((b) => b.name === n).id
+        const original = readFileSync(join(bib.dir, 'orte', 'dubrovnik.jpg'))
+        const dub = await bild(kennung('dubrovnik.jpg'))
+        assert.deepEqual([dub.status, dub.typ], [200, 'image/jpeg'])
+        assert.ok(dub.daten.equals(original), 'Original nicht byte-gleich')
+        const teil = await bild(kennung('dubrovnik.jpg'), { Range: 'bytes=0-9' })
+        assert.deepEqual([teil.status, teil.bereich], [206, `bytes 0-9/${original.length}`])
+        assert.ok(teil.daten.equals(original.subarray(0, 10)))
+        const tif = await bild(kennung('bild.tif'))
+        assert.deepEqual([tif.status, tif.typ], [200, 'image/jpeg'])
+        const m = await sharp(tif.daten).metadata()
+        assert.deepEqual([m.width, m.height], [400, 300])
+        assert.equal((await bild(kennung('png-als.jpg'))).typ, 'image/png')
+        // von außen geändert: erst nach dem nächsten Einlesen wieder (der Index ist die Grundlage).
+        // Ein Bild, das in dieser Sitzung noch nicht offen war (sonst nimmt Chromium das schon
+        // geladene); danach Größe und Änderungszeit zurück – dann passt es wieder zum Index.
+        const muenchen = join(bib.dir, 'orte', 'muenchen.jpg')
+        const st = statSync(muenchen)
+        appendFileSync(muenchen, Buffer.from([0]))
+        try {
+          assert.equal((await bild(kennung('muenchen.jpg'))).status, 409)
+          await raster().getByRole('option', { name: 'muenchen.jpg', exact: true }).dblclick()
+          await betrachter()
+            .getByText(/lässt sich gerade nicht anzeigen/)
+            .waitFor({ timeout: 5_000 })
+        } finally {
+          truncateSync(muenchen, st.size)
+          // Sekunden als Kommazahl: mit einem Date landet die Zeit unter Windows gelegentlich
+          // knapp unter der vollen Millisekunde (Rundung) – dann passt sie nicht mehr zum Index
+          utimesSync(muenchen, st.atime, (Math.trunc(st.mtimeMs) + 0.5) / 1000)
+        }
+        assert.equal((await bild(kennung('muenchen.jpg'))).status, 200)
+        // Zoom: 100 %, Mausrad am Bild, Anpassen
+        await ctx.page.keyboard.press('ArrowRight')
+        const name = await angezeigt()
+        assert.ok(await waitFor(() => geladen(name), 5_000))
+        const stufe = () => betrachter().getByLabel('Zoomstufe').innerText()
+        await betrachter().getByRole('button', { name: '100 %' }).click()
+        assert.equal(await stufe(), '100 %')
+        await betrachter().locator(`img[alt="${name}"]`).hover()
+        await ctx.page.mouse.wheel(0, -300)
+        assert.ok(
+          await waitFor(async () => parseInt(await stufe(), 10) > 100, 3_000),
+          await stufe()
+        )
+        await betrachter().getByRole('button', { name: 'Anpassen' }).click()
+        assert.equal(
+          await betrachter().getByRole('button', { name: 'Anpassen' }).getAttribute('aria-pressed'),
+          'true'
+        )
+        // Info: Quelle des Datums
+        await betrachter().getByRole('button', { name: 'Info' }).click()
+        const info = betrachter().getByRole('complementary', { name: 'Informationen zum Bild' })
+        await info.waitFor({ timeout: 3_000 })
+        assert.match(await info.innerText(), /Quelle des Datums/)
+        // Ausrichtung: gespeichert 200 × 300 (gedreht), der Betrachter zeigt das Original
+        // aufgerichtet 300 × 200 und im Querformat – Chromium wendet die EXIF-Ausrichtung an
+        // (bei Bildern fremder Herkunft wie bild: auch gegen `image-orientation: none`)
+        const roh = await sharp(join(bib.dir, 'ausrichtung', 'ausrichtung-6.jpg')).metadata()
+        assert.deepEqual([roh.width, roh.height, roh.orientation], [200, 300, 6])
+        const namen = await reihenfolge()
+        assert.ok(namen.includes('ausrichtung-6.jpg'))
+        await ctx.page.keyboard.press('Home')
+        for (let k = 0; k < namen.indexOf('ausrichtung-6.jpg'); k++) {
+          await ctx.page.keyboard.press('ArrowRight', { delay: 20 })
+        }
+        assert.ok(
+          await waitFor(async () => (await angezeigt()) === 'ausrichtung-6.jpg', 3_000),
+          await angezeigt()
+        )
+        assert.ok(await waitFor(() => geladen('ausrichtung-6.jpg'), 5_000))
+        const masse = await betrachter()
+          .locator('img[alt="ausrichtung-6.jpg"]')
+          .evaluate((i) => {
+            const r = i.getBoundingClientRect()
+            return [i.naturalWidth, i.naturalHeight, r.width > r.height]
+          })
+        assert.deepEqual(masse, [300, 200, true])
+        await ctx.page.keyboard.press('Escape')
+        assert.ok(await waitFor(async () => (await betrachter().count()) === 0, 3_000))
+      }
+    ],
+    [
+      'Diashow blättert im eingestellten Abstand weiter; Pause hält an',
+      async () => {
+        await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
+        await raster().getByRole('option', { name: 'Bild 2.jpg', exact: true }).dblclick()
+        await betrachter().waitFor({ timeout: 5_000 })
+        await betrachter()
+          .getByRole('combobox', { name: 'Intervall der Diashow' })
+          .selectOption('2')
+        const vorher = await angezeigt()
+        await betrachter().getByRole('button', { name: 'Diashow' }).click()
+        assert.ok(
+          await waitFor(async () => (await angezeigt()) !== vorher, 5_000),
+          'blättert nicht'
+        )
+        await betrachter().getByRole('button', { name: 'Diashow' }).click()
+        const jetzt = await angezeigt()
+        await sleep(2_600)
+        assert.equal(await angezeigt(), jetzt, 'blättert nach der Pause weiter')
+        await ctx.page.keyboard.press('Escape')
+        assert.ok(await waitFor(async () => (await betrachter().count()) === 0, 3_000))
+      }
+    ],
+    [
       'Unterordner eines Bibliotheksordners wird mit Hinweis abgelehnt',
       async () => {
+        await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
         await stubOrdnerDialog(ctx.app, join(bib.dir, 'orte'))
         await ctx.page
           .getByRole('navigation', { name: 'Bibliothek und Ordner' })
@@ -629,8 +818,55 @@ try {
       }
     ],
     [
+      'Papierkorb: im Ordner „nur lesen“ verweigert; sonst nach Rückfrage – Datei, Index-Zeile und Vorschaubilder weg',
+      async () => {
+        // den Papierkorb des Systems ersetzen: Testdateien landen in einem Temp-Ordner, nicht im
+        // echten Papierkorb des Entwicklers (wie die Dialoge ein Stub im main)
+        await ctx.app.evaluate(({ shell }, ziel) => {
+          const fs = process.getBuiltinModule('node:fs')
+          const path = process.getBuiltinModule('node:path')
+          globalThis.__papierkorb = []
+          shell.trashItem = async (p) => {
+            globalThis.__papierkorb.push(p)
+            fs.renameSync(p, path.join(ziel, path.basename(p)))
+          }
+        }, papierkorbDir)
+        const datei = join(bib.dir, 'namen', 'Bild 10.jpg')
+        const vorher = (await zustand()).total
+        await raster().getByRole('option', { name: 'Bild 10.jpg', exact: true }).dblclick()
+        await betrachter().waitFor({ timeout: 5_000 })
+        // Modus ist „nur lesen“ (früherer Schritt): nichts passiert, Hinweis
+        await ctx.page.keyboard.press('Delete')
+        await betrachter()
+          .getByRole('alert')
+          .filter({ hasText: 'nur lesen' })
+          .waitFor({ timeout: 5_000 })
+        assert.ok(existsSync(datei))
+        // Ordner wieder „normal“: erst „Abbrechen“, dann bestätigt
+        const [o] = await ordner()
+        await ctx.page.evaluate((id) => window.api.library.setFolderMode(id, 'normal'), o.id)
+        await stubConfirmSequence(ctx.app, [1, 0])
+        const id = (await alleBilder()).find((b) => b.name === 'Bild 10.jpg').id
+        const vorschauVon = () =>
+          cacheDateien().filter((f) => [`${id}-256.gbv`, `${id}-768.gbv`].includes(basename(f)))
+        assert.equal(vorschauVon().length, 2)
+        await ctx.page.keyboard.press('Delete')
+        await sleep(500)
+        assert.ok(existsSync(datei), 'trotz „Abbrechen“ verschoben')
+        await ctx.page.keyboard.press('Delete')
+        assert.ok(await waitFor(async () => (await zustand()).total === vorher - 1, 5_000))
+        assert.ok(!existsSync(datei) && existsSync(join(papierkorbDir, 'Bild 10.jpg')))
+        assert.deepEqual(await ctx.app.evaluate(() => globalThis.__papierkorb), [datei])
+        assert.deepEqual(vorschauVon(), [])
+        // der Betrachter zeigt das nächste Bild
+        assert.ok(await waitFor(async () => (await angezeigt()) !== 'Bild 10.jpg', 3_000))
+        await ctx.page.keyboard.press('Escape')
+      }
+    ],
+    [
       'Entfernen fragt nach; „Abbrechen“ behält, „Entfernen“ entfernt – die Dateien bleiben',
       async () => {
+        await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
         const dateienVorher = readdirSync(bib.dir, { recursive: true }).length
         await stubConfirmSequence(ctx.app, [1, 0])
         await menue({ name: /Aus der Galerie entfernen/ })
@@ -690,4 +926,5 @@ try {
   rmSync(userData, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   bib.aufraeumen()
   rmSync(join(vieleDir, '..'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+  rmSync(papierkorbDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 }

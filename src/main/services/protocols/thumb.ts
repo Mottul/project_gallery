@@ -10,13 +10,6 @@ import { inhaltstyp } from '../cache/vorschauCache'
 import { vorschauHolen } from '../library/vorschauen'
 import { logLine } from '../log'
 
-/** Vor `app.whenReady()`: thumb als sicheres Standard-Protokoll (für <img> in der App-Seite). */
-export function thumbSchemaAnmelden(): void {
-  protocol.registerSchemesAsPrivileged([
-    { scheme: THUMB_PROTOKOLL, privileges: { standard: true, secure: true } }
-  ])
-}
-
 const antwort = (status: number): Response => new Response(null, { status })
 
 /** Nach `ready`: Anfragen an thumb:// bedienen (Standard-Sitzung). */

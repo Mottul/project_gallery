@@ -4,7 +4,7 @@
 // Danach – und schon während des Einlesens – liest der Bilddienst die Grundfelder (ExifTool) aller
 // Dateien, deren Metadaten fehlen (zweite Warteschlange, Stapel für Stapel).
 
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
 import { grundfelderAus } from '@shared/grundfelder'
 import { Channels } from '@shared/ipc-contracts'
@@ -17,7 +17,8 @@ import type {
   ImageInfo,
   LibraryDirs,
   LibraryFolder,
-  LibraryState
+  LibraryState,
+  TrashResult
 } from '@shared/types'
 import { bilddienst, type ScanAuftrag } from '../bilddienst/client'
 import { broadcast } from '../broadcast'
@@ -27,6 +28,8 @@ import { lokalerOrdner, lokalerUnterordner } from '../lokaleDaten'
 import { logLine } from '../log'
 import { isDirReachable } from '../reachableDir'
 import { vorschauSchluesselLaden } from '../cache/vorschauCache'
+import { mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
+import { anzeigeVerwerfen, bildHolen, type BildAntwort } from './anzeige'
 import * as repo from './repo'
 import {
   ordnerNichtMehrPrivat,
@@ -333,6 +336,97 @@ export function bildDetails(ids: readonly number[]): ImageInfo[] {
   return repo.details(db(), ids)
 }
 
+/** Bild für den Betrachter (bild://): Original oder Umrechnung, vorher geprüft. */
+export function bildFuerBetrachter(id: number): Promise<BildAntwort> {
+  return bildHolen(db(), id)
+}
+
+/** So lange darf die Prüfung einer Datei dauern (hängendes Netzlaufwerk) */
+const PRUEF_MS = 5000
+/** Höchstens so viele Namen nennt die Rückfrage vor dem Papierkorb */
+const NAMEN_IN_RUECKFRAGE = 5
+
+/**
+ * Bilder in den Papierkorb (Schicht B): nur nach Rückfrage, die die Dateien nennt; nie in einem
+ * Ordner „nur lesen“; nur, wenn die Datei noch zum Index passt; nur über den Papierkorb des
+ * Systems – klappt das nicht (Netzlaufwerk, Wechseldatenträger), wird nichts endgültig gelöscht.
+ * Danach sind Index-Zeilen, Vorschaubilder und Umrechnungen weg.
+ */
+export async function inPapierkorb(
+  win: BrowserWindow | null,
+  ids: readonly number[]
+): Promise<TrashResult> {
+  const zeilen = repo.vorschauZeilen(db(), ids)
+  const nurLesen = zeilen.filter((z) => z.mode === 'nur-lesen')
+  const ziel = zeilen.filter((z) => z.mode !== 'nur-lesen')
+  const hinweisNurLesen = nurLesen.length
+    ? `${nurLesen.length === 1 ? '1 Bild liegt' : `${nurLesen.length} Bilder liegen`} in einem Ordner „nur lesen“ – dort löscht die Galerie nichts.`
+    : null
+  if (!ziel.length) return { moved: 0, failed: 0, cancelled: false, refused: hinweisNurLesen }
+  const namen = ziel.slice(0, NAMEN_IN_RUECKFRAGE).map((z) => z.name)
+  const opts = {
+    type: 'warning' as const,
+    title: 'In den Papierkorb',
+    message:
+      ziel.length === 1
+        ? `„${ziel[0].name}“ in den Papierkorb verschieben?`
+        : `${ziel.length} Bilder in den Papierkorb verschieben?`,
+    detail: [
+      ...(ziel.length > 1 ? [namen.join(', ') + (ziel.length > namen.length ? ', …' : '')] : []),
+      'Aus dem Papierkorb von Windows lassen sie sich wiederherstellen.',
+      ...(hinweisNurLesen ? [hinweisNurLesen] : [])
+    ].join('\n\n'),
+    buttons: ['In den Papierkorb', 'Abbrechen'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  }
+  const { response } = win
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts)
+  if (response !== 0) return { moved: 0, failed: 0, cancelled: true, refused: hinweisNurLesen }
+  const verschoben: number[] = []
+  let gescheitert = 0
+  // nach der Rückfrage frisch lesen: inzwischen „nur lesen“, Ordner entfernt oder Datei neu
+  // eingelesen? Dann zählt der neue Stand (Review-Checkliste, „Zustand nach await“)
+  const jetzt = repo
+    .vorschauZeilen(
+      db(),
+      ziel.map((z) => z.id)
+    )
+    .filter((z) => z.mode !== 'nur-lesen')
+  gescheitert += ziel.length - jetzt.length
+  for (const z of jetzt) {
+    const pfad = join(z.ordner, ...z.rel_path.split('/'))
+    try {
+      // inzwischen geändert oder verschoben? Dann nicht anfassen (Zeitlimit: Netzlaufwerk)
+      await mitZeitlimit(pruefeDatei(pfad, z.ordner, z.size, z.mtime), PRUEF_MS)
+      await shell.trashItem(pfad)
+      verschoben.push(z.id)
+    } catch (err) {
+      gescheitert++
+      logLine(
+        '[bibliothek] Papierkorb gescheitert:',
+        z.id,
+        (err as NodeJS.ErrnoException).code ?? ''
+      )
+    }
+  }
+  if (verschoben.length) {
+    repo.bilderEntfernen(db(), verschoben)
+    anzeigeVerwerfen(verschoben)
+    await vorschauVerwerfen(verschoben)
+    logLine(`[bibliothek] ${verschoben.length} Bilder in den Papierkorb`)
+    melden()
+  }
+  return {
+    moved: verschoben.length,
+    failed: gescheitert,
+    cancelled: false,
+    refused: hinweisNurLesen
+  }
+}
+
 // ── Start und Ende ────────────────────────────────────────────────────────────────────────────
 
 /** Beim Start: Index öffnen, alle Ordner im Hintergrund abgleichen, offene Metadaten lesen. */
@@ -441,6 +535,7 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
   const ok = repo.ordnerEntfernen(db(), id)
   logLine('[bibliothek] Ordner entfernt:', id)
   // Vorschaubilder gleich mit (Schicht D: keine Reste)
+  anzeigeVerwerfen(ids)
   await vorschauVerwerfen(ids)
   melden()
   return ok

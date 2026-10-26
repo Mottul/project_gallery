@@ -44,6 +44,17 @@ export function auswahlKlick(
   useStore.setState({ ausgewaehlt: new Set([id]), anker: id })
 }
 
+/** Genau dieses Bild wählen (nach dem Betrachter: das zuletzt gezeigte). */
+export function auswahlNur(id: number): void {
+  useStore.setState({ ausgewaehlt: new Set([id]), anker: id })
+}
+
+/** Das erste gewählte Bild in der Reihenfolge `ids` (Eingabetaste öffnet es) – oder -1. */
+export function ersteGewaehlte(ids: readonly number[]): number {
+  const { ausgewaehlt } = useStore.getState()
+  return ausgewaehlt.size ? ids.findIndex((id) => ausgewaehlt.has(id)) : -1
+}
+
 export function auswahlAlle(ids: readonly number[]): void {
   useStore.setState({ ausgewaehlt: new Set(ids) })
 }

@@ -16,6 +16,8 @@ import {
   type AnDienst,
   type MetaDatei,
   type MetaErgebnis,
+  type AnzeigeDatei,
+  type AnzeigeErgebnis,
   type VomDienst,
   type VorschauDatei,
   type VorschauErgebnis
@@ -107,6 +109,7 @@ class Bilddienst {
     this.laufend.delete(n.auftrag)
     if (n.typ === 'fertig') l.resolve({ gefunden: n.gefunden, unlesbar: n.unlesbar })
     else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
+    else if (n.typ === 'anzeige-ergebnis') l.resolve(n.ergebnis)
     else l.reject(fehler(n.code, n.meldung))
   }
 
@@ -164,6 +167,11 @@ class Bilddienst {
   vorschau(dateien: VorschauDatei[]): Promise<VorschauErgebnis[]> {
     return this.auftrag<VorschauErgebnis[]>((a) => ({ typ: 'vorschau', auftrag: a, dateien }))
       .antwort
+  }
+
+  /** Bildschirmgroße Fassung für den Betrachter (TIFF); Fehler kommen als Code zurück. */
+  anzeige(datei: AnzeigeDatei): Promise<AnzeigeErgebnis> {
+    return this.auftrag<AnzeigeErgebnis>((a) => ({ typ: 'anzeige', auftrag: a, datei })).antwort
   }
 
   /** Beim Beenden der App: laufende Aufträge abbrechen, ExifTool sauber beenden, Prozess beenden. */

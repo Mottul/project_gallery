@@ -25,6 +25,7 @@ const api: GalerieApi = {
     query: (sortierung, filter) => ipcRenderer.invoke(Channels.libraryQuery, sortierung, filter),
     details: (ids) => ipcRenderer.invoke(Channels.libraryDetails, ids),
     dirs: () => ipcRenderer.invoke(Channels.libraryDirs),
+    trash: (ids) => ipcRenderer.invoke(Channels.libraryTrash, ids),
     size: (ids) => ipcRenderer.invoke(Channels.librarySize, ids),
     visible: (ids) => ipcRenderer.send(Channels.libraryVisible, ids),
     // Den Pfad kennt nur ein echtes Datei-Objekt aus einem Drop (oder Datei-Dialog); ein in der

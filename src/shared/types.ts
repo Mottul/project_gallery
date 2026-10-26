@@ -107,6 +107,18 @@ export interface ImageInfo {
   color: string | null
 }
 
+/** Ergebnis von „In den Papierkorb“ */
+export interface TrashResult {
+  /** verschoben (aus dem Index entfernt) */
+  moved: number
+  /** nicht verschoben (geändert, gesperrt, kein Papierkorb auf dem Laufwerk) – nichts gelöscht */
+  failed: number
+  /** Rückfrage mit „Abbrechen“ beantwortet */
+  cancelled: boolean
+  /** Hinweis, wenn Bilder in einem Ordner „nur lesen“ lagen (die bleiben) */
+  refused: string | null
+}
+
 /** Unterordner eines Bibliotheksordners mit der Zahl seiner direkten Dateien (Ordnerbaum) */
 export interface LibraryDir {
   /** relativ zum Ordner, „/“ als Trenner; „“ = der Ordner selbst */

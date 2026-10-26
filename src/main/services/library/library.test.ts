@@ -24,15 +24,31 @@ const h = vi.hoisted(() => ({
   /** lokaler Datenordner des Tests (Cache der Vorschaubilder) */
   tmp: '',
   /** meldet der Schlüssel beim Start „neu“ (Cache geleert)? */
-  schluesselNeu: false
+  schluesselNeu: false,
+  /** Antwort auf Rückfragen (0 = bestätigt) */
+  antwort: 0,
+  /** Papierkorb des Systems (nachgebaut): wirft = geht nicht */
+  papierkorb: (async () => undefined) as (pfad: string) => Promise<void>,
+  /** geschieht, während die Rückfrage offen ist */
+  waehrendRueckfrage: (async () => undefined) as () => Promise<unknown>
 }))
 
 vi.mock('electron', () => ({
   // getAppPath: ffmpeg wird dort gesucht (ffmpegPath.ts) – im Test gibt es keins
   app: { getPath: () => 'C:\\Profil', getAppPath: () => h.tmp, isPackaged: false },
   BrowserWindow: { fromWebContents: () => null },
-  // Rückfrage „Ordner entfernen“: bestätigt
-  dialog: { showMessageBox: async () => ({ response: 0 }) }
+  dialog: {
+    showMessageBox: async () => {
+      await h.waehrendRueckfrage()
+      return { response: h.antwort }
+    }
+  },
+  shell: { trashItem: vi.fn((p: string) => h.papierkorb(p)) }
+}))
+// die Dateien der Tests gibt es nicht wirklich – die Prüfung (passt zum Index) gilt als bestanden
+vi.mock('../dateien/pruefeDatei', async (original) => ({
+  ...(await original<typeof import('../dateien/pruefeDatei')>()),
+  pruefeDatei: async () => undefined
 }))
 vi.mock('../log', () => ({ logLine: vi.fn() }))
 vi.mock('../broadcast', () => ({ broadcast: vi.fn() }))
@@ -75,6 +91,7 @@ const repo = await import('./repo')
 const { bilddienst } = await import('../bilddienst/client')
 const meta = vi.mocked(bilddienst.meta)
 const vorschau = vi.mocked(bilddienst.vorschau)
+const { shell } = await import('electron')
 const { vorschauPfad } = await import('../cache/ablage')
 
 const datei = (name: string): GefundeneDatei => ({
@@ -116,6 +133,9 @@ beforeEach(async () => {
   h.tmp = mkdtempSync(join(tmpdir(), 'galeria-lib-'))
   h.vorschau = allesOk
   h.schluesselNeu = false
+  h.antwort = 0
+  h.papierkorb = async () => undefined
+  h.waehrendRueckfrage = async () => undefined
   h.db = oeffneIndex(':memory:')
   h.erreichbar = () => true
   h.dateien = ['a.jpg', 'gift.jpg', 'c.jpg'].map(datei)
@@ -319,5 +339,89 @@ describe('Vorschaubilder-Warteschlange', () => {
     await vi.waitFor(() => expect(vorschau.mock.calls.length).toBeGreaterThanOrEqual(2))
     expect(vorschau.mock.calls[1][0].map((x) => x.id)).toEqual(ende)
     await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+  })
+})
+
+describe('Papierkorb', () => {
+  const papierkorb = vi.mocked(shell.trashItem)
+  const ids = (): Record<string, number> =>
+    Object.fromEntries(Object.entries(vzeilen()).map(([n, z]) => [n, z.id]))
+
+  // Klammern nötig: mockClear() gibt den Mock zurück – als Rückgabe von beforeEach hielte Vitest
+  // ihn für Aufräumarbeit und riefe den Papierkorb nach dem Test ohne Pfad auf
+  beforeEach(() => {
+    papierkorb.mockClear()
+  })
+
+  async function bereit(): Promise<void> {
+    lib.bibliothekStarten()
+    await vi.waitFor(() => expect(lib.zustand().total).toBe(3))
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+  }
+
+  it('Rückfrage mit „Abbrechen“: nichts verschoben, nichts aus dem Index', async () => {
+    await bereit()
+    h.antwort = 1
+    expect(await lib.inPapierkorb(null, [ids()['a.jpg']])).toEqual({
+      moved: 0,
+      failed: 0,
+      cancelled: true,
+      refused: null
+    })
+    expect(papierkorb).not.toHaveBeenCalled()
+    expect(lib.zustand().total).toBe(3)
+  })
+
+  it('verschiebt nach Rückfrage; Index-Zeilen und Vorschaubilder sind danach weg', async () => {
+    await bereit()
+    const { a, c } = { a: ids()['a.jpg'], c: ids()['c.jpg'] }
+    const cache = join(h.tmp, 'vorschau')
+    for (const id of [a, c]) {
+      mkdirSync(join(vorschauPfad(cache, id, 256), '..'), { recursive: true })
+      writeFileSync(vorschauPfad(cache, id, 256), 'x')
+    }
+    expect(await lib.inPapierkorb(null, [a, c])).toEqual({
+      moved: 2,
+      failed: 0,
+      cancelled: false,
+      refused: null
+    })
+    expect(papierkorb.mock.calls.map(([p]) => p)).toEqual([
+      join('D:\\Bilder', 'sub', 'a.jpg'),
+      join('D:\\Bilder', 'sub', 'c.jpg')
+    ])
+    expect(Object.keys(vzeilen())).toEqual(['gift.jpg'])
+    expect(existsSync(vorschauPfad(cache, a, 256))).toBe(false)
+    expect(existsSync(vorschauPfad(cache, c, 256))).toBe(false)
+  })
+
+  it('Ordner „nur lesen“: nichts verschoben, keine Rückfrage, Hinweis', async () => {
+    await bereit()
+    await lib.modusSetzen(1, 'nur-lesen')
+    h.antwort = 0
+    const r = await lib.inPapierkorb(null, [ids()['a.jpg']])
+    expect(r).toMatchObject({ moved: 0, failed: 0, cancelled: false })
+    expect(r.refused).toMatch(/nur lesen/)
+    expect(papierkorb).not.toHaveBeenCalled()
+    expect(lib.zustand().total).toBe(3)
+  })
+
+  it('während der Rückfrage auf „nur lesen“ gestellt: nichts verschoben (frischer Stand)', async () => {
+    await bereit()
+    h.waehrendRueckfrage = () => lib.modusSetzen(1, 'nur-lesen')
+    const r = await lib.inPapierkorb(null, [ids()['a.jpg']])
+    expect(r).toMatchObject({ moved: 0, failed: 1, cancelled: false })
+    expect(papierkorb).not.toHaveBeenCalled()
+    expect(lib.zustand().total).toBe(3)
+  })
+
+  it('geht der Papierkorb nicht (Netzlaufwerk): nichts gelöscht, Datei bleibt im Index', async () => {
+    await bereit()
+    h.papierkorb = async (p) => {
+      if (p.endsWith('gift.jpg')) throw Object.assign(new Error('x'), { code: 'EPERM' })
+    }
+    const r = await lib.inPapierkorb(null, [ids()['a.jpg'], ids()['gift.jpg']])
+    expect(r).toMatchObject({ moved: 1, failed: 1 })
+    expect(Object.keys(vzeilen()).sort()).toEqual(['c.jpg', 'gift.jpg'])
   })
 })

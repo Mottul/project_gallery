@@ -10,8 +10,9 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen, Installer und Abnahme in der
 Windows-Sandbox. **Phase 1 läuft** (Bibliothek und Galerie) in den Teilschritten 1.1–1.6 aus dem
 Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfelder per ExifTool,
-Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`) und 1.4 (Galerie-Oberfläche:
-Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop) sind umgesetzt. Grundlage ist
+Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`), 1.4 (Galerie-Oberfläche:
+Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop) und 1.5 (Betrachter,
+`bild://`, Papierkorb) sind umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -81,6 +82,11 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   (`library/vorschauen.ts`), nur AES-256-GCM-verschlüsselt im Cache (`services/cache/`, Schlüssel
   per `safeStorage`), ausgeliefert über `thumb://id/<kennung>/<stufe>`
   (`services/protocols/thumb.ts`); Ordner „privat“ nur im Arbeitsspeicher.
+- **Betrachter:** `renderer/src/galerie/Betrachter.tsx`; Original über `bild://id/<kennung>`
+  (`services/protocols/bild.ts`, Nachschlagen und Prüfen in `library/anzeige.ts`, TIFF als
+  Umrechnung aus dem Bilddienst, nur im Arbeitsspeicher). Eigene Protokolle nur in
+  `protocols/schemata.ts` anmelden. Vor jedem Lesen einer Nutzerdatei `dateien/pruefeDatei.ts`.
+  Papierkorb nur über `inPapierkorb` (`library.ts`: Rückfrage, nie „nur lesen“, `shell.trashItem`).
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
   Hell = `.light` am `<html>`, Standard „wie Windows“.
 
