@@ -1,11 +1,20 @@
-// Bibliothek in der echten App (Phase 1.1, 1.3): Ordner hinzufügen über den Dialog des main,
-// Einlesen im Bilddienst, Ablehnung überlappender Ordner, Modus, Vorschaubilder (thumb://,
-// verschlüsselter Cache, „privat“ nur im Speicher), Abgleich nach Änderungen von außen, Neustart
-// mit vorhandenem Index und Cache, Entfernen mit Rückfrage (keine Reste). Testbibliothek aus
-// scripts/testbilder.mjs.
+// Bibliothek in der echten App (Phase 1.1–1.4): Ordner hinzufügen über den Dialog des main und per
+// Drag & Drop, Einlesen im Bilddienst, Ablehnung überlappender Ordner, Modus, Vorschaubilder
+// (thumb://, verschlüsselter Cache, „privat“ nur im Speicher), Ordnerbaum, Raster und Liste
+// (virtualisiert, Größe, Spalten, Ansicht je Ordner), Auswahl wie im Explorer, Abgleich nach
+// Änderungen von außen, Neustart mit vorhandenem Index und Cache, Entfernen mit Rückfrage (keine
+// Reste). Testbibliothek aus scripts/testbilder.mjs.
 
 import assert from 'node:assert/strict'
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
@@ -14,6 +23,7 @@ import {
   erwarteteBilder,
   launchApp,
   runSteps,
+  stubConfirm,
   stubConfirmSequence,
   stubOrdnerDialog,
   testbibliothek,
@@ -60,6 +70,36 @@ const cacheDateien = () =>
     .map(String)
     .filter((p) => p.endsWith('.gbv'))
     .map((p) => join(userData, 'lokal', p))
+/** Ordnerbaum, Raster (virtualisiert: nur die gezeigten Kacheln), Statusleiste */
+const baum = () => ctx.page.getByRole('tree', { name: 'Ordner' })
+const raster = () => ctx.page.getByRole('listbox', { name: 'Bilder' })
+const kacheln = () => raster().getByRole('option')
+const kachelNamen = () => kacheln().evaluateAll((el) => el.map((e) => e.getAttribute('aria-label')))
+const gewaehlteNamen = () =>
+  raster()
+    .locator('[role="option"][aria-selected="true"]')
+    .evaluateAll((el) => el.map((e) => e.getAttribute('aria-label')))
+const statusText = () => ctx.page.locator('footer').innerText()
+/** Ordner für Drag & Drop (600 Kopien eines Testbilds, synthetisch) */
+const vieleDir = join(mkdtempSync(join(tmpdir(), 'galeria-viele-')), 'viele')
+/**
+ * Echter Drop aus dem Betriebssystem, nachgestellt über das DevTools-Protokoll: Die Seite bekommt
+ * Datei-Objekte mit Pfad – wie beim Ziehen aus dem Explorer.
+ */
+async function ablegen(pfade) {
+  const box = await ctx.page.getByRole('main').boundingBox()
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  const cdp = await ctx.page.context().newCDPSession(ctx.page)
+  const data = { items: [], files: pfade, dragOperationsMask: 1 }
+  try {
+    for (const type of ['dragEnter', 'dragOver', 'drop']) {
+      await cdp.send('Input.dispatchDragEvent', { type, x, y, data })
+    }
+  } finally {
+    await cdp.detach()
+  }
+}
 const defektErwartet = bib.manifest.eintraege
   .filter((e) => e.art === 'defekt')
   .map((e) => e.datei.split('/').pop())
@@ -96,9 +136,12 @@ try {
         // der Dialog fragte nach einem Ordner
         const opts = await ctx.app.evaluate(() => globalThis.__ordnerDialog)
         assert.deepEqual(opts.properties, ['openDirectory'])
-        await ctx.page.getByRole('listitem', { name: 'bib' }).waitFor({ timeout: 5_000 })
         await ctx.page
-          .getByRole('heading', { name: `${erwartet} Bilder` })
+          .getByRole('treeitem', { name: 'bib', exact: true })
+          .waitFor({ timeout: 5_000 })
+        await ctx.page
+          .locator('footer')
+          .getByText(`${erwartet} Bilder`, { exact: true })
           .waitFor({ timeout: 5_000 })
       }
     ],
@@ -112,7 +155,7 @@ try {
         // in der Tabelle geladen (nicht nur das Element da)
         const geladen = await waitFor(async () => {
           const n = await ctx.page.$$eval(
-            'table[aria-label="Bilder"] tbody img',
+            '[role="listbox"][aria-label="Bilder"] img',
             (imgs) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length
           )
           return n >= 5 ? n : null
@@ -180,11 +223,231 @@ try {
       }
     ],
     [
+      'Ordnerbaum: Unterordner mit Anzahl; ein Klick zeigt nur diesen Ordner samt allem darunter',
+      async () => {
+        const orte = baum().getByRole('treeitem', { name: 'orte', exact: true })
+        await orte.waitFor({ timeout: 10_000 })
+        assert.match(await orte.innerText(), /orte\s+4/)
+        await orte.getByRole('button', { name: 'orte' }).click()
+        assert.ok(await waitFor(async () => (await statusText()).includes('4 Bilder'), 5_000))
+        assert.ok(
+          await waitFor(
+            async () =>
+              JSON.stringify((await kachelNamen()).sort()) ===
+              JSON.stringify(['dubrovnik.jpg', 'muenchen.jpg', 'paris-texas.jpg', 'paris.jpg']),
+            5_000
+          ),
+          `Kacheln: ${await kachelNamen()}`
+        )
+        await ctx.page.getByRole('button', { name: /^Alle Bilder/ }).click()
+        assert.ok(
+          await waitFor(async () => (await statusText()).includes(`${erwartet} Bilder`), 5_000)
+        )
+      }
+    ],
+    [
+      'Auswahl wie im Explorer: Klick, Strg, Umschalt, Strg+A, Esc – Statusleiste mit Anzahl und Summe',
+      async () => {
+        assert.ok(await waitFor(async () => !(await kachelNamen()).includes('Bild'), 10_000))
+        const namen = await kachelNamen()
+        const k = kacheln()
+        await k.nth(0).click()
+        assert.deepEqual(await gewaehlteNamen(), [namen[0]])
+        await k.nth(2).click({ modifiers: ['Control'] })
+        assert.deepEqual(await gewaehlteNamen(), [namen[0], namen[2]])
+        // Umschalt: Bereich ab dem Anker (der letzte Klick)
+        await k.nth(4).click({ modifiers: ['Shift'] })
+        assert.deepEqual(await gewaehlteNamen(), [namen[2], namen[3], namen[4]])
+        assert.ok(await waitFor(async () => (await statusText()).includes('3 ausgewählt'), 3_000))
+        await raster().press('Control+a')
+        assert.ok(
+          await waitFor(
+            async () =>
+              new RegExp(`${erwartet} ausgewählt · [\\d.,]+ (Byte|KB|MB)`).test(await statusText()),
+            5_000
+          ),
+          await statusText()
+        )
+        await raster().press('Escape')
+        assert.deepEqual(await gewaehlteNamen(), [])
+        assert.ok(await waitFor(async () => !(await statusText()).includes('ausgewählt'), 3_000))
+      }
+    ],
+    [
+      'Rahmen ziehen wählt die überfahrenen Kacheln',
+      async () => {
+        const namen = await kachelNamen()
+        const tops = await kacheln().evaluateAll((el) =>
+          el.map((e) => Math.round(e.getBoundingClientRect().top))
+        )
+        const spalten = tops.filter((t) => t === tops[0]).length
+        assert.ok(spalten >= 2, `nur ${spalten} Spalte(n)`)
+        const lb = await raster().boundingBox()
+        const ziel = await kacheln()
+          .nth(spalten + 1)
+          .boundingBox()
+        // von der freien Ecke oben links bis in die zweite Kachel der zweiten Zeile
+        await ctx.page.mouse.move(lb.x + 4, lb.y + 4)
+        await ctx.page.mouse.down()
+        await ctx.page.mouse.move(ziel.x + ziel.width / 2, ziel.y + ziel.height / 3, { steps: 6 })
+        await ctx.page.mouse.up()
+        assert.deepEqual(
+          (await gewaehlteNamen()).sort(),
+          [namen[0], namen[1], namen[spalten], namen[spalten + 1]].sort()
+        )
+        await raster().press('Escape')
+      }
+    ],
+    [
+      'Größenregler und Strg + Mausrad; Liste mit wählbaren Spalten, Sortieren per Überschrift',
+      async () => {
+        const breite = async () => (await kacheln().first().boundingBox()).width
+        const vorher = await breite()
+        await ctx.page.getByRole('slider', { name: 'Größe' }).fill('80')
+        assert.ok(await waitFor(async () => (await breite()) < vorher, 3_000))
+        const klein = await breite()
+        const lb = await raster().boundingBox()
+        await ctx.page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2)
+        await ctx.page.keyboard.down('Control')
+        await ctx.page.mouse.wheel(0, -300)
+        await ctx.page.keyboard.up('Control')
+        assert.ok(await waitFor(async () => (await breite()) > klein, 3_000), 'Strg + Mausrad')
+        // Liste
+        await ctx.page.getByRole('button', { name: 'Liste', exact: true }).click()
+        const grid = ctx.page.getByRole('grid', { name: 'Bilder' })
+        await grid.waitFor({ timeout: 5_000 })
+        const sortieren = ctx.page.getByRole('combobox', { name: 'Sortieren nach' })
+        await grid.getByRole('columnheader', { name: 'Name' }).getByRole('button').click()
+        assert.equal(await sortieren.inputValue(), 'name')
+        await grid.getByRole('columnheader', { name: 'Name' }).getByRole('button').click()
+        assert.equal(
+          await ctx.page.getByRole('button', { name: 'Absteigend' }).getAttribute('aria-pressed'),
+          'true'
+        )
+        assert.equal(
+          await grid.getByRole('columnheader', { name: 'Name' }).getAttribute('aria-sort'),
+          'descending'
+        )
+        // Spalten wählen
+        assert.equal(await grid.getByRole('columnheader', { name: 'Geändert' }).count(), 0)
+        await ctx.page.getByRole('button', { name: 'Spalten' }).click()
+        await ctx.page.getByRole('checkbox', { name: 'Geändert' }).check()
+        await grid.getByRole('columnheader', { name: 'Geändert' }).waitFor({ timeout: 3_000 })
+        await ctx.page.getByRole('button', { name: 'Spalten' }).click()
+        // zurück zur Vorgabe-Sortierung
+        await sortieren.selectOption('aufnahme')
+        await ctx.page.getByRole('button', { name: 'Absteigend' }).click()
+      }
+    ],
+    [
+      'Ansicht je Ordner gemerkt (Bedienzustand), auch nach dem Neuladen',
+      async () => {
+        // „Alle Bilder“ steht jetzt auf Liste; „bib“ hat seine eigene Ansicht (Vorgabe: Kacheln)
+        await baum()
+          .getByRole('treeitem', { name: 'bib', exact: true })
+          .getByRole('button', { name: /^bib/ })
+          .click()
+        await raster().waitFor({ timeout: 5_000 })
+        await ctx.page.getByRole('button', { name: /^Alle Bilder/ }).click()
+        await ctx.page.getByRole('grid', { name: 'Bilder' }).waitFor({ timeout: 5_000 })
+        await ctx.page.reload()
+        await ctx.page.getByRole('grid', { name: 'Bilder' }).waitFor({ timeout: 10_000 })
+        assert.equal(
+          await ctx.page.getByRole('button', { name: /^Alle Bilder/ }).getAttribute('aria-current'),
+          'true'
+        )
+        // für die weiteren Schritte zurück auf Kacheln
+        await ctx.page.getByRole('button', { name: 'Kacheln', exact: true }).click()
+        await raster().waitFor({ timeout: 5_000 })
+      }
+    ],
+    [
+      'Ordner per Drag & Drop (echter Drop): aufgenommen und gewählt; 600 Bilder – nur die sichtbaren Kacheln im DOM',
+      async () => {
+        mkdirSync(vieleDir)
+        for (let i = 0; i < 600; i++) {
+          copyFileSync(
+            join(bib.dir, 'namen', 'bild 1.jpg'),
+            join(vieleDir, `k${String(i).padStart(3, '0')}.jpg`)
+          )
+        }
+        await ablegen([vieleDir])
+        const v = await waitFor(async () => {
+          const f = (await ordner()).find((x) => x.name === 'viele')
+          return f && f.status === 'bereit' && f.count === 600 ? f : null
+        }, 40_000)
+        assert.ok(v, `nicht aufgenommen: ${JSON.stringify(await ordner())}`)
+        // ein einzelner gezogener Ordner wird gleich gewählt
+        assert.ok(await waitFor(async () => (await statusText()).includes('600 Bilder'), 5_000))
+        await ctx.page.getByRole('combobox', { name: 'Sortieren nach' }).selectOption('name')
+        await ctx.page.getByRole('slider', { name: 'Größe' }).fill('80')
+        assert.ok(await waitFor(async () => (await kachelNamen())[0] === 'k000.jpg', 5_000))
+        const imDom = await kacheln().count()
+        assert.ok(imDom > 0 && imDom < 300, `${imDom} Kacheln im DOM`)
+        await raster().evaluate((el) => {
+          el.scrollTop = el.scrollHeight
+        })
+        assert.ok(await waitFor(async () => (await kachelNamen()).includes('k599.jpg'), 5_000))
+        assert.ok(!(await kachelNamen()).includes('k000.jpg'))
+      }
+    ],
+    [
+      'Ziehen abgelehnt: eine Datei statt eines Ordners, eine in der Seite erzeugte Datei (ohne Pfad)',
+      async () => {
+        await ablegen([join(bib.dir, 'orte', 'dubrovnik.jpg')])
+        await ctx.page
+          .getByText(/ist kein Ordner oder gerade nicht erreichbar/)
+          .waitFor({ timeout: 5_000 })
+        assert.equal((await ordner()).length, 2)
+        await ctx.page.getByRole('button', { name: 'Hinweis schließen' }).click()
+        // ein File aus der Seite hat keinen Pfad: der Preload lässt es weg, der main sieht nichts.
+        // Als Name trägt es den Pfad eines echten (leeren) Ordners – nähme die App den Namen als
+        // Pfad, würde dieser Ordner aufgenommen (Gegenprobe)
+        const leer = mkdtempSync(join(tmpdir(), 'galeria-untergeschoben-'))
+        await raster().evaluate((el, name) => {
+          const dt = new DataTransfer()
+          dt.items.add(new File(['x'], name))
+          for (const typ of ['dragenter', 'dragover', 'drop']) {
+            el.dispatchEvent(
+              new DragEvent(typ, { dataTransfer: dt, bubbles: true, cancelable: true })
+            )
+          }
+        }, leer)
+        await ctx.page.getByText('Nur Ordner lassen sich hinzufügen.').waitFor({ timeout: 5_000 })
+        assert.equal((await ordner()).length, 2)
+        await ctx.page.getByRole('button', { name: 'Hinweis schließen' }).click()
+        rmSync(leer, { recursive: true, force: true })
+      }
+    ],
+    [
+      'Gezogenen Ordner wieder entfernen: auch seine Vorschaubilder sind weg',
+      async () => {
+        await stubConfirm(ctx.app, true)
+        const v = (await ordner()).find((x) => x.name === 'viele')
+        assert.equal(
+          await ctx.page.evaluate((id) => window.api.library.removeFolder(id), v.id),
+          true
+        )
+        assert.ok(await waitFor(async () => (await ordner()).length === 1, 5_000))
+        // auch was der Bilddienst für „viele“ gerade noch erzeugte, verschwindet wieder
+        assert.ok(
+          await waitFor(
+            async () => cacheDateien().length === 2 * (erwartet - defektErwartet.length),
+            30_000
+          ),
+          `Cache: ${cacheDateien().length}`
+        )
+        assert.ok(
+          await waitFor(async () => (await statusText()).includes(`${erwartet} Bilder`), 5_000)
+        )
+      }
+    ],
+    [
       'Unterordner eines Bibliotheksordners wird mit Hinweis abgelehnt',
       async () => {
         await stubOrdnerDialog(ctx.app, join(bib.dir, 'orte'))
         await ctx.page
-          .getByRole('navigation', { name: 'Ordner' })
+          .getByRole('navigation', { name: 'Bibliothek und Ordner' })
           .getByRole('button', { name: 'Ordner hinzufügen' })
           .click()
         await ctx.page.getByText('liegt schon in „bib“').waitFor({ timeout: 5_000 })
@@ -197,13 +460,13 @@ try {
       async () => {
         await stubOrdnerDialog(ctx.app, null)
         await ctx.page
-          .getByRole('navigation', { name: 'Ordner' })
+          .getByRole('navigation', { name: 'Bibliothek und Ordner' })
           .getByRole('button', { name: 'Ordner hinzufügen' })
           .click()
         await waitFor(
           async () =>
             !(await ctx.page
-              .getByRole('navigation', { name: 'Ordner' })
+              .getByRole('navigation', { name: 'Bibliothek und Ordner' })
               .getByRole('button', { name: 'Ordner hinzufügen' })
               .isDisabled()),
           5_000
@@ -238,7 +501,7 @@ try {
         await menue({ rolle: 'menuitemradio', name: /^Nur lesen/ })
         assert.ok(await waitFor(async () => (await ordner())[0].mode === 'nur-lesen', 5_000))
         await ctx.page
-          .getByRole('listitem', { name: 'bib' })
+          .getByRole('treeitem', { name: 'bib', exact: true })
           .getByText('nur lesen')
           .waitFor({ timeout: 5_000 })
       }
@@ -265,7 +528,7 @@ try {
         assert.ok(
           await waitFor(async () => {
             const n = await ctx.page.$$eval(
-              'table[aria-label="Bilder"] tbody img',
+              '[role="listbox"][aria-label="Bilder"] img',
               (imgs) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length
             )
             return n >= 5
@@ -293,7 +556,7 @@ try {
         await menue({ name: 'Neu einlesen' })
         await eingelesen((o) => o.lastScan > vorher && o.count === erwartet && o.missing === 1)
         await ctx.page
-          .getByRole('listitem', { name: 'bib' })
+          .getByRole('treeitem', { name: 'bib', exact: true })
           .getByText('1 fehlt')
           .waitFor({ timeout: 5_000 })
       }
@@ -307,7 +570,9 @@ try {
         const stempel = new Map(cacheDateien().map((f) => [f, statSync(f).mtimeMs]))
         await ctx.close()
         ctx = await launchApp({ userData })
-        await ctx.page.getByRole('listitem', { name: 'bib' }).waitFor({ timeout: 15_000 })
+        await ctx.page
+          .getByRole('treeitem', { name: 'bib', exact: true })
+          .waitFor({ timeout: 15_000 })
         const o = await eingelesen()
         assert.deepEqual(
           [o.path, o.count, o.missing, o.mode],
@@ -424,4 +689,5 @@ try {
   await ctx.close()
   rmSync(userData, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   bib.aufraeumen()
+  rmSync(join(vieleDir, '..'), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 }

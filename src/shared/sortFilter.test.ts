@@ -1,5 +1,59 @@
 import { describe, expect, it } from 'vitest'
-import { orderBy, pruefeSortierung, SORT_FELDER, STANDARD_SORTIERUNG } from './sortFilter'
+import {
+  orderBy,
+  pruefeOrdnerFilter,
+  pruefeSortierung,
+  SORT_FELDER,
+  STANDARD_SORTIERUNG,
+  unterordnerBereich
+} from './sortFilter'
+
+describe('Ordner-Filter', () => {
+  it('nimmt ganzen Ordner und echte Unterordner (auch mit Umlauten, Leerzeichen, Punkten)', () => {
+    expect(pruefeOrdnerFilter({ ordner: 3, pfad: '' })).toEqual({ ordner: 3, pfad: '' })
+    for (const pfad of [
+      'Urlaub',
+      'Urlaub/2024',
+      'Übersicht äöü/Sonne 🌞',
+      'a.b/.versteckt',
+      'pCc'
+    ]) {
+      expect(pruefeOrdnerFilter({ ordner: 1, pfad, extra: 1 }), pfad).toEqual({ ordner: 1, pfad })
+    }
+  })
+
+  it('lehnt „..“, leere Teile, Rückstriche, Steuerzeichen und falsche Typen ab', () => {
+    for (const v of [
+      null,
+      'Urlaub',
+      { ordner: 0, pfad: '' },
+      { ordner: 1.5, pfad: '' },
+      { ordner: '1', pfad: '' },
+      { ordner: 1 },
+      { ordner: 1, pfad: '..' },
+      { ordner: 1, pfad: 'a/../b' },
+      { ordner: 1, pfad: './a' },
+      { ordner: 1, pfad: '/a' },
+      { ordner: 1, pfad: 'a/' },
+      { ordner: 1, pfad: 'a//b' },
+      { ordner: 1, pfad: 'a\\b' },
+      { ordner: 1, pfad: 'a\u0000b' },
+      { ordner: 1, pfad: 'a\nb' },
+      { ordner: 1, pfad: 'x'.repeat(4097) }
+    ]) {
+      expect(pruefeOrdnerFilter(v), JSON.stringify(v)).toBeNull()
+    }
+  })
+
+  it('Bereich unter einem Unterordner: genau seine Einträge, nicht die Geschwister', () => {
+    const [von, bis] = unterordnerBereich('urlaub')
+    const drin = (k: string): boolean => k >= von && k < bis
+    expect(['urlaub/a.jpg', 'urlaub/2024/b.jpg', 'urlaub/ü.jpg'].every(drin)).toBe(true)
+    expect(
+      ['urlaub.jpg', 'urlaub 2/a.jpg', 'urlaub-x/a.jpg', 'urlaubx/a.jpg', 'urlaub'].some(drin)
+    ).toBe(false)
+  })
+})
 
 describe('Sortierung prüfen', () => {
   it('nimmt jedes bekannte Feld in beiden Richtungen an', () => {

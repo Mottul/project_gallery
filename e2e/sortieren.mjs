@@ -59,10 +59,16 @@ const api = {
 /** Details aller Dateien in der Reihenfolge einer Sortierung */
 const liste = async (feld, richtung = 'auf') => api.details(await api.query(feld, richtung))
 /** Namen der Tabellenzeilen in der Oberfläche */
+/** Namen der Kacheln in der Oberfläche (virtualisiert: nur die gerade gezeigten, in Reihenfolge) */
 const tabelle = () =>
-  ctx.page.$$eval('table[aria-label="Bilder"] tbody tr td:nth-child(2)', (td) =>
-    td.map((x) => x.textContent)
+  ctx.page.$$eval('[role="listbox"][aria-label="Bilder"] [role="option"]', (el) =>
+    el.map((x) => x.getAttribute('aria-label'))
   )
+/** Zeigt die Oberfläche den Anfang dieser Reihenfolge? */
+const zeigtAnfang = async (namen) => {
+  const t = await tabelle()
+  return t.length > 0 && JSON.stringify(t) === JSON.stringify(namen.slice(0, t.length))
+}
 const zeilenUeber = new Map()
 let prozesseWaehrend = []
 
@@ -216,7 +222,7 @@ try {
       }
     ],
     [
-      'Oberfläche: „Sortieren nach“ und Richtung ändern die Tabelle',
+      'Oberfläche: „Sortieren nach“ und Richtung ändern die Reihenfolge der Kacheln',
       async () => {
         const auswahl = ctx.page.getByRole('combobox', { name: 'Sortieren nach' })
         assert.equal(await auswahl.inputValue(), 'aufnahme')
@@ -225,10 +231,7 @@ try {
         await auswahl.selectOption('name')
         const nachName = (await liste('name')).map((b) => b.name)
         assert.ok(
-          await waitFor(
-            async () => JSON.stringify(await tabelle()) === JSON.stringify(nachName),
-            5_000
-          ),
+          await waitFor(() => zeigtAnfang(nachName), 5_000),
           `Tabelle: ${(await tabelle()).slice(0, 5).join(' | ')}`
         )
         const richtung = ctx.page.getByRole('button', { name: 'Absteigend' })

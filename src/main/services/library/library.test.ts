@@ -295,4 +295,29 @@ describe('Vorschaubilder-Warteschlange', () => {
     await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
     expect(Object.values(vzeilen()).map((z) => z.thumb_state)).toEqual(['ok', 'ok', 'ok'])
   })
+
+  it('der gemeldete sichtbare Ausschnitt kommt vor dem übrigen Hintergrund', async () => {
+    h.dateien = Array.from({ length: 12 }, (_, i) => datei(`b${String(i).padStart(2, '0')}.jpg`))
+    // der erste Stapel wartet, bis der Ausschnitt gemeldet ist
+    let weiter: () => void = () => undefined
+    const erster = new Promise<void>((r) => (weiter = r))
+    let aufrufe = 0
+    h.vorschau = async (d) => {
+      if (aufrufe++ === 0) await erster
+      return allesOk(d)
+    }
+    lib.bibliothekStarten()
+    await vi.waitFor(() => expect(lib.zustand().total).toBe(12))
+    await vi.waitFor(() => expect(vorschau).toHaveBeenCalledTimes(1))
+    const ids = (
+      h.db.prepare('SELECT id FROM images ORDER BY id').pluck().all() as number[]
+    ).slice()
+    const ende = ids.slice(-2)
+    expect(vorschau.mock.calls[0][0].map((x) => x.id)).not.toContain(ende[0])
+    lib.sichtbar(ende)
+    weiter()
+    await vi.waitFor(() => expect(vorschau.mock.calls.length).toBeGreaterThanOrEqual(2))
+    expect(vorschau.mock.calls[1][0].map((x) => x.id)).toEqual(ende)
+    await vi.waitFor(() => expect(lib.zustand().thumbPending).toBe(0))
+  })
 })

@@ -107,6 +107,18 @@ export interface ImageInfo {
   color: string | null
 }
 
+/** Unterordner eines Bibliotheksordners mit der Zahl seiner direkten Dateien (Ordnerbaum) */
+export interface LibraryDir {
+  /** relativ zum Ordner, „/“ als Trenner; „“ = der Ordner selbst */
+  path: string
+  count: number
+}
+
+export interface LibraryDirs {
+  folderId: number
+  dirs: LibraryDir[]
+}
+
 export type AddFolderResult =
   | { status: 'hinzugefuegt'; folder: LibraryFolder }
   | { status: 'abgebrochen' }

@@ -1,8 +1,8 @@
-// Auswahl der Sortierung: Feld und Richtung. Gruppen und weitere Felder (Ort, Kamera, Bewertung)
-// kommen mit Phase 2 (docs/PLAN.md, „Sortieren, Filtern, Gruppieren, Suchen“).
+// Auswahl der Sortierung (je Bibliotheksordner gemerkt): Feld und Richtung. Gruppen und weitere
+// Felder (Ort, Kamera, Bewertung) kommen mit Phase 2 (docs/PLAN.md, „Sortieren, Filtern, Gruppieren, Suchen“).
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
-import { sortierungSetzen, useSortierung } from '@renderer/lib/bildliste'
+import { ansichtAendern, useAnsicht } from '@renderer/lib/ansicht'
 import type { SortFeld } from '@shared/sortFilter'
 
 export const FELD_TEXT: Record<SortFeld, string> = {
@@ -14,7 +14,7 @@ export const FELD_TEXT: Record<SortFeld, string> = {
 }
 
 export function Sortierwahl(): JSX.Element {
-  const s = useSortierung()
+  const s = useAnsicht().sortierung
   const ab = s.richtung === 'ab'
   return (
     <div className="flex items-center gap-1.5">
@@ -24,7 +24,7 @@ export function Sortierwahl(): JSX.Element {
       <select
         id="sortierung"
         value={s.feld}
-        onChange={(e) => sortierungSetzen({ ...s, feld: e.target.value as SortFeld })}
+        onChange={(e) => ansichtAendern({ sortierung: { ...s, feld: e.target.value as SortFeld } })}
         className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
       >
         {(Object.keys(FELD_TEXT) as SortFeld[]).map((f) => (
@@ -40,7 +40,7 @@ export function Sortierwahl(): JSX.Element {
         aria-label="Absteigend"
         aria-pressed={ab}
         title={ab ? 'Absteigend – klicken für aufsteigend' : 'Aufsteigend – klicken für absteigend'}
-        onClick={() => sortierungSetzen({ ...s, richtung: ab ? 'auf' : 'ab' })}
+        onClick={() => ansichtAendern({ sortierung: { ...s, richtung: ab ? 'auf' : 'ab' } })}
       >
         {ab ? (
           <ArrowDownWideNarrow className="size-4" aria-hidden />

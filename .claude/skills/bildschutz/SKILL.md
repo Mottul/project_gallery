@@ -54,6 +54,8 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 - [ ] Bilder nur über `thumb://id/<kennung>/<stufe>` und `bild://…`; der Handler schlägt die Kennung im
       Index nach, prüft `realpath` innerhalb eines Bibliotheksordners (Symlinks/Junctions nach
       außen!) und dass die Datei zum Index passt.
+- [ ] Ordner per Drag & Drop: Pfad nur aus dem Datei-Objekt im Preload (`webUtils.getPathForFile`),
+      nie aus einem Text der Seite; Gegenprobe im E2E `galerie` (untergeschobenes File).
 - [ ] Jeder IPC-Eingang geprüft: Typ, Allowlist, Grenzen (Skill `ipc-kanal`). Pfade, in die
       geschrieben wird, stammen aus einem Dialog des main oder aus dem Index, nie direkt vom Renderer.
 - [ ] Fenster nur über `secureWebPreferences` (Sandbox, contextIsolation, kein Node, keine Webviews).

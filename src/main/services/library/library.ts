@@ -9,12 +9,13 @@ import { basename, isAbsolute, join } from 'node:path'
 import { grundfelderAus } from '@shared/grundfelder'
 import { Channels } from '@shared/ipc-contracts'
 import { konfliktText, ordnerKonflikt } from '@shared/ordnerPruefen'
-import type { Sortierung } from '@shared/sortFilter'
+import type { OrdnerFilter, Sortierung } from '@shared/sortFilter'
 import type {
   AddFolderResult,
   FolderMode,
   FolderStatus,
   ImageInfo,
+  LibraryDirs,
   LibraryFolder,
   LibraryState
 } from '@shared/types'
@@ -32,6 +33,7 @@ import {
   ordnerWirdPrivat,
   vorschauenAnstossen,
   vorschauenBeenden,
+  vorschauAusschnitt,
   vorschauenEinrichten,
   vorschauVerwerfen
 } from './vorschauen'
@@ -300,9 +302,30 @@ async function metaRunde(): Promise<void> {
 
 // ── Abfragen ──────────────────────────────────────────────────────────────────────────────────
 
-/** Kennungen aller vorhandenen Dateien in der gewünschten Reihenfolge. */
-export function abfrage(sortierung: Sortierung): number[] {
-  return repo.kennungen(db(), sortierung)
+/** Kennungen aller vorhandenen Dateien in der gewünschten Reihenfolge, wahlweise nur eines Ordners. */
+export function abfrage(sortierung: Sortierung, filter?: OrdnerFilter): number[] {
+  return repo.kennungen(db(), sortierung, filter, WINDOWS)
+}
+
+/** Unterordner je Bibliotheksordner mit der Zahl ihrer direkten Dateien (Ordnerbaum). */
+export function verzeichnisBaum(): LibraryDirs[] {
+  const je = new Map<number, LibraryDirs>()
+  for (const v of repo.verzeichnisse(db())) {
+    const eintrag = je.get(v.folder_id) ?? { folderId: v.folder_id, dirs: [] }
+    eintrag.dirs.push({ path: v.pfad, count: v.anzahl })
+    je.set(v.folder_id, eintrag)
+  }
+  return [...je.values()]
+}
+
+/** Summe der Dateigrößen einer Auswahl (Statusleiste). */
+export function auswahlGroesse(ids: readonly number[]): number {
+  return repo.groesseSumme(db(), ids)
+}
+
+/** Die Seite meldet, was sichtbar ist: dort entstehen fehlende Vorschaubilder zuerst. */
+export function sichtbar(ids: readonly number[]): void {
+  vorschauAusschnitt(ids)
 }
 
 /** Details zu Kennungen (sichtbarer Ausschnitt), ohne Pfade. */
@@ -343,7 +366,38 @@ export async function ordnerHinzufuegen(win: BrowserWindow | null): Promise<AddF
   })
   const pfad = res.canceled ? undefined : res.filePaths[0]
   if (!pfad) return { status: 'abgebrochen' }
+  return ordnerAufnehmen(pfad, 'Der Ordner ist gerade nicht erreichbar.')
+}
+
+/**
+ * Ordner per Drag & Drop: Die Pfade hat der Preload aus den gezogenen Datei-Objekten gelesen
+ * (webUtils.getPathForFile) – die Seite selbst kann keinen Pfad vorgeben. Geprüft wird wie beim
+ * Dialog; eine gezogene Datei statt eines Ordners wird mit Hinweis abgelehnt. Nacheinander, damit
+ * zwei gezogene Ordner, die ineinander liegen, als Überlappung erkannt werden.
+ */
+export async function ordnerHinzufuegenGezogen(
+  pfade: readonly string[]
+): Promise<AddFolderResult[]> {
+  const out: AddFolderResult[] = []
+  for (const pfad of pfade) {
+    out.push(
+      await ordnerAufnehmen(
+        pfad,
+        `„${anzeigeName(pfad)}“ ist kein Ordner oder gerade nicht erreichbar – nur Ordner lassen sich hinzufügen.`
+      )
+    )
+  }
+  return out
+}
+
+/** Gewählten oder gezogenen Ordner prüfen und aufnehmen. */
+async function ordnerAufnehmen(pfad: string, nichtErreichbar: string): Promise<AddFolderResult> {
   if (!isAbsolute(pfad)) return { status: 'abgelehnt', grund: 'Ungültiger Ordner.' }
+  // erreichbar UND ein Ordner (isDirReachable prüft beides, mit Zeitlimit) – zuerst, damit eine
+  // gezogene Datei „kein Ordner“ heißt, nicht „liegt schon in …“
+  if (!(await isDirReachable(pfad))) return { status: 'abgelehnt', grund: nichtErreichbar }
+  // Überlappung erst nach dem await und direkt vor dem Eintragen: dazwischen kann ein anderer
+  // Ordner dazugekommen sein (Review-Checkliste, „Zustand nach await“)
   const konflikt = ordnerKonflikt(
     pfad,
     repo.ordnerListe(db()).map((o) => o.path),
@@ -351,9 +405,6 @@ export async function ordnerHinzufuegen(win: BrowserWindow | null): Promise<AddF
     WINDOWS
   )
   if (konflikt) return { status: 'abgelehnt', grund: konfliktText(konflikt, anzeigeName) }
-  if (!(await isDirReachable(pfad))) {
-    return { status: 'abgelehnt', grund: 'Der Ordner ist gerade nicht erreichbar.' }
-  }
   const id = repo.ordnerAnlegen(db(), pfad, WINDOWS, Date.now())
   logLine('[bibliothek] Ordner hinzugefügt:', id)
   einreihen(id)

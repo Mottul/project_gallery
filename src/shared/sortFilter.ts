@@ -8,7 +8,9 @@
 // hat mindestens die Dateizeit); kommen Felder mit fehlenden Werten hinzu (Ort, Kamera), stehen
 // diese immer am Ende – dafür eine eigene Spalte vorn in den Index (wie `place_missing`).
 //
-// Später kommen Filter und Gruppen hinzu (docs/PLAN.md, Phase 2).
+// Filter (1.4): ein Bibliotheksordner, wahlweise ab einem Unterordner samt allem darunter. Der
+// Pfad wird geprüft und nur als Parameter (Vergleichsschlüssel) verwendet. Weitere Filter und
+// Gruppen kommen in Phase 2 (docs/PLAN.md).
 
 export type SortFeld = 'aufnahme' | 'name' | 'geaendert' | 'groesse' | 'typ'
 export type Richtung = 'auf' | 'ab'
@@ -49,4 +51,35 @@ export function orderBy(s: Sortierung): string {
   if (!spalten) throw new Error('Unbekanntes Sortierfeld')
   const r = s.richtung === 'ab' ? ' DESC' : ''
   return [...spalten, 'id'].map((sp) => sp + r).join(', ')
+}
+
+/** Ordner-Filter: Bibliotheksordner `ordner`, ab Unterordner `pfad` („“ = ganzer Ordner) */
+export interface OrdnerFilter {
+  ordner: number
+  /** relativ zum Ordner, „/“ als Trenner, ohne Schluss-Trenner */
+  pfad: string
+}
+
+/** Höchstlänge eines Unterordner-Pfads (Windows: lange Pfade bis 32.767 Zeichen; hier großzügig) */
+const PFAD_MAX = 4096
+
+/** Filter aus dem Renderer prüfen; liefert eine saubere Kopie oder null. */
+export function pruefeOrdnerFilter(v: unknown): OrdnerFilter | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const { ordner, pfad } = v as Record<string, unknown>
+  if (typeof ordner !== 'number' || !Number.isSafeInteger(ordner) || ordner < 1) return null
+  if (typeof pfad !== 'string' || pfad.length > PFAD_MAX) return null
+  if (pfad === '') return { ordner, pfad }
+  // nur echte Unterordner: keine leeren Teile, kein „.“/„..“, kein „\“, keine Steuerzeichen
+  if (/\\|\p{Cc}/u.test(pfad)) return null
+  if (pfad.split('/').some((t) => t === '' || t === '.' || t === '..')) return null
+  return { ordner, pfad }
+}
+
+/**
+ * Bereich der Vergleichsschlüssel unter einem Unterordner: `schluessel/` ≤ rel_key < `schluessel0`
+ * („0“ folgt auf „/“) – so nutzt die Abfrage den Index (folder_id, rel_key) statt LIKE.
+ */
+export function unterordnerBereich(schluessel: string): [string, string] {
+  return [schluessel + '/', schluessel + '0']
 }

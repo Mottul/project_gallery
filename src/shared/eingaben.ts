@@ -1,7 +1,12 @@
 // Eingaben aus dem Renderer prüfen – rein, getestet in eingaben.test.ts. Auch der eigene Renderer
 // gilt als fremde Eingabe (Skill ipc-kanal): Ungültiges ist ein Fehler, nie still „korrigiert“.
 
-import { pruefeSortierung, type Sortierung } from './sortFilter'
+import {
+  pruefeOrdnerFilter,
+  pruefeSortierung,
+  type OrdnerFilter,
+  type Sortierung
+} from './sortFilter'
 import { FOLDER_MODES, type FolderMode } from './types'
 
 /** Kennung aus dem Index: ganze Zahl ab 1. */
@@ -22,6 +27,29 @@ export function pruefeSortierungStreng(v: unknown): Sortierung {
   const s = pruefeSortierung(v)
   if (!s) throw new Error('Ungültige Sortierung')
   return s
+}
+
+export function pruefeOrdnerFilterStreng(v: unknown): OrdnerFilter {
+  const f = pruefeOrdnerFilter(v)
+  if (!f) throw new Error('Ungültiger Ordner-Filter')
+  return f
+}
+
+/** Längster Pfad unter Windows (mit \\?\-Präfix) */
+const PFAD_MAX = 32_767
+
+/**
+ * Pfade gezogener Ordner (kommen aus dem Preload, nie aus der Seite): Liste von Texten, höchstens
+ * `max`, ohne Steuerzeichen. Ob sie absolut, erreichbar und Ordner sind, prüft der main.
+ */
+export function pruefePfade(v: unknown, max: number): string[] {
+  if (!Array.isArray(v) || v.length > max) throw new Error('Ungültige Pfade')
+  for (const p of v) {
+    if (typeof p !== 'string' || p === '' || p.length > PFAD_MAX || /\p{Cc}/u.test(p)) {
+      throw new Error('Ungültiger Pfad')
+    }
+  }
+  return v as string[]
 }
 
 export function pruefeOrdnerModus(v: unknown): FolderMode {
