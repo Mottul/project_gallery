@@ -73,6 +73,8 @@ const teile = new Map<number, { pfade: Set<string>; dateien: Set<string> }>()
 let aktiv: number | null = null
 /** App wird beendet: nichts mehr anstoßen oder schreiben */
 let beendet = false
+/** Zählt Abgleiche, die den Index verändert haben (LibraryState.revision) */
+let revision = 0
 
 function db(): DB {
   return getDb(lokalerUnterordner('index'))
@@ -114,7 +116,8 @@ export function zustand(): LibraryState {
     folders,
     total: folders.reduce((s, f) => s + f.count, 0),
     metaPending: ohneExiftool ? 0 : repo.metaOffenAnzahl(db(), nichtErreichbar()),
-    thumbPending: repo.vorschauOffenAnzahl(db(), nichtErreichbar())
+    thumbPending: repo.vorschauOffenAnzahl(db(), nichtErreichbar()),
+    revision
   }
 }
 
@@ -163,10 +166,11 @@ async function einlesen(id: number): Promise<void> {
   const lz = setzeStatus(id, 'liest')
   melden()
   const t0 = Date.now()
+  let geschrieben = 0
   lz.auftrag = bilddienst.scan(ordner.path, (dateien) => {
     // Ordner inzwischen entfernt? Dann nichts mehr schreiben.
     if (laufzeit.get(id) !== lz) return
-    repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
+    geschrieben += repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
     lz.found += dateien.length
     melden(false)
     metadatenAnstossen()
@@ -180,6 +184,7 @@ async function einlesen(id: number): Promise<void> {
       `[bibliothek] Ordner ${id} eingelesen: ${r.gefunden} Dateien, ${a.fehlend} fehlen neu,`,
       `${a.verschoben} verschoben, ${r.unlesbar.length} unlesbar, ${Date.now() - t0} ms`
     )
+    if (geschrieben || a.fehlend || a.verschoben) revision++
     await verworfeneWeg(a.verworfen)
     setzeStatus(id, 'bereit')
     metadatenAnstossen()
@@ -215,11 +220,12 @@ async function teilEinlesen(id: number, pfade: string[], dateien: string[]): Pro
   const neuAb = repo.hoechsteKennung(db())
   const seq = repo.scanBeginnen(db(), id)
   const t0 = Date.now()
+  let geschrieben = 0
   const auftrag = bilddienst.scan(
     ordner.path,
     (dateien) => {
       if (laufzeit.get(id) !== lz) return
-      repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
+      geschrieben += repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
       melden(false)
       metadatenAnstossen()
       vorschauenAnstossen()
@@ -231,6 +237,7 @@ async function teilEinlesen(id: number, pfade: string[], dateien: string[]): Pro
     const r = await auftrag.fertig
     if (laufzeit.get(id) !== lz) return
     const a = repo.teilAbschliessen(db(), id, seq, pfade, dateien, r.unlesbar, WINDOWS, neuAb)
+    if (geschrieben || a.fehlend || a.verschoben) revision++
     logLine(
       `[bibliothek] Ordner ${id} abgeglichen (${pfade.length + dateien.length} Pfade):`,
       `${r.gefunden} Dateien,`,

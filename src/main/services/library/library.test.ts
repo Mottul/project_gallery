@@ -502,6 +502,22 @@ describe('Überwachen (1.6)', () => {
     await vi.waitFor(() => expect(h.scans).toHaveLength(2))
   })
 
+  it('verschoben: alle Anzahlen gleich, aber die Revision steigt – unverändert nicht', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    const r0 = lib.zustand().revision
+    // nur „gelesen“ gemeldet, nichts geändert: keine neue Revision
+    bilddienst.onAenderung?.(ordnerId(), { art: 'pfade', pfade: [], dateien: ['sub/a.jpg'] })
+    await vi.waitFor(() => expect(h.scans).toHaveLength(2))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(lib.zustand().revision).toBe(r0)
+    // c.jpg in einen neuen Ordner verschoben
+    h.dateien = h.dateien.map((d) => (d.name === 'c.jpg' ? { ...d, rel: 'neu/c.jpg' } : d))
+    bilddienst.onAenderung?.(ordnerId(), { art: 'pfade', pfade: ['neu', 'sub/c.jpg'], dateien: [] })
+    await vi.waitFor(() => expect(lib.zustand().revision).toBeGreaterThan(r0))
+    expect(lib.zustand().folders[0]).toMatchObject({ count: 3, missing: 0 })
+  })
+
   it('Bilddienst neu gestartet: die Wächter entstehen neu', async () => {
     lib.bibliothekStarten()
     await eingelesen()

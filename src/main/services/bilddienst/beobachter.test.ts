@@ -137,11 +137,18 @@ describe('Beobachter (echtes fs.watch)', () => {
     expect(meldungen).toEqual([{ art: 'pfade', pfade: [], dateien: ['Urlaub/a.jpg'] }])
   })
 
-  it('der Ordner selbst wird gelöscht: einmal „weg“, dann still (kein Ereignissturm)', async () => {
-    rmSync(dir, { recursive: true, force: true })
-    await warten(() => meldungen.some((m) => m.art === 'weg'))
-    await new Promise((r) => setTimeout(r, 300))
-    expect(meldungen.filter((m) => m.art === 'weg')).toHaveLength(1)
-    expect(meldungen.length).toBeLessThanOrEqual(2)
-  })
+  // Gemessen unter Windows (Endlos-Sturm absoluter Pfade); Linux meldet das Löschen des Ordners
+  // selbst nicht (CI) – dort findet es die Erreichbarkeitsprüfung der Bibliothek (30 s, Fokus;
+  // library.test.ts, E2E ueberwachen)
+  it.runIf(process.platform === 'win32')(
+    'der Ordner selbst wird gelöscht: einmal „weg“, dann still (kein Ereignissturm)',
+    { timeout: 10_000 },
+    async () => {
+      rmSync(dir, { recursive: true, force: true })
+      await warten(() => meldungen.some((m) => m.art === 'weg'))
+      await new Promise((r) => setTimeout(r, 300))
+      expect(meldungen.filter((m) => m.art === 'weg')).toHaveLength(1)
+      expect(meldungen.length).toBeLessThanOrEqual(2)
+    }
+  )
 })

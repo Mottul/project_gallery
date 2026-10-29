@@ -78,6 +78,9 @@ export interface LibraryState {
   metaPending: number
   /** Dateien, deren Vorschaubild noch entsteht (ohne Ordner „privat“; 0 = fertig) */
   thumbPending: number
+  /** Zählt Abgleiche, die etwas verändert haben – auch solche, nach denen alle Anzahlen gleich
+   *  sind (verschoben, umbenannt, geändert): Die Oberfläche fragt dann neu nach */
+  revision: number
 }
 
 /** Eine Datei für Raster und Liste – ohne Pfad (der Renderer liest keine Dateien, Schicht C). */

@@ -98,7 +98,7 @@ export function scanBeginnen(db: DB, id: number): number {
  * Unveränderte Dateien (gleicher Pfad, Größe, Zeiten, nicht „fehlt“) werden nur als gesehen
  * markiert – ein UPDATE für den ganzen Stapel statt eines UPSERT je Zeile. Gemessen im Index mit
  * 50.000 Zeilen (1.6): 2 statt 47 ms je Stapel von 250, ein ganzer Abgleich ohne Änderungen
- * 0,5 statt 7 s im main.
+ * 0,5 statt 7 s im main. Liefert die Zahl der geschriebenen (neuen oder geänderten) Zeilen.
  */
 export function stapelSchreiben(
   db: DB,
@@ -106,7 +106,7 @@ export function stapelSchreiben(
   seq: number,
   dateien: readonly GefundeneDatei[],
   windows: boolean
-): void {
+): number {
   // Aufnahmedatum vorläufig aus den Dateizeiten (dates.ts), bis ExifTool gelesen hat – ein
   // Datum aus den Metadaten wird dabei nie überschrieben
   const st = db.prepare(`
@@ -141,7 +141,7 @@ export function stapelSchreiben(
   const gesehen = db.prepare(
     'UPDATE images SET seen_scan = ? WHERE id IN (SELECT value FROM json_each(?))'
   )
-  db.transaction(() => {
+  return db.transaction(() => {
     const schluessel = dateien.map((d) => pfadSchluessel(d.rel, windows))
     const alt = new Map(
       (
@@ -188,6 +188,7 @@ export function stapelSchreiben(
       })
     })
     if (gleich.length) gesehen.run(seq, JSON.stringify(gleich))
+    return dateien.length - gleich.length
   })()
 }
 

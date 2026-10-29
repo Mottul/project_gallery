@@ -22,6 +22,7 @@ function inhaltsSchluessel(lib: LibraryState | null): string {
     lib.total,
     lib.metaPending,
     lib.thumbPending,
+    lib.revision,
     ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}:${f.missing}:${f.mode}`)
   ].join('|')
 }
