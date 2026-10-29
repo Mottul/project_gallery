@@ -1,0 +1,12 @@
+{
+  "stand": "2026-10-29",
+  "quelle": "GeoNames cities1000 + alternateNamesV2 (Sprache de)",
+  "lizenz": "CC BY 4.0 – https://www.geonames.org",
+  "orte": 162014,
+  "deutscheNamen": 22094,
+  "sha256": "08cd1dd02182dc095c8e64eee3c3ae6489c055cfa9b0afe2ad7e5c8939fbcbe7",
+  "quellen": {
+    "cities1000.zip": "8874dd9c206961c9c3fa89548abb4d02bbfc39ad2d14d966af053b2e8b9f09c3",
+    "alternateNamesV2.zip": "296abd79a20616cb63bfc923fe788ef4113fd8f02a74a0da9ffeb030a63f2180"
+  }
+}

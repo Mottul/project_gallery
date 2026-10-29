@@ -10,7 +10,8 @@ export const FELD_TEXT: Record<SortFeld, string> = {
   name: 'Name',
   geaendert: 'Änderungsdatum',
   groesse: 'Dateigröße',
-  typ: 'Dateityp'
+  typ: 'Dateityp',
+  ort: 'Ort (A–Z)'
 }
 
 export function Sortierwahl(): JSX.Element {

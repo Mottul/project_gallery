@@ -15,7 +15,7 @@ Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5
 `bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) und
 1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). **Phase 2 läuft**
 (Metadaten lesen, Filtern, Suchen; Teilschritte 2.1–2.5 im Plan); 2.1 (alle Metadaten, Info-Panel,
-Fehlende entfernen) ist umgesetzt. Grundlage ist
+Fehlende entfernen) und 2.2 (Orte offline, Sortieren nach Ort A–Z) sind umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -42,6 +42,7 @@ npm run e2e             # App bauen + E2E (Playwright, e2e/; `-- smoke netz` wä
 npm run build           # typecheck + electron-vite build -> out/
 npm run exiftool:fetch  # ExifTool nach resources/exiftool/<os>/ (gepinnt, SHA-256)
 npm run ffmpeg:fetch    # ffmpeg/ffprobe nach resources/ffmpeg/<os>/ (gepinnt, SHA-256)
+npm run orte:bauen      # Ortsdaten aus GeoNames neu bauen -> resources/geo/ (im Repo, selten)
 npm run testbilder -- <ordner>  # synthetische Testbibliothek + testbilder.json (nie echte Fotos)
 npm run package         # Installer nach dist/ (package:dir = entpackt, für e2e:run -- paket)
 npm run abnahme:sandbox # Installer in der Windows-Sandbox ohne Netz prüfen

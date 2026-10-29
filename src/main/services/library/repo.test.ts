@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lokalAusMs } from '@shared/dates'
 import { grundfelderAus } from '@shared/grundfelder'
 import { orderBy, SORT_FELDER } from '@shared/sortFilter'
-import type { GefundeneDatei } from './repo'
+import type { GefundeneDatei, OrtWert } from './repo'
 
 vi.mock('../log', () => ({ logLine: vi.fn() }))
 
@@ -427,6 +427,69 @@ describe('Metadaten und Fehlende (2.1)', () => {
   })
 })
 
+describe('Orte (2.2)', () => {
+  /** eine Datei mit Ort (oder ohne) eintragen und als gelesen markieren */
+  function mitOrt(rel: string, ort: OrtWert | null, mtime = 1000): void {
+    scan(db, id, [...(alleDateien.push(datei(rel, 100, mtime)), alleDateien)])
+    const o = repo.metaOffen(db, 100).find((x) => x.rel_path === rel)
+    if (!o) throw new Error(rel)
+    repo.metaSchreiben(db, [{ ...o, felder: grundfelderAus(null, o, 1), ort }], 2)
+  }
+  let alleDateien: GefundeneDatei[] = []
+  beforeEach(() => {
+    alleDateien = []
+  })
+  const reihe = (richtung: 'auf' | 'ab'): string[] =>
+    repo
+      .details(db, repo.kennungen(db, { feld: 'ort', richtung }, undefined, true))
+      .map((d) => d.name)
+
+  it('nach Ort A–Z, gleichnamige Orte nach Land; ohne Ort am Ende – auch absteigend', () => {
+    mitOrt('ohne.jpg', null)
+    mitOrt('paris-us.jpg', { name: 'Paris', land: 'Vereinigte Staaten', quelle: 'gps' })
+    mitOrt('dubrovnik.jpg', { name: 'Dubrovnik', land: 'Kroatien', quelle: 'gps' })
+    mitOrt('muenchen.jpg', { name: 'München', land: 'Deutschland', quelle: 'gps' })
+    mitOrt('paris-fr.jpg', { name: 'Paris', land: 'Frankreich', quelle: 'metadaten' })
+    mitOrt('ohne2.jpg', null)
+    expect(reihe('auf')).toEqual([
+      'dubrovnik.jpg',
+      'muenchen.jpg',
+      'paris-fr.jpg',
+      'paris-us.jpg',
+      'ohne.jpg',
+      'ohne2.jpg'
+    ])
+    expect(reihe('ab')).toEqual([
+      'paris-us.jpg',
+      'paris-fr.jpg',
+      'muenchen.jpg',
+      'dubrovnik.jpg',
+      'ohne2.jpg',
+      'ohne.jpg'
+    ])
+    expect(
+      repo.details(db, repo.kennungen(db, { feld: 'ort', richtung: 'auf' }, undefined, true))[0]
+        .place
+    ).toEqual({
+      name: 'Dubrovnik',
+      country: 'Kroatien',
+      source: 'gps'
+    })
+  })
+
+  it('neue Ortsdaten: nur Orte aus GPS werden neu bestimmt; Stand im Schlüssel-Wert-Speicher', () => {
+    mitOrt('gps.jpg', { name: 'A', land: null, quelle: 'gps' })
+    mitOrt('feld.jpg', { name: 'B', land: null, quelle: 'metadaten' })
+    db.prepare('UPDATE images SET gps_lat = 1, gps_lon = 2').run()
+    expect(repo.orteNeuBestimmen(db)).toBe(1)
+    expect(repo.metaOffen(db, 10).map((o) => o.rel_path)).toEqual(['gps.jpg'])
+    expect(repo.kvLesen(db, 'orte_stand')).toBeNull()
+    repo.kvSchreiben(db, 'orte_stand', 'x')
+    repo.kvSchreiben(db, 'orte_stand', 'y')
+    expect(repo.kvLesen(db, 'orte_stand')).toBe('y')
+  })
+})
+
 describe('Abfragen', () => {
   const zeile = (rel: string, size: number, mtime: number): GefundeneDatei => ({
     rel,
@@ -517,7 +580,8 @@ describe('Abfragen', () => {
       colorLabel: null,
       title: null,
       description: null,
-      keywords: []
+      keywords: [],
+      place: null
     })
     expect(JSON.stringify(d)).not.toMatch(/Bilder/)
     expect(repo.details(db, [])).toEqual([])

@@ -195,6 +195,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   schlägt die Kennung nach, der Bilddienst prüft die Datei und liest sie frisch (`alleFelder.ts`,
   nichts davon im Index). Fehlende Dateien: `missing_since` beim Fehlen, `library.removeMissing`
   (Rückfrage) bzw. automatisch nach 30 Tagen (`fehlendeAufraeumen` in `library.ts`).
+- **Orte (2.2):** Die Ortsdaten liegen im Repository (`resources/geo/`, gebaut mit
+  `npm run orte:bauen` aus GeoNames, selten und mit eigenem PR – GeoNames ändert sich täglich,
+  eine feste Prüfsumme der Quelle ginge nicht). Der Bilddienst lädt sie beim ersten Bedarf,
+  prüft die SHA-256 aus `orte.json` und fragt `OrtsIndex.naechster` (`shared/geo.ts`, Regel im
+  Kopfkommentar). `library.ts` bestimmt den Ort im Metadaten-Durchlauf (Ort-Feld der Datei vor
+  GPS); `repo.metaSchreiben` legt Name, Land, Quelle und `place_sort` ab. Ändert sich der Stand
+  der Ortsdaten (`kv`), werden die Orte aus GPS beim Nachlesen neu bestimmt.
 - **Leistung des main:** Der Client des Bilddienstes arbeitet Nachrichten einzeln ab und gibt
   dazwischen an die Ereignisschleife ab; `stapelSchreiben` schreibt nur Geändertes. Steht die
   Ereignisschleife länger als 250 ms, steht das im Log („[main] Ereignisschleife … ms blockiert“)

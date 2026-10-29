@@ -1,0 +1,12 @@
+Ortsdaten (orte.tsv.gz)
+
+Quelle: GeoNames – https://www.geonames.org
+Dateien: cities1000 (Orte ab 1.000 Einwohnern) und alternateNamesV2 (deutsche Namen)
+Lizenz: Creative Commons Namensnennung 4.0 International (CC BY 4.0)
+        https://creativecommons.org/licenses/by/4.0/
+
+Galeria Beata verwendet daraus nur Ortsname, Koordinaten, Ländercode und Einwohnerzahl, um zu
+GPS-Koordinaten offline den nächsten Ort zu finden. Die Daten wurden mit scripts/orte-bauen.mjs
+zusammengestellt (Stand und Prüfsummen in orte.json); verändert wurden sie nur in der Auswahl
+(ohne Ortsteile, historische, aufgegebene und zerstörte Orte) und durch den deutschen Namen, wo
+GeoNames einen kennt.

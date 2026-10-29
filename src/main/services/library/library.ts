@@ -8,7 +8,8 @@
 
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
-import { grundfelderAus } from '@shared/grundfelder'
+import { landName } from '@shared/geo'
+import { grundfelderAus, type Grundfelder } from '@shared/grundfelder'
 import { Channels } from '@shared/ipc-contracts'
 import { konfliktText, ordnerKonflikt } from '@shared/ordnerPruefen'
 import type { OrdnerFilter, Sortierung } from '@shared/sortFilter'
@@ -27,6 +28,7 @@ import { bilddienst, type ScanAuftrag } from '../bilddienst/client'
 import { broadcast } from '../broadcast'
 import { getDb, schliesseDb, type DB } from '../db'
 import { showOpenDialog } from '../fileDialogs'
+import { orteStand } from '../geo/geoPfad'
 import { lokalerOrdner, lokalerUnterordner } from '../lokaleDaten'
 import { logLine } from '../log'
 import { isDirReachable } from '../reachableDir'
@@ -349,6 +351,35 @@ async function metadatenLesen(): Promise<void> {
   }
 }
 
+/**
+ * Ort je Datei (2.2): das Ort-Feld der Metadaten hat Vorrang; sonst der nächste Ort zu den
+ * Koordinaten (Ortsdaten im Bilddienst). Ohne Ortsdaten bleibt es bei den Koordinaten.
+ */
+async function orteFuer(
+  zeilen: readonly { id: number; felder: Grundfelder }[]
+): Promise<Map<number, repo.OrtWert>> {
+  const m = new Map<number, repo.OrtWert>()
+  const punkte: { id: number; lat: number; lon: number }[] = []
+  for (const z of zeilen) {
+    const om = z.felder.ortMeta
+    if (om) {
+      const land = om.land ?? (om.landCode ? landName(om.landCode) : null)
+      m.set(z.id, { name: om.name, land, quelle: 'metadaten' })
+    } else if (z.felder.gps) {
+      punkte.push({ id: z.id, lat: z.felder.gps.breite, lon: z.felder.gps.laenge })
+    }
+  }
+  if (!punkte.length) return m
+  try {
+    for (const o of await bilddienst.orte(punkte)) {
+      if (o.name) m.set(o.id, { name: o.name, land: o.land, quelle: 'gps' })
+    }
+  } catch (err) {
+    logLine('[bibliothek] Orte nicht bestimmt:', (err as NodeJS.ErrnoException).code ?? 'UNBEKANNT')
+  }
+  return m
+}
+
 /** Absoluter Pfad einer Datei im Index (nur main und Bilddienst kennen Pfade). */
 function dateiPfad(o: repo.MetaOffen): string {
   return join(o.ordner, ...o.rel_path.split('/'))
@@ -416,11 +447,14 @@ async function metaRunde(): Promise<void> {
       roh.set(o.id, einzeln.get(o.id) ?? null)
     }
     const jetzt = Date.now()
+    const zeilen = offen
+      .filter((o) => !aussen.has(o.folder_id))
+      .map((o) => ({ ...o, felder: grundfelderAus(roh.get(o.id) ?? null, o, jetzt) }))
+    const orte = await orteFuer(zeilen)
+    if (beendet) return
     geschrieben += repo.metaSchreiben(
       db(),
-      offen
-        .filter((o) => !aussen.has(o.folder_id))
-        .map((o) => ({ ...o, felder: grundfelderAus(roh.get(o.id) ?? null, o, jetzt) })),
+      zeilen.map((z) => ({ ...z, ort: orte.get(z.id) ?? null })),
       jetzt
     )
     melden(false)
@@ -637,6 +671,13 @@ export function bibliothekStarten(): void {
   if (vorschauSchluesselLaden()) {
     const n = repo.vorschauAlleOffen(db())
     if (n) logLine(`[vorschau] neuer Schlüssel – ${n} Vorschaubilder entstehen neu`)
+  }
+  // neue Ortsdaten (anderer Stand): Orte aus GPS neu bestimmen – beim Nachlesen
+  const stand = orteStand()
+  if (stand && repo.kvLesen(db(), 'orte_stand') !== stand) {
+    const n = repo.orteNeuBestimmen(db())
+    repo.kvSchreiben(db(), 'orte_stand', stand)
+    if (n) logLine(`[bibliothek] Ortsdaten ${stand} – ${n} Orte werden neu bestimmt`)
   }
   for (const o of repo.ordnerListe(db())) einreihen(o.id)
   metadatenAnstossen()

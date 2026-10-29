@@ -106,3 +106,14 @@ describe('ORDER BY', () => {
     )
   })
 })
+
+describe('Sortieren nach Ort (2.2)', () => {
+  it('ohne Ort bleibt auch absteigend am Ende: place_missing immer aufsteigend', () => {
+    expect(orderBy({ feld: 'ort', richtung: 'auf' })).toBe(
+      'place_missing, place_sort, taken_at, id'
+    )
+    expect(orderBy({ feld: 'ort', richtung: 'ab' })).toBe(
+      'place_missing, place_sort DESC, taken_at DESC, id DESC'
+    )
+  })
+})

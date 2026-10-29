@@ -5,7 +5,6 @@
     "editor.mjs",
     "ffmpeg/mediaInfoParse.ts",
     "ffmpeg/probe.ts",
-    "geo.ts",
     "jobList.ts",
     "metaFields.ts",
     "metadaten.mjs",
@@ -17,7 +16,6 @@
     "src/main/services/exiftool/args.ts",
     "src/main/services/jobs/queue.ts",
     "src/shared/batchPlan.ts",
-    "src/shared/geo.ts",
     "src/shared/metaFields.ts",
     "src/shared/renamePattern.ts",
     "stapel.mjs"
