@@ -11,6 +11,7 @@ import {
   appendFileSync,
   copyFileSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -538,12 +539,17 @@ try {
         const m = await sharp(tif.daten).metadata()
         assert.deepEqual([m.width, m.height], [400, 300])
         assert.equal((await bild(kennung('png-als.jpg'))).typ, 'image/png')
-        // von außen geändert: erst nach dem nächsten Einlesen wieder (der Index ist die Grundlage).
-        // Ein Bild, das in dieser Sitzung noch nicht offen war (sonst nimmt Chromium das schon
-        // geladene); danach Größe und Änderungszeit zurück – dann passt es wieder zum Index.
+        // von außen geändert, ohne dass der Index es schon weiß: 409 und Hinweis (der Index ist
+        // die Grundlage). Geändert über einen Hardlink außerhalb des Ordners – das meldet der
+        // Wächter nicht (gemessen, 1.6), sonst gliche er schneller ab, als der Test schaut; so
+        // auch der echte Fall, den die Prüfung abfängt. Ein Bild, das in dieser Sitzung noch
+        // nicht offen war (sonst nimmt Chromium das schon geladene); danach Größe und
+        // Änderungszeit zurück – dann passt es wieder zum Index.
         const muenchen = join(bib.dir, 'orte', 'muenchen.jpg')
         const st = statSync(muenchen)
-        appendFileSync(muenchen, Buffer.from([0]))
+        const link = join(bib.dir, '..', 'muenchen-link.jpg')
+        linkSync(muenchen, link)
+        appendFileSync(link, Buffer.from([0]))
         try {
           assert.equal((await bild(kennung('muenchen.jpg'))).status, 409)
           await raster().getByRole('option', { name: 'muenchen.jpg', exact: true }).dblclick()
@@ -551,10 +557,11 @@ try {
             .getByText(/lässt sich gerade nicht anzeigen/)
             .waitFor({ timeout: 5_000 })
         } finally {
-          truncateSync(muenchen, st.size)
+          truncateSync(link, st.size)
           // Sekunden als Kommazahl: mit einem Date landet die Zeit unter Windows gelegentlich
           // knapp unter der vollen Millisekunde (Rundung) – dann passt sie nicht mehr zum Index
-          utimesSync(muenchen, st.atime, (Math.trunc(st.mtimeMs) + 0.5) / 1000)
+          utimesSync(link, st.atime, (Math.trunc(st.mtimeMs) + 0.5) / 1000)
+          rmSync(link)
         }
         assert.equal((await bild(kennung('muenchen.jpg'))).status, 200)
         // Zoom: 100 %, Mausrad am Bild, Anpassen

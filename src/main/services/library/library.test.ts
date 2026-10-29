@@ -30,7 +30,11 @@ const h = vi.hoisted(() => ({
   /** Papierkorb des Systems (nachgebaut): wirft = geht nicht */
   papierkorb: (async () => undefined) as (pfad: string) => Promise<void>,
   /** geschieht, während die Rückfrage offen ist */
-  waehrendRueckfrage: (async () => undefined) as () => Promise<unknown>
+  waehrendRueckfrage: (async () => undefined) as () => Promise<unknown>,
+  /** Ordner liegt auf einem Netzlaufwerk (Antwort des Bilddienstes auf „beobachten“) */
+  netz: false,
+  /** Scans in Reihenfolge: null = ganzer Ordner, sonst die Pfade des Teil-Scans */
+  scans: [] as (string[] | null)[]
 }))
 
 vi.mock('electron', () => ({
@@ -72,14 +76,27 @@ vi.mock('../db', async (original) => ({
 }))
 vi.mock('../bilddienst/client', () => ({
   bilddienst: {
-    // liefert die Dateien sofort in einem Stapel
-    scan: (_wurzel: string, onStapel: (d: GefundeneDatei[]) => void) => {
-      onStapel(h.dateien)
+    // liefert die Dateien sofort in einem Stapel (Teil-Scan: nur die unter den Pfaden)
+    scan: (
+      _wurzel: string,
+      onStapel: (d: GefundeneDatei[]) => void,
+      teil?: { pfade: string[]; dateien: string[] }
+    ) => {
+      const pfade = teil ? [...teil.pfade, ...teil.dateien] : undefined
+      h.scans.push(pfade ?? null)
+      const d = pfade
+        ? h.dateien.filter((f) => pfade.some((p) => f.rel === p || f.rel.startsWith(p + '/')))
+        : h.dateien
+      onStapel(d)
       return {
-        fertig: Promise.resolve({ gefunden: h.dateien.length, unlesbar: [] }),
+        fertig: Promise.resolve({ gefunden: d.length, unlesbar: [] }),
         abbrechen() {}
       }
     },
+    beobachten: vi.fn(async () => ({ netz: h.netz })),
+    nichtBeobachten: vi.fn(),
+    onAenderung: null,
+    onEnde: null,
     meta: vi.fn((d: MetaDatei[]) => h.meta(d)),
     vorschau: vi.fn((d: VorschauDatei[]) => h.vorschau(d)),
     beenden: vi.fn()
@@ -90,6 +107,7 @@ const { oeffneIndex } = await import('../db')
 const repo = await import('./repo')
 const { bilddienst } = await import('../bilddienst/client')
 const meta = vi.mocked(bilddienst.meta)
+const beobachten = vi.mocked(bilddienst.beobachten)
 const vorschau = vi.mocked(bilddienst.vorschau)
 const { shell } = await import('electron')
 const { vorschauPfad } = await import('../cache/ablage')
@@ -139,6 +157,9 @@ beforeEach(async () => {
   h.db = oeffneIndex(':memory:')
   h.erreichbar = () => true
   h.dateien = ['a.jpg', 'gift.jpg', 'c.jpg'].map(datei)
+  h.netz = false
+  h.scans = []
+  beobachten.mockClear()
   repo.ordnerAnlegen(h.db, 'D:\\Bilder', true, 1)
   lib = await import('./library')
   vorschauen = await import('./vorschauen')
@@ -423,5 +444,81 @@ describe('Papierkorb', () => {
     const r = await lib.inPapierkorb(null, [ids()['a.jpg'], ids()['gift.jpg']])
     expect(r).toMatchObject({ moved: 1, failed: 1 })
     expect(Object.keys(vzeilen()).sort()).toEqual(['c.jpg', 'gift.jpg'])
+  })
+})
+
+describe('Überwachen (1.6)', () => {
+  const ordnerId = (): number => lib.zustand().folders[0].id
+  const eingelesen = async (): Promise<void> =>
+    vi.waitFor(() =>
+      expect(lib.zustand().folders[0]).toMatchObject({
+        status: 'bereit',
+        lastScan: expect.any(Number)
+      })
+    )
+
+  it('erst überwachen, dann einlesen; gemeldete Pfade gleicht nur ein Teil-Abgleich ab', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    expect(beobachten).toHaveBeenCalledWith(ordnerId(), 'D:\\Bilder')
+    expect(lib.zustand().folders[0].watch).toBe('live')
+    // von außen: c.jpg weg, ein Ordner dazu (andere Größe – sonst gälte c.jpg als verschoben)
+    h.dateien = [
+      ...h.dateien.filter((d) => d.name !== 'c.jpg'),
+      { ...datei('x.jpg'), rel: 'neu/x.jpg', size: 99 }
+    ]
+    bilddienst.onAenderung?.(ordnerId(), { art: 'pfade', pfade: ['neu'], dateien: ['sub/c.jpg'] })
+    await vi.waitFor(() => expect(lib.zustand().folders[0]).toMatchObject({ count: 3, missing: 1 }))
+    expect(h.scans).toEqual([null, ['neu', 'sub/c.jpg']])
+  })
+
+  it('Wächter weg: ganzer Abgleich; nicht erreichbar, bis der Fokus ihn wieder findet', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    h.erreichbar = () => false
+    bilddienst.onAenderung?.(ordnerId(), { art: 'weg', code: 'WURZEL' })
+    await vi.waitFor(() =>
+      expect(lib.zustand().folders[0]).toMatchObject({ status: 'nicht-erreichbar', watch: null })
+    )
+    h.erreichbar = () => true
+    lib.beiFokus()
+    await vi.waitFor(() =>
+      expect(lib.zustand().folders[0]).toMatchObject({ status: 'bereit', watch: 'live' })
+    )
+    expect(beobachten).toHaveBeenCalledTimes(2)
+  })
+
+  it('Netzlaufwerk: nicht überwacht, periodisch – der Fokus gleicht nur nach einer Weile ab', async () => {
+    h.netz = true
+    lib.bibliothekStarten()
+    await eingelesen()
+    expect(lib.zustand().folders[0].watch).toBe('periodisch')
+    lib.beiFokus()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(h.scans).toHaveLength(1)
+    // letzter Abgleich vor zwei Minuten
+    h.db.prepare('UPDATE folders SET last_scan = ?').run(Date.now() - 120_000)
+    lib.beiFokus()
+    await vi.waitFor(() => expect(h.scans).toHaveLength(2))
+  })
+
+  it('Bilddienst neu gestartet: die Wächter entstehen neu', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    expect(beobachten).toHaveBeenCalledTimes(1)
+    bilddienst.onEnde?.()
+    await vi.waitFor(() => expect(beobachten).toHaveBeenCalledTimes(2), { timeout: 3000 })
+    expect(lib.zustand().folders[0].watch).toBe('live')
+  })
+
+  it('Ordner entfernt: nicht mehr überwacht, keine späten Meldungen', async () => {
+    lib.bibliothekStarten()
+    await eingelesen()
+    const id = ordnerId()
+    expect(await lib.ordnerEntfernen(null, id)).toBe(true)
+    expect(bilddienst.nichtBeobachten).toHaveBeenCalledWith(id)
+    bilddienst.onAenderung?.(id, { art: 'pfade', pfade: ['sub/a.jpg'], dateien: [] })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(h.scans).toEqual([null])
   })
 })

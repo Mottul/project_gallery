@@ -62,7 +62,13 @@ export interface LibraryFolder {
   lastScan: number | null
   /** Ordner, die beim letzten Einlesen nicht lesbar waren (Rechte), zur Anzeige */
   unreadable: number
+  /** Wie der Ordner aktuell bleibt: live überwacht, periodisch abgeglichen (Netzlaufwerk) oder
+   *  noch nicht (vor dem ersten Einlesen, nicht erreichbar) */
+  watch: FolderWatch | null
 }
+
+/** live = Änderungen erscheinen sofort (fs.watch); periodisch = alle paar Minuten (Netzlaufwerk) */
+export type FolderWatch = 'live' | 'periodisch'
 
 export interface LibraryState {
   folders: LibraryFolder[]

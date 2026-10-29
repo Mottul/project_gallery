@@ -1,7 +1,8 @@
 # Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 25. Oktober 2026: Phase 0 ist
-abgeschlossen ([Phase 0](#phase-0--fundament-und-labor)), als Nächstes kommt Phase 1. Dieser Plan ist die Grundlage für die
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 29. Oktober 2026: Phase 0 und
+Phase 1 sind umgesetzt ([Phase 1](#phase-1--bibliothek-und-galerie-erste-nutzbare-version)), als
+Nächstes kommt Phase 2. Dieser Plan ist die Grundlage für die
 Umsetzung: vor jeder Phase lesen, offene Fragen
 klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
 Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
@@ -174,8 +175,11 @@ resources/ffmpeg/win/             # gebündeltes ffmpeg/ffprobe (nicht im Git, p
 3. **Metadaten** (Bilddienst, ExifTool stapelweise) → Spalten im Index + vollständige Liste als JSON.
 4. **Vorschaubilder** (Bilddienst, sharp; Videos: Standbild per ffmpeg, dann sharp): sichtbare
    Dateien zuerst, dann der Rest im Hintergrund; verschlüsselt in den Cache.
-5. **Überwachen:** `fs.watch` rekursiv (lokal), Abgleich beim Start und bei Fokus; Netzlaufwerke
-   periodisch mit Zeitlimit. Bei Überlauf der Ereignisse: Ordner neu abgleichen.
+5. **Überwachen** (seit 1.6): `fs.watch` rekursiv im Bilddienst (lokal), gemeldete Pfade
+   gesammelt (300 ms Ruhe, spätestens 2 s) → Teil-Abgleich nur dort; zu viele oder ein Ereignis
+   ohne Namen → ganzer Abgleich. Verschobene/umbenannte Dateien behalten Kennung, Metadaten und
+   Vorschaubild. Netzlaufwerke (UNC, auch verbundene Laufwerke) periodisch (5 min) und beim Fokus;
+   nicht erreichbare Ordner alle 30 s und beim Fokus. Abgleich beim Start wie bisher.
 6. **Renderer** fragt `library.query({ sortierung, filter, gruppierung })` → geordnete Liste der
    Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://id/<kennung>/<stufe>`.
 
@@ -591,6 +595,37 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - **Abnahme** (50.000 synthetische Bilder): Neustart mit vorhandenem Index bis zur sichtbaren
   Galerie < 2 s, Sortierwechsel < 200 ms, Scrollen ohne Ruckeln, Erstindex im Hintergrund ohne
   hängende Oberfläche; E2E `galerie`, `originale`.
+- ✅ **Abnahme gemessen** (29.10.2026, `npm run e2e -- abnahme50k`; Windows 11, i7-8750H, SSD;
+  50.000 kleine JPEGs 160 × 120 in 240 Jahr/Monat-Ordnern, 93 MB):
+
+  | Ziel | gemessen |
+  |---|---|
+  | Neustart bis zur sichtbaren Galerie < 2 s | **1,16 s** (Median aus 3: 1,29 / 1,13 / 1,16 s; Fenster nach 0,5–0,6 s) |
+  | Sortierwechsel < 200 ms | Abfrage höchstens 71 ms, Raster mit neuer Reihenfolge Median 4 ms, höchstens 72 ms |
+  | Scrollen ohne Ruckeln | 241 Bilder in 4 s, 95 % unter 17 ms, keins über 50 ms |
+  | Erstindex ohne hängende Oberfläche | IPC Median 57 ms, 99 % unter 177 ms, höchstens 391 ms; main einmal 260 ms blockiert; Renderer ohne lange Aufgaben |
+
+  Erstindex: eingelesen und Grundfelder nach 136 s, alle Vorschaubilder nach 614 s (rund 80/s
+  bei kleinen Bildern – die Zeit je Bild geht in Lesen, Verschlüsseln und zwei Dateien, nicht ins
+  Dekodieren). Abgleich beim Start (unverändert): 10–11 s im Bilddienst, im main 0,5 s.
+  Arbeitsspeicher: main höchstens 240 MB beim Erstindex (180 MB nach dem Neustart), Seite
+  210 MB, Bilddienst 200 MB (93 MB). Lokaler Datenordner 217 MB (Index und 100.000
+  verschlüsselte Vorschaubilder).
+  **Vorher gefunden und behoben:** ein UPSERT je Zeile (7 s main-Zeit je Abgleich), gestaute
+  Nachrichten des Bilddienstes (main bis 6,8 s blockiert, IPC bis 12,7 s, Neustart 18 s bis zur
+  Galerie), Lese-Ereignisse von Windows als Änderung (zwei überflüssige ganze Abgleiche beim
+  Erstindex), ein zweiter Abgleich durch den ersten Fokus beim Start. Einmal in sieben Läufen
+  zeigte das Raster einen Sortierwechsel nicht (nicht nachstellbar; die Messung schreibt bei
+  einem Fehlschlag jetzt mit, was die Oberfläche stattdessen zeigt).
+- ✅ **Sandbox-Abnahme mit Testbildern** (29.10.2026, `npm run abnahme:sandbox`, Windows-Sandbox
+  ohne Netz, alle Prüfungen bestanden): Installer still in 35 s; die installierte App liest die
+  Testbibliothek aus „Bilder“ ein (36 Bilder, Grundfelder und Vorschaubilder in 1 s), überwacht
+  den Ordner live, zeigt Vorschaubilder, sortiert nach Name natürlich, zeigt das Original im
+  Betrachter, nimmt eine Datei von außen auf; Prüfsummen und Änderungszeiten der Testbilder
+  unverändert; Vorschaubilder nur verschlüsselt (keine JPEG-Signatur); die Netzsperre musste
+  nichts abweisen; nach der Deinstallation kein Index und kein Cache mehr in `%LOCALAPPDATA%`,
+  die Testbilder bleiben.
+- **Phase 1 umgesetzt.**
 
 **Teilschritte** (je ein Pull Request gegen `main`, jeder für sich grün und installierbar):
 
@@ -602,7 +637,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | 1.4 ✅ | **Galerie-Oberfläche** nach dem Entwurf: Ordnerbaum („Alle Bilder“, Bibliotheksordner mit Unterordnern und Anzahl, Filter auf Ordner samt allem darunter), virtualisiertes Raster (`@tanstack/react-virtual`; Kacheln füllen die Breite, Größenregler 80–320 px und Strg + Mausrad), Liste/Details (wählbare Spalten, Sortieren per Überschrift), Ansicht/Größe/Sortierung je Ordner gemerkt, Auswahl wie im Explorer (Klick, Strg, Umschalt, Strg+A, Esc, Rahmen), Statusleiste mit Anzahl, Auswahl und Summe; der Renderer meldet den sichtbaren Ausschnitt (Vorschau-Vorrang); **neu auf Wunsch: Ordner per Drag & Drop** aus dem Explorer (Pfad liest der Preload aus dem gezogenen Datei-Objekt) | `galerie` (Baum, Auswahl, Rahmen, Größe, Liste, Ansicht je Ordner, echter Drop über das DevTools-Protokoll, 600 Bilder virtualisiert, untergeschobene Datei abgelehnt) |
 | 1.5 ✅ | **Betrachter:** `bild://id/<kennung>` (Original mit Range-Anfragen, TIFF im Bilddienst umgerechnet, Prüfung wie beim Vorschaubild, siehe „Protokolle“); Betrachter als Dialog über der Galerie (Doppelklick oder Enter, Esc zurück – das zuletzt gezeigte Bild bleibt gewählt): Vorschau 768 als Platzhalter, Anpassen / 100 % / Mausrad am Zeiger / Verschieben / Doppelklick, Vor/Zurück (Pfeile, Pos1/Ende), virtualisierter Filmstreifen, Diashow (2–10 s), Vollbild (F11), Info (Aufnahme mit Quelle des Datums, Kamera, Datei), Nachbarn vorgeladen; **Papierkorb** (Entf): Rückfrage im main mit Namen, nie in Ordnern „nur lesen“, nach der Rückfrage frischer Stand aus dem Index, je Datei Prüfung (mit Zeitlimit) und `shell.trashItem`, erst danach Index-Zeile und Vorschaubilder weg; geht der Papierkorb nicht (Netzlaufwerk), bleibt alles, wie es ist – endgültiges Löschen mit eigener Rückfrage ist noch offen | `galerie` (Blättern, Filmstreifen, `bild://` byte-gleich, Range, TIFF, Typ nach Inhalt, geänderte Datei 409, Zoom, Ausrichtung, Info, Diashow, Papierkorb), `security` (`bild://`), `originale` (jedes Bild einmal über `bild://`); Unit `anzeige.test.ts`, `library.test.ts` (Papierkorb), Labortest der Umrechnung |
 | 1.5+ ✅ | **Feinschliff Betrachter** nach eigener Probe mit Fotos (29.10.2026): Diashow und Blättern ohne „Blitzer“ (zwei Ebenen: das alte Bild bleibt, bis das neue dekodiert ist; Diashow wartet auf das nächste), Filmstreifen nicht mehr vom Scrollbalken angeschnitten, Zoom mit Schieberegler (logarithmisch), Stufen-Menü an der Prozentzahl, sanftem Übergang und feinen Touchpad-Schritten (`lib/zoom.ts`). Die Anordnung der Werkzeugleiste bleibt vorerst, wie sie ist | `betrachter` (kein Moment ohne Bild beim Blättern und in der Diashow – auch bei 4000 × 3000 –, Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom; Gegenprobe am alten Stand rot); Unit `zoom.test.ts` |
-| 1.6 | **Überwachen und Abnahme:** `fs.watch` mit Abgleich, Netzlaufwerke periodisch; Messung mit 50.000 Bildern; Sandbox-Abnahme mit Testbildern | alle |
+| 1.6 ✅ | **Überwachen und Abnahme:** Wächter im Bilddienst (`fs.watch` rekursiv, gesammelt 300 ms/2 s, „rename“ = Pfad samt allem darunter, „change“ = nur die Datei und nur, wenn sich Größe oder Änderungszeit gegenüber dem eigenen Lesen geändert haben – Windows meldet schon das Lesen), Teil-Abgleich nur der gemeldeten Pfade, Verschoben/Umbenannt erkannt (Kennung, Metadaten, Vorschaubild bleiben), Netzlaufwerke (UNC nach `realpath`) alle 5 min und beim Fokus, nicht erreichbare Ordner alle 30 s und beim Fokus, Hinweis „Abgleich alle 5 min“ im Ordnerbaum; Leistung nach der Messung: unveränderte Dateien nur als gesehen markiert, Nachrichten des Bilddienstes einzeln abgearbeitet, Blockaden des main im Log; Abnahme mit 50.000 Bildern (unten); Sandbox-Abnahme mit Testbildern und der installierten App | `ueberwachen` (Gegenprobe am alten Stand 9 von 10 rot), `galerie` (409 jetzt über einen Hardlink außerhalb), alle; `abnahme50k` auf Wunsch; Unit `beobachter.test.ts`, `scan.test.ts`, `repo.test.ts`, `library.test.ts` |
 
 ### Phase 2 – Metadaten lesen, Filtern, Suchen
 
@@ -708,7 +743,7 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 |---|---|
 | ExifTool-Start/Durchsatz unter Windows langsam (Perl in der exe) | Gemessen (Phase 0): Start 0,2 s, 165 Dateien/s je Prozess, 567/s mit 4 Prozessen – `-stay_open`, Stapel von 50, mehrere Prozesse; kein JS-Leser nötig |
 | Dekoder-Absturz an präparierten Dateien | Bilddienst als eigener Prozess, Zeitlimit je Datei, Datei als „defekt“ markieren; Updates für Dekoder |
-| `fs.watch` verpasst Änderungen (Netzlaufwerk, Überlauf) | Abgleich beim Start, bei Fokus und periodisch; Überlauf → Ordner neu abgleichen |
+| `fs.watch` verpasst Änderungen (Netzlaufwerk, Überlauf) | Abgleich beim Start, bei Fokus und periodisch; Überlauf → Ordner neu abgleichen. Gemessen (1.6): Löschen des beobachteten Ordners selbst meldet Windows als Endlos-Sturm absoluter Pfade statt als Fehler (→ „Ordner weg“); Linux meldet es womöglich gar nicht (→ Erreichbarkeit alle 30 s); Änderungen über einen Hardlink außerhalb meldet `fs.watch` nicht (→ `pruefeDatei` vor jedem Lesen, 409) |
 | Metadaten erscheinen in anderen Programmen nicht | Feld-Zuordnung im Labor gegen Explorer/digiKam/Lightroom prüfen, MWG-Regeln |
 | Chromium spielt manche Videos nicht (HEVC je nach Rechner, AVCHD) | Klarer Hinweis + „Mit Standardprogramm öffnen“; Abspiel-Kopie nur nach Labor-Entscheidung |
 | Update-Weg wird missbraucht (Konto übernommen) | Eigene Ed25519-Signatur, Schlüssel nur beim Nutzer; Laden nur auf Klick |
@@ -742,7 +777,13 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **BMP** ab Phase 1: Vorschaubild per ffmpeg, Anzeige in Chromium, Metadaten nur lesen (sharp
   kann BMP nicht, Labor 25.10.2026).
 
-**Noch offen:** nichts. Neue Fragen hier eintragen.
+**Noch offen:**
+
+- **Wie lange bleiben fehlende Dateien im Index?** Eine von außen gelöschte Datei steht als
+  „fehlt“ samt verschlüsseltem Vorschaubild weiter im Index (seit 1.1; so erkennt der Abgleich
+  sie wieder, wenn sie zurückkommt oder verschoben wurde). Vorschlag: Menüpunkt „Fehlende aus
+  der Galerie entfernen“ je Ordner und automatisch nach 30 Tagen. Gefunden in 1.6 (Prüfliste
+  `bildschutz`, Schicht D).
 
 ## Skills
 

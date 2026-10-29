@@ -3,8 +3,17 @@
 // übernommen (project_mega/e2e/run.mjs). `paket` (die gepackte App aus dist/) läuft nur auf
 // Wunsch – vorher `npm run package:dir`. Der Exit-Code ist 1, sobald ein Schritt fehlschlägt.
 
-const all = ['smoke', 'security', 'netz', 'galerie', 'betrachter', 'sortieren', 'originale']
-const nurAufWunsch = ['paket']
+const all = [
+  'smoke',
+  'security',
+  'netz',
+  'galerie',
+  'betrachter',
+  'ueberwachen',
+  'sortieren',
+  'originale'
+]
+const nurAufWunsch = ['paket', 'abnahme50k']
 const wanted = process.argv.slice(2)
 const unknown = wanted.filter((n) => !all.includes(n) && !nurAufWunsch.includes(n))
 if (unknown.length) {

@@ -178,6 +178,20 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   in einem Zug (gleicher `key` = gleiches `<img>`, kein zweites Laden). Ein kleiner Puffer
   (`Bildpuffer`) hält die Nachbarn vorgeladen und dekodiert; die Diashow wartet auf ihn. Zoom-
   Rechnung (Grenzen, Regler, Mausrad) rein in `lib/zoom.ts`, die Leiste in `galerie/Zoomleiste.tsx`.
+- **Überwachen** (1.6): Der Bilddienst beobachtet lokale Ordner (`bilddienst/beobachter.ts`:
+  `fs.watch` rekursiv, Pfade sammeln und zusammenfassen, „Ordner weg“ erkennen) und meldet
+  Änderungen ohne Auftrag (`client.ts`: `onAenderung`, nach einem Absturz `onEnde`).
+  `library/ueberwachen.ts` entscheidet live/periodisch (Netzlaufwerk: `realpath` liefert einen
+  UNC-Pfad), prüft alle 30 s und beim Fokus (`beiFokus`, `index.ts`) nicht erreichbare und
+  periodische Ordner; `library.ts` reiht Teil-Abgleiche nach den ganzen ein (`scanneTeile` in
+  `bilddienst/scan.ts`, `repo.teilAbschliessen`). Beide Abschlüsse erkennen Verschobenes
+  (Endung, Größe, Änderungszeit eindeutig): Die alte Zeile übernimmt den neuen Pfad. „change“
+  zählt nur für Dateien, deren Größe oder Änderungszeit sich gegenüber dem eigenen Lesen des
+  Bilddienstes geändert hat (Windows meldet schon das Lesen).
+- **Leistung des main:** Der Client des Bilddienstes arbeitet Nachrichten einzeln ab und gibt
+  dazwischen an die Ereignisschleife ab; `stapelSchreiben` schreibt nur Geändertes. Steht die
+  Ereignisschleife länger als 250 ms, steht das im Log („[main] Ereignisschleife … ms blockiert“)
+  – erste Anlaufstelle, wenn die Oberfläche hängt.
 
 ## Konventionen
 
@@ -196,9 +210,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
   Gegenprobe), `galerie` (Ordner, Abgleich, Vorschaubilder samt Cache und „privat“, Oberfläche,
   Betrachter mit `bild://` und Papierkorb, Neustart, Entfernen, Log ohne Inhalte), `betrachter`
-  (kein Moment ohne Bild, Vorladen, Filmstreifen, Zoom), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
+  (kein Moment ohne Bild, Vorladen, Filmstreifen, Zoom), `ueberwachen` (Änderungen von außen,
+  Verschobenes, Ordner weg und wieder da, UNC-Pfad periodisch), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
   nach dem Beenden), `originale` (Prüfsummen vorher/nachher); `paket` nur auf Wunsch (gepackte
-  App samt Bilddienst). Jeder Schritt hat ein Zeitlimit von 60 s. Pixel aus `thumb://` und
+  App samt Bilddienst) und `abnahme50k` (Abnahme-Messung mit 50.000 synthetischen Bildern,
+  `ABNAHME_ANZAHL` für eine andere Zahl, `ABNAHME_BEHALTEN=1` behält Bibliothek und Index,
+  `ABNAHME_DATEN=<Ordner>` misst damit nur Neustart, Sortieren und Scrollen) nur auf Wunsch. Jeder Schritt hat ein Zeitlimit von 60 s
+  (lange Messungen: drittes Element `[Name, fn, ms]`). Pixel aus `thumb://` und
   Bytes aus `bild://` prüft ein Test im main über `net.fetch` (derselbe Handler) – eine Canvas in
   der Seite dürfte sie nicht lesen (anderer Ursprung). Den Papierkorb ersetzt `galerie` durch
   einen Stub, der die Datei in einen Temp-Ordner verschiebt.

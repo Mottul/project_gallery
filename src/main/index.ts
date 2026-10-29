@@ -2,7 +2,7 @@
 // Netzsperre und Wächter vor dem ersten Fenster, dann IPC, dann das Hauptfenster.
 import { app, BrowserWindow } from 'electron'
 import { registerIpcHandlers } from './ipc/registry'
-import { bibliothekBeenden, bibliothekStarten } from './services/library/library'
+import { beiFokus, bibliothekBeenden, bibliothekStarten } from './services/library/library'
 import { logLine } from './services/log'
 import { installNetzsperre } from './services/netzsperre'
 import { bildProtokollBedienen } from './services/protocols/bild'
@@ -68,6 +68,17 @@ if (!app.requestSingleInstanceLock()) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) openMainWindow()
     })
+    // zurück in der App: nicht erreichbare und periodisch abgeglichene Ordner prüfen (1.6)
+    app.on('browser-window-focus', () => beiFokus())
+
+    // Diagnose: Stand die Ereignisschleife des main (dann hängen Fenster und IPC)? Nur die Dauer
+    // ins Log – gesehen bei der Abnahme mit 50.000 Bildern (1.6)
+    let faellig = Date.now() + 100
+    setInterval(() => {
+      const verspaetet = Date.now() - faellig
+      if (verspaetet > 250) logLine(`[main] Ereignisschleife ${verspaetet} ms blockiert`)
+      faellig = Date.now() + 100
+    }, 100).unref()
   })
 
   app.on('window-all-closed', () => {

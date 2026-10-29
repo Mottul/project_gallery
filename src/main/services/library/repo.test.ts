@@ -32,7 +32,7 @@ const status = (db: DB): Record<string, string> =>
 function scan(db: DB, id: number, dateien: GefundeneDatei[], unlesbar: string[] = []): number {
   const seq = repo.scanBeginnen(db, id)
   repo.stapelSchreiben(db, id, seq, dateien, true)
-  return repo.scanAbschliessen(db, id, seq, unlesbar, true, 2000)
+  return repo.scanAbschliessen(db, id, seq, unlesbar, true, 2000).fehlend
 }
 
 let db: DB
@@ -79,6 +79,26 @@ describe('Bibliothek im Index', () => {
     // c taucht wieder auf
     scan(db, id, [datei('a.jpg'), datei('b.jpg', 222), datei('c.jpg'), datei('d.jpg')])
     expect(status(db)['c.jpg']).toBe('ok')
+  })
+
+  it('unverändert: nur als gesehen markiert – Metadaten, Vorschau, Status bleiben (1.6)', () => {
+    scan(db, id, [datei('a.jpg'), datei('b.jpg')])
+    db.prepare(
+      "UPDATE images SET thumb_state = 'ok', meta_read_at = 5, status = 'defekt', taken_source = 'exif'"
+    ).run()
+    const vorher = db.prepare('SELECT * FROM images ORDER BY id').all() as Record<string, unknown>[]
+    // a.jpg unverändert, b.jpg fehlt jetzt
+    expect(scan(db, id, [datei('a.jpg')])).toBe(1)
+    const nachher = db.prepare('SELECT * FROM images ORDER BY id').all() as Record<
+      string,
+      unknown
+    >[]
+    expect({ ...nachher[0], seen_scan: 0 }).toEqual({ ...vorher[0], seen_scan: 0 })
+    expect(nachher[0].seen_scan).toBe((vorher[0].seen_scan as number) + 1)
+    expect(status(db)).toEqual({ 'a.jpg': 'defekt', 'b.jpg': 'fehlt' })
+    // andere Erstellzeit: zählt als geändert (das vorläufige Datum hängt daran)
+    scan(db, id, [{ ...datei('a.jpg'), btime: 400 }])
+    expect(db.prepare("SELECT btime FROM images WHERE name = 'a.jpg'").pluck().get()).toBe(400)
   })
 
   it('eine nur in der Schreibweise umbenannte Datei behält ihre Zeile', () => {
@@ -138,6 +158,109 @@ describe('Bibliothek im Index', () => {
     expect(() =>
       repo.modusSetzen(db, id, 'alles' as unknown as Parameters<typeof repo.modusSetzen>[2])
     ).toThrow(/CHECK/)
+  })
+})
+
+describe('Teil-Abgleich und verschobene Dateien (1.6)', () => {
+  /** Teil-Scan der Pfade mit diesen gefundenen Dateien; liefert den Abschluss */
+  function teil(
+    pfade: string[],
+    dateien: GefundeneDatei[],
+    unlesbar: string[] = [],
+    nurDateien: string[] = []
+  ) {
+    const neuAb = repo.hoechsteKennung(db)
+    const seq = repo.scanBeginnen(db, id)
+    repo.stapelSchreiben(db, id, seq, dateien, true)
+    return repo.teilAbschliessen(db, id, seq, pfade, nurDateien, unlesbar, true, neuAb)
+  }
+  const kennung = (rel: string): number | undefined =>
+    db.prepare('SELECT id FROM images WHERE rel_path = ?').pluck().get(rel) as number | undefined
+
+  it('gleicht nur unter den gemeldeten Pfaden ab; last_scan bleibt', () => {
+    scan(db, id, [datei('a.jpg'), datei('Urlaub/b.jpg'), datei('Urlaub2/c.jpg'), datei('d.jpg')])
+    const r = teil(['Urlaub', 'a.jpg'], [datei('Urlaub/neu.jpg', 7, 7)])
+    expect(r).toEqual({ fehlend: 2, verschoben: 0, verworfen: [] })
+    expect(status(db)).toEqual({
+      'Urlaub/b.jpg': 'fehlt',
+      'Urlaub/neu.jpg': 'ok',
+      'Urlaub2/c.jpg': 'ok',
+      'a.jpg': 'fehlt',
+      'd.jpg': 'ok'
+    })
+    expect(repo.ordnerHolen(db, id)?.last_scan).toBe(2000)
+  })
+
+  it('als geändert gemeldet: nur genau diese Datei, nichts darunter', () => {
+    scan(db, id, [datei('Urlaub/a.jpg'), datei('Urlaub/x/b.jpg'), datei('c.jpg')])
+    // „Urlaub“ als geändert (Ordner): die Dateien darunter gelten nicht als fehlend
+    expect(teil([], [], [], ['Urlaub', 'c.jpg']).fehlend).toBe(1)
+    expect(status(db)).toEqual({ 'Urlaub/a.jpg': 'ok', 'Urlaub/x/b.jpg': 'ok', 'c.jpg': 'fehlt' })
+  })
+
+  it('unter einem unlesbaren Pfad fehlt nichts', () => {
+    scan(db, id, [datei('Urlaub/x.jpg')])
+    expect(teil(['Urlaub'], [], ['Urlaub']).fehlend).toBe(0)
+    expect(status(db)['Urlaub/x.jpg']).toBe('ok')
+  })
+
+  it('Ordner umbenannt: die Bilder behalten Kennung, Metadaten und Vorschaubild', () => {
+    scan(db, id, [datei('Urlaub/a.jpg', 100, 1), datei('Urlaub/b.jpg', 200, 2)])
+    const a = kennung('Urlaub/a.jpg')
+    db.prepare(
+      "UPDATE images SET thumb_state = 'ok', meta_read_at = 5, status = 'defekt' WHERE id = ?"
+    ).run(a)
+    const r = teil(
+      ['Urlaub', 'Reise'],
+      [datei('Reise/a.jpg', 100, 1), datei('Reise/b.jpg', 200, 2)]
+    )
+    expect(r.fehlend).toBe(0)
+    expect(r.verschoben).toBe(2)
+    expect(r.verworfen).toHaveLength(2)
+    expect(kennung('Reise/a.jpg')).toBe(a)
+    expect(status(db)).toEqual({ 'Reise/a.jpg': 'defekt', 'Reise/b.jpg': 'ok' })
+    const z = db
+      .prepare('SELECT name, rel_key, thumb_state, meta_read_at FROM images WHERE id = ?')
+      .get(a)
+    expect(z).toEqual({ name: 'a.jpg', rel_key: 'reise/a.jpg', thumb_state: 'ok', meta_read_at: 5 })
+  })
+
+  it('umbenannte Datei und eine früher verschwundene, die wieder auftaucht', () => {
+    scan(db, id, [datei('IMG_1.jpg', 300, 3), datei('alt.jpg', 400, 4)])
+    const i = kennung('IMG_1.jpg')
+    const alt = kennung('alt.jpg')
+    scan(db, id, [datei('IMG_1.jpg', 300, 3)]) // alt.jpg fehlt
+    const r = teil(
+      ['IMG_1.jpg', 'Urlaub 1.jpg', 'Archiv'],
+      [datei('Urlaub 1.jpg', 300, 3), datei('Archiv/alt.jpg', 400, 4)]
+    )
+    expect(r).toMatchObject({ fehlend: 0, verschoben: 2 })
+    expect([kennung('Urlaub 1.jpg'), kennung('Archiv/alt.jpg')]).toEqual([i, alt])
+    expect(repo.zaehlen(db).get(id)).toEqual({ count: 2, missing: 0 })
+  })
+
+  it('nicht eindeutig (gleiche Größe und Zeit): kein Raten – fehlt und neu', () => {
+    scan(db, id, [datei('a.jpg', 100, 1), datei('b.jpg', 100, 1)])
+    const r = teil(['a.jpg', 'b.jpg', 'c.jpg'], [datei('c.jpg', 100, 1)])
+    expect(r).toEqual({ fehlend: 2, verschoben: 0, verworfen: [] })
+  })
+
+  it('kopiert statt verschoben: das Original bleibt, die Kopie ist neu', () => {
+    scan(db, id, [datei('a.jpg', 100, 1)])
+    const r = teil(['Kopie'], [datei('Kopie/a.jpg', 100, 1)])
+    expect(r).toEqual({ fehlend: 0, verschoben: 0, verworfen: [] })
+    expect(status(db)).toEqual({ 'Kopie/a.jpg': 'ok', 'a.jpg': 'ok' })
+  })
+
+  it('auch der ganze Scan erkennt Verschobenes (z. B. bei geschlossener App)', () => {
+    scan(db, id, [datei('Urlaub/a.jpg', 100, 1)])
+    const a = kennung('Urlaub/a.jpg')
+    const neuAb = repo.hoechsteKennung(db)
+    const seq = repo.scanBeginnen(db, id)
+    repo.stapelSchreiben(db, id, seq, [datei('Reise/a.jpg', 100, 1)], true)
+    const r = repo.scanAbschliessen(db, id, seq, [], true, 3000, neuAb)
+    expect(r).toMatchObject({ fehlend: 0, verschoben: 1 })
+    expect(kennung('Reise/a.jpg')).toBe(a)
   })
 })
 

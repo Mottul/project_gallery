@@ -2,7 +2,9 @@
 # Läuft IN der Sandbox als Anmeldebefehl (scripts/sandbox-abnahme.mjs schreibt die .wsb):
 # Installer aus C:\Installer (nur lesen), Bericht und Bildschirmfoto nach C:\Ergebnis.
 # Phase 0: installieren ohne Fragen, ohne Netz starten, gebündelte Programme laufen,
-# deinstallieren ohne Reste im Programmordner. Ordner, Ansehen, Metadaten folgen mit Phase 1–3.
+# deinstallieren ohne Reste im Programmordner. Seit 1.6 mit Testbildern (galerie.mjs): Ordner
+# hinzufügen, Vorschaubilder, Sortieren, Betrachter, Überwachen, Originale unverändert, und nach
+# der Deinstallation keine Vorschaubilder mehr auf der Platte. Metadaten folgen mit Phase 3.
 
 $ErrorActionPreference = 'Continue'
 $ergebnis = 'C:\Ergebnis'
@@ -59,6 +61,38 @@ try {
   $bild.Save((Join-Path $ergebnis 'app.png'), [System.Drawing.Imaging.ImageFormat]::Png)
   Zeile 'INFO    Bildschirmfoto: app.png'
 } catch { Zeile "INFO    kein Bildschirmfoto: $_" }
+Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+# 3b. Galerie mit Testbildern (Phase 1.6): die installierte App über Playwright steuern – mit dem
+# Node des Rechners (C:\Node) und playwright-core aus dem Projekt (C:\Repo), beides nur lesend.
+# Testbilder (synthetisch, auf dem Rechner erzeugt) nach „Bilder“ kopieren: dort liegen sie echt.
+$bilder = Join-Path $env:USERPROFILE 'Pictures\Testbilder'
+Copy-Item -LiteralPath 'C:\Testbilder\bib' -Destination $bilder -Recurse -Force
+$node = 'C:\Node\node.exe'
+if ((Test-Path $node) -and (Test-Path 'C:\Repo\scripts\sandbox\galerie.mjs')) {
+  $ausgabe = & $node 'C:\Repo\scripts\sandbox\galerie.mjs' $exe.FullName $bilder $ergebnis 2>&1
+  $galerie = 0
+  foreach ($z in $ausgabe) {
+    $t = "$z"
+    if ($t -match '^(OK|FEHLER)\s') {
+      Zeile $t
+      $galerie++
+      if ($t -match '^FEHLER') { $fehler++ }
+    } elseif ($t.Trim()) { Zeile "INFO    $t" }
+  }
+  # lief sie überhaupt durch? (sonst stünden oben keine Prüfungen)
+  Pruefe 'Galerie-Prüfung vollständig gelaufen' ($galerie -ge 7) "(Code $LASTEXITCODE, $galerie Prüfungen)"
+  Zeile 'INFO    Bildschirmfotos: galerie.png, betrachter.png'
+} else {
+  Pruefe 'Node und Galerie-Prüfung eingebunden' $false
+}
+$cache = Join-Path $env:LOCALAPPDATA 'Galeria Beata\vorschau'
+$gbv = @(Get-ChildItem $cache -Recurse -Filter '*.gbv' -ErrorAction SilentlyContinue)
+Pruefe 'Vorschaubilder verschlüsselt im lokalen Datenordner' ($gbv.Count -gt 0) "($($gbv.Count) Dateien)"
+$jpeg = @($gbv | Where-Object { $k = [System.IO.File]::ReadAllBytes($_.FullName); $k.Length -gt 2 -and $k[0] -eq 0xFF -and $k[1] -eq 0xD8 })
+Pruefe 'kein Vorschaubild unverschlüsselt (keine JPEG-Signatur)' ($jpeg.Count -eq 0)
+
 $log = Join-Path $env:APPDATA 'Galeria Beata\galeria-debug.log'
 if (Test-Path $log) {
   $abgewiesen = Select-String -LiteralPath $log -Pattern '\[netzsperre\] abgewiesen' -SimpleMatch:$false
@@ -68,7 +102,7 @@ if (Test-Path $log) {
 $lokal = Join-Path $env:LOCALAPPDATA 'Galeria Beata'
 Pruefe 'Index im lokalen Datenordner angelegt' (Test-Path (Join-Path $lokal 'index\galerie.db'))
 Pruefe 'kein Index im Roaming-Profil' (-not (Test-Path (Join-Path $env:APPDATA 'Galeria Beata\index')))
-Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
+Get-Process -Name 'Galeria Beata' -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 2
 
 # 4. Deinstallieren (still) – Programmordner und Verknüpfungen weg; Einstellungen bleiben laut Plan
@@ -79,6 +113,7 @@ Pruefe 'Deinstallation ohne Fehler' ($u.ExitCode -eq 0) "(Code $($u.ExitCode))"
 Pruefe 'Programmordner entfernt' (-not (Test-Path $exe.DirectoryName))
 Pruefe 'Desktop-Verknüpfung entfernt' (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Galeria Beata.lnk')))
 Pruefe 'Index und Cache entfernt (keine Reste in %LOCALAPPDATA%)' (-not (Test-Path $lokal))
+Pruefe 'Testbilder bleiben nach der Deinstallation' ((@(Get-ChildItem $bilder -Recurse -File)).Count -gt 0)
 Zeile "INFO    Einstellungen bleiben (gewollt): $(Test-Path (Join-Path $env:APPDATA 'Galeria Beata'))"
 
 Zeile ''

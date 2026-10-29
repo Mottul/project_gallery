@@ -3,11 +3,15 @@
 
 import { cpus } from 'node:os'
 import type { GefundeneDatei } from '../library/repo'
+import type { Meldung } from './beobachter'
 
-/** Datei, deren Grundfelder gelesen werden sollen (Kennung aus dem Index, absoluter Pfad) */
+/** Datei, deren Grundfelder gelesen werden sollen (Kennung aus dem Index, absoluter Pfad;
+ *  Größe und Änderungszeit laut Index – der Wächter übergeht damit das eigene Lesen) */
 export interface MetaDatei {
   id: number
   pfad: string
+  size: number
+  mtime: number
 }
 
 /** Rohe ExifTool-Tags je Datei; null = nicht gelesen */
@@ -58,6 +62,11 @@ export type AnDienst =
       ffmpeg: string | null
     }
   | { typ: 'scan'; auftrag: number; wurzel: string }
+  /** Teil-Scan nach dem Überwachen: relative Pfade („/“) samt allem darunter, Dateien für sich */
+  | { typ: 'teilscan'; auftrag: number; wurzel: string; pfade: string[]; dateien: string[] }
+  /** Ordner überwachen (fs.watch) – außer auf einem Netzlaufwerk; Antwort „beobachtet“ */
+  | { typ: 'beobachten'; auftrag: number; ordner: number; wurzel: string }
+  | { typ: 'nicht-beobachten'; ordner: number }
   | { typ: 'meta'; auftrag: number; dateien: MetaDatei[] }
   | { typ: 'vorschau'; auftrag: number; dateien: VorschauDatei[] }
   | { typ: 'anzeige'; auftrag: number; datei: AnzeigeDatei }
@@ -71,6 +80,10 @@ export type VomDienst =
   | { typ: 'meta-ergebnis'; auftrag: number; ergebnisse: MetaErgebnis[] }
   | { typ: 'vorschau-ergebnis'; auftrag: number; ergebnisse: VorschauErgebnis[] }
   | { typ: 'anzeige-ergebnis'; auftrag: number; ergebnis: AnzeigeErgebnis }
+  /** netz = Netzlaufwerk: nicht überwacht, der main gleicht periodisch ab */
+  | { typ: 'beobachtet'; auftrag: number; netz: boolean }
+  /** ohne Auftrag: Änderungen in einem überwachten Ordner */
+  | { typ: 'aenderung'; ordner: number; meldung: Meldung }
   | { typ: 'fehler'; auftrag: number; code: string; meldung: string }
   | { typ: 'log'; text: string }
 

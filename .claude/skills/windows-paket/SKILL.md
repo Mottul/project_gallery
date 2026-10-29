@@ -76,6 +76,12 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0), 187
    (`scripts/sandbox-abnahme.mjs` schreibt die `.wsb` mit `<Networking>Disable</Networking>`,
    Installer nur lesend; `scripts/sandbox/abnahme.ps1` prüft automatisch und schreibt
    `dist/abnahme/ergebnis/abnahme.txt`). Neue Prüfschritte dort ergänzen, sobald die Funktion da
+   ist. **Seit 1.6 mit Testbildern:** `sandbox-abnahme.mjs` erzeugt sie auf dem Rechner und bindet
+   sie, das Projekt (`C:\Repo`, für playwright-core) und den Ordner des laufenden Node
+   (`C:\Node`) nur lesend ein; `scripts/sandbox/galerie.mjs` steuert darin die **installierte**
+   App über Playwright mit den echten Datenordnern (Ordner hinzufügen mit ersetztem Dialog,
+   Vorschaubilder, Sortieren, Betrachter, Überwachen, Prüfsummen der Testbilder vorher/nachher);
+   `abnahme.ps1` prüft danach den verschlüsselten Cache und nach der Deinstallation, dass er weg
    ist. Ablauf: installieren (keine UAC-Abfrage, keine Fragen) → starten → Testbilder-Ordner
    hinzufügen → ansehen, sortieren → Metadaten schreiben → Export ohne Standort →
    deinstallieren → `%LOCALAPPDATA%` und `%APPDATA%` ohne Reste (außer Sicherungen laut Doku).
