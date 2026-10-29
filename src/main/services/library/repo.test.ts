@@ -370,6 +370,63 @@ describe('Grundfelder im Index', () => {
   })
 })
 
+describe('Metadaten und Fehlende (2.1)', () => {
+  it('weitere Felder und Stichwörter; neu gelesen ersetzt die Stichwörter; weg mit der Zeile', () => {
+    scan(db, id, [datei('a.jpg')])
+    const [o] = repo.metaOffen(db, 10)
+    const f = grundfelderAus(
+      {
+        'XMP:Subject': ['Urlaub', 'Meer'],
+        'EXIF:LensModel': 'L 35',
+        'EXIF:FNumber': 2.8,
+        'Composite:GPSLatitude': 1.5,
+        'Composite:GPSLongitude': -2.5,
+        'XMP:Rating': 4,
+        'XMP:Label': 'Red',
+        'XMP:Title': 'T',
+        'XMP:Description': 'B'
+      },
+      o,
+      5000
+    )
+    expect(repo.metaSchreiben(db, [{ ...o, felder: f }], 5000)).toBe(1)
+    expect(repo.details(db, [o.id])[0]).toMatchObject({
+      lens: 'L 35',
+      aperture: 2.8,
+      gps: { lat: 1.5, lon: -2.5, alt: null },
+      rating: 4,
+      colorLabel: 'Red',
+      title: 'T',
+      description: 'B',
+      keywords: ['Meer', 'Urlaub']
+    })
+    repo.metaSchreiben(db, [{ ...o, felder: { ...f, stichwoerter: ['Neu'] } }], 6000)
+    expect(repo.details(db, [o.id])[0].keywords).toEqual(['Neu'])
+    // inzwischen geändert: nichts geschrieben, auch keine Stichwörter
+    repo.metaSchreiben(db, [{ ...o, size: 1, felder: { ...f, stichwoerter: ['Falsch'] } }], 7000)
+    expect(repo.details(db, [o.id])[0].keywords).toEqual(['Neu'])
+    repo.bilderEntfernen(db, [o.id])
+    expect(db.prepare('SELECT count(*) FROM keywords').pluck().get()).toBe(0)
+  })
+
+  it('„fehlt seit“: beim Fehlen gesetzt, beim Wiederkommen weg; Fehlende je Ordner und nach Alter', () => {
+    scan(db, id, [datei('a.jpg'), datei('b.jpg'), datei('c.jpg')])
+    const seit = (n: string): number | null =>
+      db.prepare('SELECT missing_since FROM images WHERE name = ?').pluck().get(n) as number | null
+    const vorher = Date.now()
+    scan(db, id, [datei('a.jpg')]) // b und c fehlen
+    expect(seit('b.jpg')).toBeGreaterThanOrEqual(vorher)
+    expect(seit('a.jpg')).toBeNull()
+    scan(db, id, [datei('a.jpg'), datei('b.jpg')]) // b wieder da
+    expect(seit('b.jpg')).toBeNull()
+    expect(status(db)['b.jpg']).toBe('ok')
+    const c = db.prepare("SELECT id FROM images WHERE name = 'c.jpg'").pluck().get() as number
+    expect(repo.fehlende(db, { ordner: id })).toEqual([c])
+    expect(repo.fehlende(db, { vor: (seit('c.jpg') as number) - 1 })).toEqual([])
+    expect(repo.fehlende(db, { vor: seit('c.jpg') as number })).toEqual([c])
+  })
+})
+
 describe('Abfragen', () => {
   const zeile = (rel: string, size: number, mtime: number): GefundeneDatei => ({
     rel,
@@ -449,7 +506,18 @@ describe('Abfragen', () => {
       cameraModel: null,
       status: 'ok',
       metaRead: false,
-      color: null
+      color: null,
+      lens: null,
+      aperture: null,
+      exposure: null,
+      iso: null,
+      focal: null,
+      gps: null,
+      rating: null,
+      colorLabel: null,
+      title: null,
+      description: null,
+      keywords: []
     })
     expect(JSON.stringify(d)).not.toMatch(/Bilder/)
     expect(repo.details(db, [])).toEqual([])

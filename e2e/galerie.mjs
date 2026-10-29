@@ -760,6 +760,29 @@ try {
       }
     ],
     [
+      'Fehlende entfernen (2.1): Rückfrage, dann weg samt Vorschaubildern; „Abbrechen“ behält',
+      async () => {
+        const fehlend = (await ctx.page.evaluate(() => window.api.library.state())).folders[0]
+        assert.equal(fehlend.missing, 1)
+        const cacheVorher = cacheDateien().length
+        await stubConfirmSequence(ctx.app, [1, 0])
+        await menue({ name: /Fehlende entfernen \(1\)/ })
+        await sleep(500)
+        assert.equal((await ordner())[0].missing, 1, 'trotz „Abbrechen“ entfernt')
+        await menue({ name: /Fehlende entfernen \(1\)/ })
+        assert.ok(await waitFor(async () => (await ordner())[0].missing === 0, 5_000))
+        // die beiden Vorschaubilder (256/768) der fehlenden Datei sind mit weg
+        assert.ok(
+          await waitFor(() => cacheDateien().length === cacheVorher - 2, 5_000),
+          `Cache: ${cacheDateien().length} statt ${cacheVorher - 2}`
+        )
+        await ctx.page
+          .getByRole('treeitem', { name: 'bib', exact: true })
+          .getByText('1 fehlt')
+          .waitFor({ state: 'detached', timeout: 5_000 })
+      }
+    ],
+    [
       'Neustart: Ordner, Anzahl, Modus bleiben; der Index liegt im lokalen Datenordner',
       async () => {
         const vorher = await ordner()

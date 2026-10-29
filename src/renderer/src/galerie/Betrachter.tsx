@@ -24,11 +24,12 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '@renderer/lib/api'
-import { datumText, groesseText, zahl } from '@renderer/lib/format'
+import { zahl } from '@renderer/lib/format'
 import { cn, errorText } from '@renderer/lib/utils'
 import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
 import { bildUrl } from '@shared/bild'
 import type { ImageInfo } from '@shared/types'
+import { InfoPanel } from './InfoPanel'
 import { Vorschaubild } from './Vorschaubild'
 import { Zoomleiste } from './Zoomleiste'
 
@@ -40,14 +41,6 @@ const FILM_RAND = 8
 const DIASHOW_WARTEN_MS = 10_000
 /** Erst nach dieser Zeit erscheint beim Laden eines Bildes ein Hinweis */
 const LADEN_HINWEIS_MS = 300
-
-const QUELLE_TEXT: Record<ImageInfo['takenSource'], string> = {
-  exif: 'Kamera (Aufnahmezeit)',
-  'exif-digitalisiert': 'Kamera (digitalisiert)',
-  xmp: 'XMP',
-  'datei-erstellt': 'Datei (erstellt) – nicht aus der Kamera',
-  'datei-geaendert': 'Datei (geändert) – nicht aus der Kamera'
-}
 
 /** sanft = in die neue Stufe gleiten (nicht beim Verschieben und nicht beim Bildwechsel) */
 type Zoom =
@@ -106,43 +99,6 @@ class Bildpuffer {
     }
     return e
   }
-}
-
-function InfoFeld({ bild }: { bild: ImageInfo }): JSX.Element {
-  const zeile = (titel: string, wert: string): JSX.Element => (
-    <div>
-      <dt className="text-xs text-muted-foreground">{titel}</dt>
-      <dd className="text-sm">{wert}</dd>
-    </div>
-  )
-  return (
-    <aside
-      aria-label="Informationen zum Bild"
-      className="w-72 shrink-0 overflow-auto border-l bg-leiste p-4"
-    >
-      <h3 className="mb-3 break-words text-sm font-semibold">{bild.name}</h3>
-      <dl className="space-y-3">
-        {zeile(
-          'Aufnahme',
-          datumText(bild.takenAt) + (bild.takenOffset ? ` (UTC${bild.takenOffset})` : '')
-        )}
-        {zeile('Quelle des Datums', QUELLE_TEXT[bild.takenSource])}
-        {zeile('Kamera', [bild.cameraMake, bild.cameraModel].filter(Boolean).join(' ') || '–')}
-        {zeile(
-          'Datei',
-          [
-            bild.width && bild.height
-              ? `${zahl.format(bild.width)} × ${zahl.format(bild.height)}`
-              : null,
-            groesseText(bild.size),
-            (bild.format ?? bild.ext).toUpperCase()
-          ]
-            .filter(Boolean)
-            .join(' · ')
-        )}
-      </dl>
-    </aside>
-  )
 }
 
 function Filmstreifen({
@@ -654,7 +610,7 @@ export function Betrachter({
             <ChevronRight className="size-5" aria-hidden />
           </button>
         </div>
-        {info && bild && <InfoFeld bild={bild} />}
+        {info && bild && <InfoPanel bild={bild} />}
       </div>
 
       <Filmstreifen ids={ids} index={index} details={details} onWahl={gehe} />

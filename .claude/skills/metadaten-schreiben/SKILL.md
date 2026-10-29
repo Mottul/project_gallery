@@ -30,8 +30,11 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
   `bild-labor`) und das Ergebnis in die Tabelle eintragen – erst dann gilt sie.
 - **Mehrfachauswahl:** nur geänderte Felder schreiben; Stichwörter als Hinzufügen/Entfernen
   (`-Keywords+=`/`-Keywords-=`), nie die Liste der ersten Datei auf alle kopieren.
-- **Lesen für den Index** mit `-json -n -G1` (Zahlen statt Text, Gruppen eindeutig); Anzeige-
-  texte macht die Oberfläche selbst.
+- **Lesen für den Index** mit `-json -n -G0` (Zahlen statt Text; Tags fest in
+  `GRUNDFELD_TAGS`, Prüfung in `grundfelder.ts`, seit 2.1 auch Objektiv, Belichtung, GPS,
+  Bewertung, Farblabel, Titel, Beschreibung, Stichwörter); Anzeigetexte macht die Oberfläche
+  selbst. „Alle Felder“ fürs Info-Panel liest der Bilddienst auf Abruf mit `-json -G1 -a -s`
+  (lesbare Werte) – nicht für den Index.
 
 ## ExifTool-Aufrufe
 

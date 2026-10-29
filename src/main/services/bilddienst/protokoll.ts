@@ -2,6 +2,7 @@
 // hinein, Kennwerte heraus – nie ganze Bilder (Skill bibliothek-index, „Bilddienst“).
 
 import { cpus } from 'node:os'
+import type { MetaFeld } from '@shared/types'
 import type { GefundeneDatei } from '../library/repo'
 import type { Meldung } from './beobachter'
 
@@ -70,6 +71,8 @@ export type AnDienst =
   | { typ: 'meta'; auftrag: number; dateien: MetaDatei[] }
   | { typ: 'vorschau'; auftrag: number; dateien: VorschauDatei[] }
   | { typ: 'anzeige'; auftrag: number; datei: AnzeigeDatei }
+  /** „alle Felder“ einer Datei für das Info-Panel (2.1), frisch gelesen */
+  | { typ: 'alle-felder'; auftrag: number; datei: AnzeigeDatei }
   | { typ: 'abbrechen'; auftrag: number }
   | { typ: 'beenden' }
 
@@ -80,6 +83,8 @@ export type VomDienst =
   | { typ: 'meta-ergebnis'; auftrag: number; ergebnisse: MetaErgebnis[] }
   | { typ: 'vorschau-ergebnis'; auftrag: number; ergebnisse: VorschauErgebnis[] }
   | { typ: 'anzeige-ergebnis'; auftrag: number; ergebnis: AnzeigeErgebnis }
+  /** null = nicht lesbar (geändert, fehlt, ExifTool fehlt) */
+  | { typ: 'alle-felder-ergebnis'; auftrag: number; felder: MetaFeld[] | null }
   /** netz = Netzlaufwerk: nicht überwacht, der main gleicht periodisch ab */
   | { typ: 'beobachtet'; auftrag: number; netz: boolean }
   /** ohne Auftrag: Änderungen in einem überwachten Ordner */

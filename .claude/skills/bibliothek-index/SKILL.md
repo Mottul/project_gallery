@@ -53,6 +53,12 @@ Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF al
 (`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
 Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
 Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
+Umgesetzt in 2.1: Schema 4 (`keywords`-Tabelle mit `ON DELETE CASCADE`, `gps_alt`,
+`missing_since` + Teilindex `images_fehlt`; Migration merkt alle vorhandenen Dateien zum
+Nachlesen vor), weitere Felder in `grundfelder.ts` (Grenzen je Feld, Rangfolge XMP → IPTC → EXIF,
+Stichwörter ohne Doppelte, höchstens 200 zu je 100 Zeichen), `metaSchreiben` ersetzt die
+Stichwörter nur, wenn die Zeile geschrieben wurde (Datei unverändert), `repo.fehlende` (je Ordner
+oder älter als ein Zeitpunkt), „alle Felder“ auf Abruf über den Bilddienst (nicht im Index).
 Umgesetzt in 1.6: Überwachen – Wächter im Bilddienst (`beobachter.ts`: `fs.watch` rekursiv,
 Sammeln 300 ms/2 s, `pfadeZusammenfassen`: Unwichtiges weg, Unterpfade unter gemeldeten Ordnern
 weg, mehr als 50 Einträge eines Ordners → der Ordner, mehr als 500 → ganzer Abgleich),

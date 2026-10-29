@@ -274,7 +274,9 @@ kommen mit Phase 1 dazu).
   mittel/stark – als CSS-Animation der beiden Bild-Ebenen. Bahn und Übergänge nach dem
   Video-Generator der Mottulbox (`shared/videoGenPlan.ts`: `kenBurnsPath`; `transitionCss.ts`),
   kopiert und angepasst, nicht verknüpft.
-- Info-Panel: Aufnahme, Kamera, Ort, Datei, Beschreibung, „alle Felder“; Histogramm.
+- Info-Panel (seit 2.1): Titel, Beschreibung, Bewertung, Farblabel, Stichwörter, Aufnahme mit
+  Quelle des Datums, Kamera, Objektiv, Belichtung, Standort (Koordinaten; Ortsname ab 2.2),
+  Datei, „alle Felder“ (auf Abruf frisch aus der Datei, mit Suche); Histogramm später.
 - Schnell bewerten (Tasten 0–5), Farblabel (6–9), drehen (verlustfrei, siehe Stapel), löschen
   (Papierkorb).
 - Vorladen und Dekodieren der Nachbarbilder; Chromium nimmt das vorgeladene Bild für dieselbe
@@ -652,11 +654,24 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet, „Ohne
   Standort“ am Ende in beiden Richtungen).
 
+**Teilschritte** (festgelegt 29.10.2026, je ein Pull Request gegen `main`):
+
+| | Inhalt |
+|---|---|
+| 2.1 ✅ | **Alle Metadaten lesen und Info-Panel:** Migration 4 (Stichwörter-Tabelle, `gps_alt`, `missing_since`; alle Dateien im Hintergrund nachlesen); Objektiv, Blende, Belichtungszeit, ISO, Brennweite, GPS (Composite vor XMP, 0/0 ohne Höhe = keiner), Bewertung 0–5, Farblabel, Titel/Beschreibung (XMP vor IPTC vor EXIF), Stichwörter aus XMP, IPTC und Windows zusammengeführt – alles mit Grenzen geprüft (`grundfelder.ts`); Info-Panel im Betrachter (`InfoPanel.tsx`, Farblabel auf Deutsch); „alle Felder“ auf Abruf frisch aus der Datei über den Bilddienst (Prüfung wie vor jedem Lesen, ohne Pfade, höchstens 3.000 Felder, `alleFelder.ts`); **Fehlende entfernen** (Menüpunkt mit Rückfrage, automatisch nach 30 Tagen samt Vorschaubildern); Testbibliothek um Objektiv, Belichtung, Beschreibung, Farblabel und IPTC-Stichwörter ergänzt | `sortieren` (alle neuen Felder exakt wie in der Datei, Info-Panel mit „alle Felder“), `galerie` (Fehlende entfernen, Abbrechen behält, Vorschaubilder weg); Gegenprobe am alten Stand rot; Unit `grundfelder.test.ts`, `alleFelder.test.ts`, `repo.test.ts`, `db.test.ts` (Migration 3 → 4), `format.test.ts` |
+| 2.2 | **Orte offline:** GeoNames `cities1000` (Orte ab 1.000 Einwohnern, CC BY 4.0, Hinweis in „Über“) im Paket, nächster Ort zu GPS, Ort-Feld der Metadaten vorrangig; **Sortieren nach Ort (A–Z)** mit Gruppen, „Ohne Standort“ immer am Ende; Paketgröße und Suchzeit im Labor |
+| 2.3 | **Weitere Sortierfelder und Gruppen-Überschriften** (Tag/Monat/Jahr, Ordner, Kamera, Ort) in Raster und Liste; Blocksatz-Ansicht |
+| 2.4 | **Filterleiste, gespeicherte Ansichten, Volltextsuche** (FTS5) |
+| 2.5 | **Diashow mit Überblenden und Ken Burns** (Wunsch 29.10.2026) |
+
 ### Phase 3 – Metadaten bearbeiten
 
 - Bearbeiten-Panel einzeln/mehrfach, Felder aus `shared/metaFields.ts`.
 - Schreiben mit Konfliktprüfung, Journal/Rückgängig, Sicherung, Nachprüfung, XMP-Sidecars.
 - Schnellbewertung im Betrachter.
+- **Drehen beim Bearbeiten** (Wunsch 29.10.2026): verlustfrei über die EXIF-Ausrichtung, im
+  Betrachter (Tasten/Knopf) und für eine Auswahl – über denselben Schreibweg wie die Metadaten
+  (Sicherung, Journal, Nachprüfung: Pixel unverändert); Vorschaubild und Maße danach neu.
 - **Abnahme:** E2E `metadaten` (Werte stehen danach in der Datei, Pixeldaten unverändert,
   Rückgängig stellt den alten Stand her); Checkliste von Hand: Explorer und digiKam zeigen Titel,
   Stichwörter, Bewertung.
@@ -777,13 +792,16 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **BMP** ab Phase 1: Vorschaubild per ffmpeg, Anzeige in Chromium, Metadaten nur lesen (sharp
   kann BMP nicht, Labor 25.10.2026).
 
-**Noch offen:**
+**Entschieden (29. Oktober 2026):**
 
-- **Wie lange bleiben fehlende Dateien im Index?** Eine von außen gelöschte Datei steht als
-  „fehlt“ samt verschlüsseltem Vorschaubild weiter im Index (seit 1.1; so erkennt der Abgleich
-  sie wieder, wenn sie zurückkommt oder verschoben wurde). Vorschlag: Menüpunkt „Fehlende aus
-  der Galerie entfernen“ je Ordner und automatisch nach 30 Tagen. Gefunden in 1.6 (Prüfliste
-  `bildschutz`, Schicht D).
+- **Fehlende Dateien:** Menüpunkt „Fehlende aus der Galerie entfernen“ je Ordner und automatisch
+  nach 30 Tagen (Index-Zeile samt Vorschaubildern) – bis dahin erkennt der Abgleich eine
+  zurückgekehrte oder verschobene Datei wieder (2.1).
+- **Ortsdaten:** GeoNames `cities1000` – Orte ab 1.000 Einwohnern, auch kleine Urlaubsorte (2.2).
+- **Drehen** gehört zu Phase 3 (Metadaten bearbeiten): verlustfrei über die EXIF-Ausrichtung.
+- **Phase 2 beginnt mit 2.1** (Metadaten), die Diashow-Effekte kommen als 2.5.
+
+**Noch offen:** nichts. Neue Fragen hier eintragen.
 
 ## Skills
 

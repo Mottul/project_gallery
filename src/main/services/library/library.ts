@@ -20,6 +20,7 @@ import type {
   LibraryDirs,
   LibraryFolder,
   LibraryState,
+  MetaFeld,
   TrashResult
 } from '@shared/types'
 import { bilddienst, type ScanAuftrag } from '../bilddienst/client'
@@ -467,6 +468,79 @@ export function bildFuerBetrachter(id: number): Promise<BildAntwort> {
   return bildHolen(db(), id)
 }
 
+/** „Alle Felder“ einer Datei, frisch aus der Datei gelesen (Info-Panel); null = nicht lesbar. */
+export async function alleFelder(id: number): Promise<MetaFeld[] | null> {
+  const [z] = repo.vorschauZeilen(db(), [id])
+  if (!z || z.status === 'fehlt') return null
+  return bilddienst.alleFelder({
+    pfad: join(z.ordner, ...z.rel_path.split('/')),
+    ordner: z.ordner,
+    size: z.size,
+    mtime: z.mtime
+  })
+}
+
+/** Nach so langer Zeit fallen fehlende Dateien samt Vorschaubildern weg (entschieden 29.10.2026) */
+const FEHLEND_TAGE = 30
+const FEHLEND_PRUEFEN_MS = 6 * 3600_000
+let fehlendTakt: NodeJS.Timeout | null = null
+
+/** Index-Zeilen fehlender Dateien samt Vorschaubildern und Umrechnungen entfernen. */
+async function fehlendeWeg(ids: readonly number[]): Promise<void> {
+  if (!ids.length) return
+  repo.bilderEntfernen(db(), ids)
+  anzeigeVerwerfen(ids)
+  await vorschauVerwerfen(ids)
+  revision++
+  melden()
+}
+
+/** Was seit mindestens 30 Tagen fehlt, kommt weg (beim Start und alle paar Stunden). */
+async function fehlendeAufraeumen(): Promise<void> {
+  if (beendet) return
+  const ids = repo.fehlende(db(), { vor: Date.now() - FEHLEND_TAGE * 86_400_000 })
+  if (!ids.length) return
+  await fehlendeWeg(ids)
+  logLine(`[bibliothek] ${ids.length} seit ${FEHLEND_TAGE} Tagen fehlende Dateien entfernt`)
+}
+
+/**
+ * Menü „Fehlende entfernen“: nach Rückfrage die fehlenden Dateien eines Ordners aus der Galerie
+ * nehmen (die Dateien selbst gibt es nicht mehr). Liefert die Zahl; 0 bei „Abbrechen“.
+ */
+export async function fehlendeEntfernen(
+  win: BrowserWindow | null,
+  folderId: number
+): Promise<number> {
+  const n = repo.fehlende(db(), { ordner: folderId }).length
+  if (!n) return 0
+  const opts = {
+    type: 'question' as const,
+    title: 'Fehlende entfernen',
+    message:
+      n === 1
+        ? '1 fehlende Datei aus der Galerie entfernen?'
+        : `${n} fehlende Dateien aus der Galerie entfernen?`,
+    detail:
+      'Die Dateien gibt es im Ordner nicht mehr. Entfernt wird nur, was die Galerie zu ihnen ' +
+      'gespeichert hat (Eintrag und Vorschaubild). Ohne dieses Entfernen geschieht das nach ' +
+      `${FEHLEND_TAGE} Tagen von selbst.`,
+    buttons: ['Entfernen', 'Abbrechen'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  }
+  const { response } = win
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts)
+  if (response !== 0) return 0
+  // nach der Rückfrage frisch: inzwischen wieder aufgetauchte bleiben (Review-Checkliste)
+  const ids = repo.fehlende(db(), { ordner: folderId })
+  await fehlendeWeg(ids)
+  logLine(`[bibliothek] Ordner ${folderId}: ${ids.length} fehlende Dateien entfernt`)
+  return ids.length
+}
+
 /** So lange darf die Prüfung einer Datei dauern (hängendes Netzlaufwerk) */
 const PRUEF_MS = 5000
 /** Höchstens so viele Namen nennt die Rückfrage vor dem Papierkorb */
@@ -567,10 +641,14 @@ export function bibliothekStarten(): void {
   for (const o of repo.ordnerListe(db())) einreihen(o.id)
   metadatenAnstossen()
   vorschauenAnstossen()
+  void fehlendeAufraeumen()
+  fehlendTakt = setInterval(() => void fehlendeAufraeumen(), FEHLEND_PRUEFEN_MS)
+  fehlendTakt.unref()
 }
 
 export function bibliothekBeenden(): void {
   beendet = true
+  if (fehlendTakt) clearInterval(fehlendTakt)
   ueberwachenBeenden()
   vorschauenBeenden()
   // eine gedrosselte Meldung öffnete den Index sonst nach schliesseDb() wieder

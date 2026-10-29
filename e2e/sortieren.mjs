@@ -259,6 +259,91 @@ try {
       }
     ],
     [
+      'Weitere Metadaten (2.1): Objektiv, Belichtung, GPS, Bewertung, Texte, Stichwörter wie in der Datei',
+      async () => {
+        const fehler = []
+        for (const e of bilder) {
+          const b = zeilenUeber.get(name(e))
+          const soll = {
+            gps: e.gps ? [e.gps.lat, e.gps.lon] : null,
+            rating: e.bewertung ?? null,
+            title: e.titel ?? null,
+            description: e.beschreibung ?? null,
+            colorLabel: e.farblabel ?? null,
+            lens: e.objektiv ?? null,
+            keywords: [
+              ...new Set([...(e.stichwoerter ?? []), ...(e.iptcStichwoerter ?? [])])
+            ].sort()
+          }
+          const ist = {
+            gps: b.gps ? [b.gps.lat, b.gps.lon].map((x) => Math.round(x * 1e4) / 1e4) : null,
+            rating: b.rating,
+            title: b.title,
+            description: b.description,
+            colorLabel: b.colorLabel,
+            lens: b.lens,
+            keywords: [...b.keywords].sort()
+          }
+          if (JSON.stringify(ist) !== JSON.stringify(soll))
+            fehler.push(`${e.datei}: ${JSON.stringify(ist)} statt ${JSON.stringify(soll)}`)
+        }
+        assert.deepEqual(fehler, [])
+        const d = zeilenUeber.get('dubrovnik.jpg')
+        assert.deepEqual([d.aperture, d.exposure, d.iso, d.focal], [8, 0.004, 100, 35])
+        // XMP und IPTC zusammengeführt, „Weihnachten“ nur einmal
+        assert.deepEqual([...zeilenUeber.get('muenchen.jpg').keywords].sort(), [
+          'Familie',
+          'Weihnachten',
+          'Winter'
+        ])
+      }
+    ],
+    [
+      'Info-Panel im Betrachter: Felder lesbar, „Alle Felder“ frisch aus der Datei',
+      async () => {
+        await ctx.page.getByRole('combobox', { name: 'Sortieren nach' }).selectOption('name')
+        const kachel = ctx.page
+          .getByRole('listbox', { name: 'Bilder' })
+          .getByRole('option', { name: 'dubrovnik.jpg', exact: true })
+        await kachel.scrollIntoViewIfNeeded()
+        await kachel.dblclick()
+        const betrachter = ctx.page.getByRole('dialog', { name: 'Betrachter' })
+        await betrachter.waitFor({ timeout: 5_000 })
+        await betrachter.getByRole('button', { name: 'Info' }).click()
+        const info = betrachter.getByRole('complementary', { name: 'Informationen zum Bild' })
+        await info.waitFor({ timeout: 3_000 })
+        const text = await info.innerText()
+        for (const erwartet of [
+          'Altstadt am Abend',
+          'Blick über die Stadtmauer',
+          'Galeria 35mm F1.8',
+          'f/8 · 1/250 s · ISO 100 · 35 mm',
+          '42,6507° N, 18,0944° O',
+          'Urlaub',
+          'Rot' // Farblabel „Red“ auf Deutsch
+        ]) {
+          assert.ok(
+            text.includes(erwartet),
+            `fehlt im Info-Panel: ${erwartet}
+${text}`
+          )
+        }
+        await info.getByLabel('5 von 5 Sternen').waitFor({ timeout: 2_000 })
+        await info.getByRole('button', { name: 'Alle Felder' }).click()
+        const anzahl = info.getByLabel('Anzahl der Felder')
+        await anzahl.waitFor({ timeout: 10_000 })
+        assert.ok(parseInt((await anzahl.innerText()).replace('.', ''), 10) > 20)
+        await info.getByRole('searchbox', { name: 'Feld suchen' }).fill('LensModel')
+        assert.ok((await info.innerText()).includes('Galeria 35mm F1.8'))
+        // keine Pfade im Panel (der Ordner der Testbibliothek)
+        assert.ok(!(await info.innerText()).includes(bib.dir), 'Pfad im Info-Panel')
+        // im Suchfeld gilt Esc dem Feld – erst heraus, dann schließen
+        await info.getByRole('searchbox', { name: 'Feld suchen' }).blur()
+        await ctx.page.keyboard.press('Escape')
+        await betrachter.waitFor({ state: 'detached', timeout: 3_000 })
+      }
+    ],
+    [
       'Statusleiste ohne „liest Metadaten“, wenn alles gelesen ist',
       async () => {
         assert.equal(await ctx.page.getByText(/liest Metadaten/).count(), 0)

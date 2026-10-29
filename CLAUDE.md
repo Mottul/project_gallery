@@ -13,7 +13,9 @@ dem Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfel
 Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`), 1.4 (Galerie-Oberfläche:
 Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5 (Betrachter,
 `bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) und
-1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). Als Nächstes Phase 2. Grundlage ist
+1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). **Phase 2 läuft**
+(Metadaten lesen, Filtern, Suchen; Teilschritte 2.1–2.5 im Plan); 2.1 (alle Metadaten, Info-Panel,
+Fehlende entfernen) ist umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.

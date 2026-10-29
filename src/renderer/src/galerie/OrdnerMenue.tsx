@@ -1,10 +1,10 @@
-// Menü je Ordner: Modus (normal / nur lesen / privat), neu einlesen, entfernen. Ein schlichtes
-// Aufklappmenü mit Tastatur (Pfeile, Escape) und Schließen beim Klick daneben oder bei Größen-
-// änderung. Gezeichnet über ein Portal direkt in <body>, fest am Knopf: In der Seitenleiste
+// Menü je Ordner: Modus (normal / nur lesen / privat), neu einlesen, Fehlende entfernen (2.1),
+// entfernen. Ein schlichtes Aufklappmenü mit Tastatur (Pfeile, Escape) und Schließen beim Klick
+// daneben oder bei Größenänderung. Gezeichnet über ein Portal direkt in <body>, fest am Knopf: In der Seitenleiste
 // schnitte deren Scrollbereich das breitere Menü sonst ab.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, FileX, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react'
 import { api } from '@renderer/lib/api'
 import { cn } from '@renderer/lib/utils'
 import type { FolderMode, LibraryFolder } from '@shared/types'
@@ -150,6 +150,18 @@ export function OrdnerMenue({ ordner }: { ordner: LibraryFolder }): JSX.Element 
               <RefreshCw className="size-4 shrink-0" aria-hidden />
               Neu einlesen
             </button>
+            {ordner.missing > 0 && (
+              <button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                className={EINTRAG}
+                onClick={() => tun(() => api.library.removeMissing(ordner.id))}
+              >
+                <FileX className="size-4 shrink-0" aria-hidden />
+                Fehlende entfernen ({ordner.missing}) …
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"

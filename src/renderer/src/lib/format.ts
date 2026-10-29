@@ -31,3 +31,42 @@ export function tagText(lokal: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(lokal)
   return m ? `${m[3]}.${m[2]}.${m[1]}` : lokal
 }
+
+// ── Aufnahmedaten (Info-Panel, 2.1) ──────────────────────────────────────────────────────────
+
+const grad = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+
+/** „1/250 s“ unter einer Sekunde, sonst „2 s“ bzw. „1,5 s“ */
+export function belichtungText(sekunden: number): string {
+  if (sekunden < 1) {
+    const kehr = 1 / sekunden
+    // 1/3 s, 1/250 s; krumme Werte (0,3 s) als Dezimalzahl
+    return Math.abs(kehr - Math.round(kehr)) < 0.05 * kehr
+      ? `1/${zahl.format(Math.round(kehr))} s`
+      : `${dezimal.format(sekunden)} s`
+  }
+  return `${dezimal.format(sekunden)} s`
+}
+
+/** „f/8“, „f/2,8“ */
+export function blendeText(f: number): string {
+  return `f/${dezimal.format(f)}`
+}
+
+/** „35 mm“, „4,3 mm“ */
+export function brennweiteText(mm: number): string {
+  return `${dezimal.format(mm)} mm`
+}
+
+/** „42,6507° N, 18,0944° O“ – Süd/West aus dem Vorzeichen */
+export function gpsText(lat: number, lon: number): string {
+  return (
+    `${grad.format(Math.abs(lat))}° ${lat < 0 ? 'S' : 'N'}, ` +
+    `${grad.format(Math.abs(lon))}° ${lon < 0 ? 'W' : 'O'}`
+  )
+}
+
+/** „12,5“ – Zahl mit höchstens einer Nachkommastelle */
+export function dezimalText(n: number): string {
+  return dezimal.format(n)
+}

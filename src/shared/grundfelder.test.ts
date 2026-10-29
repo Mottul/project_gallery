@@ -28,9 +28,96 @@ describe('grundfelderAus', () => {
       format: 'jpeg',
       kameraHersteller: 'Galeria',
       kameraModell: 'Testkamera A',
+      objektiv: null,
+      blende: null,
+      belichtung: null,
+      iso: null,
+      brennweite: null,
+      gps: null,
+      bewertung: null,
+      farblabel: null,
+      titel: null,
+      beschreibung: null,
+      stichwoerter: [],
       aufnahme: { lokal: '2024-05-06T12:00:00', offset: null, quelle: 'exif' },
       fehler: null
     })
+  })
+
+  it('weitere Felder (2.1): Objektiv, Belichtung, GPS, Bewertung, Texte, Stichwörter', () => {
+    const g = grundfelderAus(
+      {
+        'EXIF:LensModel': 'Galeria 35mm F1.8',
+        'EXIF:FNumber': 8,
+        'EXIF:ExposureTime': 0.004,
+        'EXIF:ISO': 100,
+        'EXIF:FocalLength': 35,
+        'Composite:GPSLatitude': 42.6507,
+        'Composite:GPSLongitude': 18.0944,
+        'Composite:GPSAltitude': 12.5,
+        'XMP:Rating': 5,
+        'XMP:Label': 'Red',
+        'XMP:Title': 'Altstadt am Abend',
+        'IPTC:ObjectName': 'älter',
+        'IPTC:Caption-Abstract': 'Blick über\ndie Stadtmauer',
+        'XMP:Subject': ['Urlaub', 'Meer'],
+        'IPTC:Keywords': ['meer', 'Kroatien'],
+        'EXIF:XPKeywords': 'Sommer;Urlaub'
+      },
+      DATEI,
+      JETZT
+    )
+    expect(g).toMatchObject({
+      objektiv: 'Galeria 35mm F1.8',
+      blende: 8,
+      belichtung: 0.004,
+      iso: 100,
+      brennweite: 35,
+      gps: { breite: 42.6507, laenge: 18.0944, hoehe: 12.5 },
+      bewertung: 5,
+      farblabel: 'Red',
+      titel: 'Altstadt am Abend', // XMP vor IPTC
+      beschreibung: 'Blick über die Stadtmauer', // Zeilenumbruch zu Leerzeichen
+      stichwoerter: ['Urlaub', 'Meer', 'Kroatien', 'Sommer'] // ohne Doppelte, Groß/Klein egal
+    })
+  })
+
+  it('fremde Werte geprüft: Unsinn, Grenzen, 0/0 ohne Höhe = kein Standort', () => {
+    const g = grundfelderAus(
+      {
+        'EXIF:FNumber': 'inf',
+        'EXIF:ExposureTime': -1,
+        'EXIF:ISO': 1e12,
+        'Composite:GPSLatitude': 0,
+        'Composite:GPSLongitude': 0,
+        'XMP:Rating': -1, // „abgelehnt“ in Lightroom – keine Bewertung
+        'EXIF:XPTitle': 'nur Windows',
+        'IPTC:Keywords': 'einzeln',
+        'XMP:Subject': ['x'.repeat(500)]
+      },
+      DATEI,
+      JETZT
+    )
+    expect(g).toMatchObject({
+      blende: null,
+      belichtung: null,
+      iso: null,
+      gps: null,
+      bewertung: null,
+      titel: 'nur Windows'
+    })
+    expect(g.stichwoerter).toEqual(['x'.repeat(100), 'einzeln'])
+    expect(
+      grundfelderAus({ 'XMP:GPSLatitude': 91, 'XMP:GPSLongitude': 10 }, DATEI, JETZT).gps
+    ).toBe(null)
+    // Süd/West: vorzeichenrichtig aus Composite (-n)
+    expect(
+      grundfelderAus(
+        { 'Composite:GPSLatitude': -33.86, 'Composite:GPSLongitude': -70.65 },
+        DATEI,
+        JETZT
+      ).gps
+    ).toEqual({ breite: -33.86, laenge: -70.65, hoehe: null })
   })
 
   it('Ausrichtung 1–4 lässt die Maße, 5–8 tauscht sie', () => {

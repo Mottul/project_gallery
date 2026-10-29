@@ -13,6 +13,8 @@ import {
   auswahlGroesse,
   bildDetails,
   fensterVon,
+  alleFelder,
+  fehlendeEntfernen,
   inPapierkorb,
   modusSetzen,
   neuEinlesen,
@@ -55,6 +57,10 @@ export function registerLibraryHandlers(): void {
     inPapierkorb(fensterVon(e.sender), pruefeKennungen(ids, PAPIERKORB_MAX))
   )
   handle(Channels.librarySize, (_e, ids) => auswahlGroesse(pruefeKennungen(ids, SUMME_MAX)))
+  handle(Channels.libraryAllFields, (_e, id) => alleFelder(pruefeKennung(id)))
+  handle(Channels.libraryRemoveMissing, (e, id) =>
+    fehlendeEntfernen(fensterVon(e.sender), pruefeKennung(id))
+  )
   on(Channels.libraryVisible, (_e, ids) => sichtbar(pruefeKennungen(ids, AUSSCHNITT_MAX)))
   // Pfade aus dem Preload (aus echten Datei-Objekten eines Drops), geprüft wie beim Dialog
   handle(Channels.libraryAddDropped, (_e, pfade) =>
