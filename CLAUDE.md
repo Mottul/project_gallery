@@ -8,12 +8,12 @@ als oberster Regel. UI-Sprache und Code-Kommentare sind Deutsch.
 
 **Phase 0 abgeschlossen** (25.10.2026): Gerüst, Netzsperre, Fenster-Härtung, Hell/Dunkel, Tests,
 CI, gepinntes ExifTool/ffmpeg, Testbibliothek, Labor-Messungen, Installer und Abnahme in der
-Windows-Sandbox. **Phase 1 läuft** (Bibliothek und Galerie) in den Teilschritten 1.1–1.6 aus dem
-Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfelder per ExifTool,
+Windows-Sandbox. **Phase 1 umgesetzt** (Bibliothek und Galerie) in den Teilschritten 1.1–1.6 aus
+dem Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfelder per ExifTool,
 Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`), 1.4 (Galerie-Oberfläche:
-Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop) und 1.5 (Betrachter,
-`bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) sind
-umgesetzt. Grundlage ist
+Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5 (Betrachter,
+`bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) und
+1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). Als Nächstes Phase 2. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -75,7 +75,8 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   nur der **Bilddienst** (eigener Prozess, `services/bilddienst/`). Der Renderer schickt Kennungen,
   nie Pfade; Ordner kommen aus dem Dialog des main oder per Drag & Drop – dann liest der Preload
   den Pfad aus dem gezogenen Datei-Objekt (`webUtils.getPathForFile`), die Seite gibt keinen vor.
-  Skill `bibliothek-index`.
+  Überwachen: Wächter im Bilddienst (`bilddienst/beobachter.ts`), Teil-Abgleich und
+  live/periodisch in `library/ueberwachen.ts`. Skill `bibliothek-index`.
 - **Galerie-Oberfläche:** `renderer/src/galerie/` (Ordnerbaum, Raster virtualisiert, Liste),
   Zustand in `renderer/src/lib/` (`ansicht.ts` je Ordner gemerkt, `auswahl.ts`, `bildliste.ts`:
   Kennungen je Knoten, Details nur für das Sichtbare).

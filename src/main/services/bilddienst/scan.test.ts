@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { GefundeneDatei } from '../library/repo'
-import { scanne } from './scan'
+import { scanne, scanneTeile } from './scan'
 
 let dir: string
 let draussen: string
@@ -102,5 +102,77 @@ describe('scanne', () => {
     const { dateien, unlesbar } = await alles()
     expect(dateien).toEqual([])
     expect(unlesbar).toEqual([])
+  })
+})
+
+describe('scanneTeile (nach dem Überwachen)', () => {
+  async function teile(
+    pfade: string[],
+    nurDateien: string[] = []
+  ): Promise<{ rel: string[]; unlesbar: string[] }> {
+    const dateien: GefundeneDatei[] = []
+    const r = await scanneTeile(dir, pfade, nurDateien, (d) => dateien.push(...d))
+    expect(r.gefunden).toBe(dateien.length)
+    return { rel: dateien.map((d) => d.rel).sort(), unlesbar: r.unlesbar }
+  }
+
+  it('Ordner samt allem darunter, einzelne Dateien für sich – sonst nichts', async () => {
+    datei('a.jpg')
+    datei('b.jpg')
+    datei('Urlaub/Köln/c.jpg')
+    datei('Urlaub/d.png')
+    datei('Urlaub/notiz.txt')
+    datei('Anderes/e.jpg')
+    expect(await teile(['Urlaub', 'a.jpg'])).toEqual({
+      rel: ['Urlaub/Köln/c.jpg', 'Urlaub/d.png', 'a.jpg'],
+      unlesbar: []
+    })
+  })
+
+  it('was es nicht mehr gibt, liefert nichts (auch nicht als unlesbar)', async () => {
+    datei('a.jpg')
+    expect(await teile(['weg.jpg', 'Weg/x.jpg', 'a.jpg/unsinn'])).toEqual({
+      rel: [],
+      unlesbar: []
+    })
+  })
+
+  it('folgt keiner Junction – weder als Ziel noch auf dem Weg dorthin', async () => {
+    datei('ok.jpg')
+    symlinkSync(draussen, join(dir, 'Verknüpfung'), 'junction')
+    expect(await teile(['Verknüpfung', 'Verknüpfung/fremd.jpg', 'ok.jpg'])).toEqual({
+      rel: ['ok.jpg'],
+      unlesbar: []
+    })
+  })
+
+  it('als geändert gemeldet: nur Dateien – ein Ordner wird nicht durchsucht', async () => {
+    datei('Urlaub/a.jpg')
+    datei('Urlaub/Köln/b.jpg')
+    expect(await teile([], ['Urlaub', 'Urlaub/a.jpg'])).toEqual({
+      rel: ['Urlaub/a.jpg'],
+      unlesbar: []
+    })
+  })
+
+  it('lässt Ausgeschlossenes und ungültige Pfade aus', async () => {
+    datei('$RECYCLE.BIN/x.jpg')
+    datei('.versteckt/y.jpg')
+    datei('Urlaub/z.jpg')
+    expect(
+      await teile([
+        '$RECYCLE.BIN',
+        '.versteckt/y.jpg',
+        '../draussen/fremd.jpg',
+        'Urlaub/./z.jpg',
+        ''
+      ])
+    ).toEqual({ rel: [], unlesbar: [] })
+  })
+
+  it('wirft, wenn die Wurzel fehlt (= nicht erreichbar)', async () => {
+    await expect(
+      scanneTeile(join(dir, 'gibt-es-nicht'), ['a.jpg'], [], () => {})
+    ).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

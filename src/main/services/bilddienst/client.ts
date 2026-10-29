@@ -2,7 +2,9 @@
 // Aufträge mit Kennung und reicht die Antworten weiter. Stirbt der Dienst, scheitern seine
 // laufenden Aufträge mit einer klaren Meldung, und der nächste Auftrag startet ihn neu. Kommt zu
 // einem Auftrag zu lange nichts (hängendes Netzlaufwerk), wird der Dienst beendet – ein Scan, der
-// in einem Systemaufruf feststeckt, lässt sich nicht anders abbrechen.
+// in einem Systemaufruf feststeckt, lässt sich nicht anders abbrechen. Änderungen in überwachten
+// Ordnern kommen ohne Auftrag (onAenderung); stirbt der Dienst, sind seine Wächter weg – das meldet
+// onEnde, damit die Bibliothek sie neu anlegt.
 
 import { utilityProcess, type UtilityProcess } from 'electron'
 import { join } from 'node:path'
@@ -10,6 +12,7 @@ import { vorschauEinrichtung } from '../cache/vorschauCache'
 import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
 import { logLine } from '../log'
+import type { Meldung } from './beobachter'
 import {
   ARG_EXIFTOOL,
   vorschauParallel,
@@ -47,6 +50,10 @@ class Bilddienst {
   private kind: UtilityProcess | null = null
   private naechster = 1
   private readonly laufend = new Map<number, Laufend>()
+  /** Änderungen in einem überwachten Ordner (Kennung im Index) */
+  onAenderung: ((ordner: number, meldung: Meldung) => void) | null = null
+  /** Der Dienst ist unerwartet beendet (Absturz, Zeitlimit) – seine Wächter sind weg */
+  onEnde: (() => void) | null = null
 
   private prozess(): UtilityProcess {
     if (this.kind) return this.kind
@@ -63,7 +70,7 @@ class Bilddienst {
     )
     kind.stdout?.on('data', (d) => logLine('[bilddienst]', String(d).trimEnd()))
     kind.stderr?.on('data', (d) => logLine('[bilddienst!]', String(d).trimEnd()))
-    kind.on('message', (n: VomDienst) => this.nachricht(n))
+    kind.on('message', (n: VomDienst) => this.eingang(n))
     // als erste Nachricht: Schlüssel und Ablage des Vorschau-Caches (nie als Argument – die
     // Befehlszeile eines Prozesses kann jedes Programm des Benutzers lesen)
     const e = vorschauEinrichtung()
@@ -78,6 +85,7 @@ class Bilddienst {
       this.kind = null
       if (this.laufend.size) logLine('[bilddienst] beendet, Code', code)
       this.alleAbbrechen(fehler('DIENST_BEENDET', `Bilddienst beendet (Code ${code})`))
+      this.onEnde?.()
     })
     this.kind = kind
     return kind
@@ -93,9 +101,36 @@ class Bilddienst {
     }, STILLE_MS)
   }
 
+  /** Eingegangen, noch nicht verarbeitet (in Reihenfolge) */
+  private readonly warten: VomDienst[] = []
+  private verarbeitet = false
+
+  /**
+   * Nachrichten einzeln verarbeiten und dazwischen an die Ereignisschleife abgeben: Kommen die
+   * Stapel eines Scans schneller, als der Index sie schreibt, stauen sie sich – am Stück
+   * abgearbeitet hielten sie den main sekundenlang an (gemessen mit 50.000 Bildern: bis 6,8 s,
+   * Fenster und IPC standen). Die Reihenfolge bleibt (Stapel vor „fertig“).
+   */
+  private eingang(n: VomDienst): void {
+    this.warten.push(n)
+    if (this.verarbeitet) return
+    this.verarbeitet = true
+    const weiter = (): void => {
+      const naechste = this.warten.shift()
+      if (naechste) this.nachricht(naechste)
+      if (this.warten.length) setImmediate(weiter)
+      else this.verarbeitet = false
+    }
+    setImmediate(weiter)
+  }
+
   private nachricht(n: VomDienst): void {
     if (n.typ === 'log') {
       logLine('[bilddienst]', n.text)
+      return
+    }
+    if (n.typ === 'aenderung') {
+      this.onAenderung?.(n.ordner, n.meldung)
       return
     }
     const l = this.laufend.get(n.auftrag)
@@ -110,6 +145,7 @@ class Bilddienst {
     if (n.typ === 'fertig') l.resolve({ gefunden: n.gefunden, unlesbar: n.unlesbar })
     else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
     else if (n.typ === 'anzeige-ergebnis') l.resolve(n.ergebnis)
+    else if (n.typ === 'beobachtet') l.resolve({ netz: n.netz })
     else l.reject(fehler(n.code, n.meldung))
   }
 
@@ -139,10 +175,20 @@ class Bilddienst {
     return { auftrag, antwort }
   }
 
-  /** Ordner einlesen; `onStapel` bekommt die gefundenen Dateien in Stapeln (in Reihenfolge). */
-  scan(wurzel: string, onStapel: (dateien: GefundeneDatei[]) => void): ScanAuftrag {
+  /**
+   * Ordner einlesen; `onStapel` bekommt die gefundenen Dateien in Stapeln (in Reihenfolge).
+   * Mit `teil` nur diese (relativ, „/“) – Teil-Scan nach dem Überwachen.
+   */
+  scan(
+    wurzel: string,
+    onStapel: (dateien: GefundeneDatei[]) => void,
+    teil?: { pfade: string[]; dateien: string[] }
+  ): ScanAuftrag {
     const { auftrag, antwort } = this.auftrag<{ gefunden: number; unlesbar: string[] }>(
-      (a) => ({ typ: 'scan', auftrag: a, wurzel }),
+      (a) =>
+        teil
+          ? { typ: 'teilscan', auftrag: a, wurzel, ...teil }
+          : { typ: 'scan', auftrag: a, wurzel },
       onStapel
     )
     return {
@@ -156,6 +202,20 @@ class Bilddienst {
         this.kind?.postMessage({ typ: 'abbrechen', auftrag } satisfies AnDienst)
       }
     }
+  }
+
+  /** Ordner überwachen (Änderungen kommen über onAenderung); netz = nicht überwacht. */
+  beobachten(ordner: number, wurzel: string): Promise<{ netz: boolean }> {
+    return this.auftrag<{ netz: boolean }>((a) => ({
+      typ: 'beobachten',
+      auftrag: a,
+      ordner,
+      wurzel
+    })).antwort
+  }
+
+  nichtBeobachten(ordner: number): void {
+    this.kind?.postMessage({ typ: 'nicht-beobachten', ordner } satisfies AnDienst)
   }
 
   /** Grundfelder (rohe ExifTool-Tags) vieler Dateien lesen. */

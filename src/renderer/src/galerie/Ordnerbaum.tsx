@@ -45,7 +45,7 @@ function Symbol({ ordner }: { ordner: LibraryFolder }): JSX.Element {
   return <Folder className={cn(k, 'text-primary-line')} aria-hidden />
 }
 
-/** Zweite Zeile: Zustand (liest, nicht erreichbar), fehlende Dateien, Modus. */
+/** Zweite Zeile: Zustand (liest, nicht erreichbar), fehlende Dateien, Modus, periodischer Abgleich. */
 function Zustand({ ordner }: { ordner: LibraryFolder }): JSX.Element | null {
   const teile: JSX.Element[] = []
   if (ordner.status === 'liest') {
@@ -67,6 +67,16 @@ function Zustand({ ordner }: { ordner: LibraryFolder }): JSX.Element | null {
   }
   if (ordner.mode !== 'normal')
     teile.push(<span key="modus">{MODUS_TEXT[ordner.mode].toLowerCase()}</span>)
+  // Netzlaufwerk (oder Überwachen nicht möglich): Änderungen kommen nicht sofort
+  if (ordner.watch === 'periodisch' && ordner.status === 'bereit')
+    teile.push(
+      <span
+        key="periodisch"
+        title="Netzlaufwerk oder ohne Überwachung – Änderungen erscheinen spätestens nach 5 Minuten oder beim Wechsel in die App"
+      >
+        Abgleich alle 5 min
+      </span>
+    )
   if (!teile.length) return null
   return (
     <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">

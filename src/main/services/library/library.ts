@@ -2,7 +2,9 @@
 // Oberfläche. Der Index (repo.ts) wird nur hier geschrieben; Dateizugriffe macht der Bilddienst.
 // Ordner werden nacheinander eingelesen (Warteschlange); beim Start einmal alle (Abgleich).
 // Danach – und schon während des Einlesens – liest der Bilddienst die Grundfelder (ExifTool) aller
-// Dateien, deren Metadaten fehlen (zweite Warteschlange, Stapel für Stapel).
+// Dateien, deren Metadaten fehlen (zweite Warteschlange, Stapel für Stapel). Seit 1.6 überwacht er
+// die Ordner (ueberwachen.ts); gemeldete Änderungen gleicht dieselbe Warteschlange als Teil-Abgleich
+// ab – nur die genannten Pfade, nach den ganzen Abgleichen.
 
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
@@ -32,6 +34,13 @@ import { mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
 import { anzeigeVerwerfen, bildHolen, type BildAntwort } from './anzeige'
 import * as repo from './repo'
 import {
+  nichtMehrUeberwachen,
+  sicherstellen,
+  ueberwachenBeenden,
+  ueberwachenEinrichten,
+  ueberwachungsArt
+} from './ueberwachen'
+import {
   ordnerNichtMehrPrivat,
   ordnerWirdPrivat,
   vorschauenAnstossen,
@@ -46,6 +55,8 @@ const WINDOWS = process.platform === 'win32'
 const MELDEN_MS = 250
 /** Dateien je Metadaten-Auftrag (ExifTool liest sie in Teilen zu 50 auf mehreren Prozessen) */
 const META_STAPEL = 200
+/** Mehr offene Pfade für den Teil-Abgleich eines Ordners: ihn lieber ganz abgleichen */
+const TEIL_HOECHSTENS = 2000
 
 interface Laufzeit {
   status: FolderStatus
@@ -54,10 +65,16 @@ interface Laufzeit {
 }
 
 const laufzeit = new Map<number, Laufzeit>()
+/** Ordner, die ganz abgeglichen werden sollen */
 const warteschlange: number[] = []
+/** Gemeldete Pfade je Ordner für den Teil-Abgleich (nach den ganzen): samt allem darunter bzw.
+ *  nur die Datei (geändert) */
+const teile = new Map<number, { pfade: Set<string>; dateien: Set<string> }>()
 let aktiv: number | null = null
 /** App wird beendet: nichts mehr anstoßen oder schreiben */
 let beendet = false
+/** Zählt Abgleiche, die den Index verändert haben (LibraryState.revision) */
+let revision = 0
 
 function db(): DB {
   return getDb(lokalerUnterordner('index'))
@@ -91,14 +108,16 @@ export function zustand(): LibraryState {
       missing: z.missing,
       found: lz?.found ?? 0,
       lastScan: o.last_scan,
-      unreadable: o.unreadable
+      unreadable: o.unreadable,
+      watch: lz?.status === 'nicht-erreichbar' ? null : ueberwachungsArt(o.id)
     }
   })
   return {
     folders,
     total: folders.reduce((s, f) => s + f.count, 0),
     metaPending: ohneExiftool ? 0 : repo.metaOffenAnzahl(db(), nichtErreichbar()),
-    thumbPending: repo.vorschauOffenAnzahl(db(), nichtErreichbar())
+    thumbPending: repo.vorschauOffenAnzahl(db(), nichtErreichbar()),
+    revision
   }
 }
 
@@ -137,14 +156,21 @@ async function einlesen(id: number): Promise<void> {
     melden()
     return
   }
+  // erst überwachen, dann einlesen: Änderungen während des Einlesens gehen so nicht verloren
+  await sicherstellen(id, ordner.path)
+  if (beendet || !repo.ordnerHolen(db(), id)) return
+  // was der Wächter bis hierher meldete, deckt dieser Abgleich ab
+  teile.delete(id)
+  const neuAb = repo.hoechsteKennung(db())
   const seq = repo.scanBeginnen(db(), id)
   const lz = setzeStatus(id, 'liest')
   melden()
   const t0 = Date.now()
+  let geschrieben = 0
   lz.auftrag = bilddienst.scan(ordner.path, (dateien) => {
     // Ordner inzwischen entfernt? Dann nichts mehr schreiben.
     if (laufzeit.get(id) !== lz) return
-    repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
+    geschrieben += repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
     lz.found += dateien.length
     melden(false)
     metadatenAnstossen()
@@ -153,11 +179,13 @@ async function einlesen(id: number): Promise<void> {
   try {
     const r = await lz.auftrag.fertig
     if (laufzeit.get(id) !== lz) return
-    const fehlend = repo.scanAbschliessen(db(), id, seq, r.unlesbar, WINDOWS, Date.now())
+    const a = repo.scanAbschliessen(db(), id, seq, r.unlesbar, WINDOWS, Date.now(), neuAb)
     logLine(
-      `[bibliothek] Ordner ${id} eingelesen: ${r.gefunden} Dateien, ${fehlend} fehlen neu,`,
-      `${r.unlesbar.length} unlesbar, ${Date.now() - t0} ms`
+      `[bibliothek] Ordner ${id} eingelesen: ${r.gefunden} Dateien, ${a.fehlend} fehlen neu,`,
+      `${a.verschoben} verschoben, ${r.unlesbar.length} unlesbar, ${Date.now() - t0} ms`
     )
+    if (geschrieben || a.fehlend || a.verschoben) revision++
+    await verworfeneWeg(a.verworfen)
     setzeStatus(id, 'bereit')
     metadatenAnstossen()
     vorschauenAnstossen()
@@ -173,12 +201,82 @@ async function einlesen(id: number): Promise<void> {
   }
 }
 
+/** Neue Zeilen, die in einer verschobenen aufgingen: ihre Vorschaubilder und Umrechnungen weg. */
+async function verworfeneWeg(ids: readonly number[]): Promise<void> {
+  if (!ids.length) return
+  anzeigeVerwerfen(ids)
+  await vorschauVerwerfen(ids)
+}
+
+/**
+ * Teil-Abgleich nach dem Überwachen: nur die gemeldeten Pfade einlesen und abschließen. Der
+ * Status bleibt (meist „bereit“) – das geht schnell und soll in der Oberfläche nicht flackern.
+ */
+async function teilEinlesen(id: number, pfade: string[], dateien: string[]): Promise<void> {
+  const ordner = repo.ordnerHolen(db(), id)
+  if (!ordner || beendet) return
+  const lz = laufzeit.get(id) ?? setzeStatus(id, 'bereit')
+  if (lz.status !== 'bereit') return einreihen(id)
+  const neuAb = repo.hoechsteKennung(db())
+  const seq = repo.scanBeginnen(db(), id)
+  const t0 = Date.now()
+  let geschrieben = 0
+  const auftrag = bilddienst.scan(
+    ordner.path,
+    (dateien) => {
+      if (laufzeit.get(id) !== lz) return
+      geschrieben += repo.stapelSchreiben(db(), id, seq, dateien, WINDOWS)
+      melden(false)
+      metadatenAnstossen()
+      vorschauenAnstossen()
+    },
+    { pfade, dateien }
+  )
+  lz.auftrag = auftrag
+  try {
+    const r = await auftrag.fertig
+    if (laufzeit.get(id) !== lz) return
+    const a = repo.teilAbschliessen(db(), id, seq, pfade, dateien, r.unlesbar, WINDOWS, neuAb)
+    if (geschrieben || a.fehlend || a.verschoben) revision++
+    logLine(
+      `[bibliothek] Ordner ${id} abgeglichen (${pfade.length + dateien.length} Pfade):`,
+      `${r.gefunden} Dateien,`,
+      `${a.fehlend} fehlen neu, ${a.verschoben} verschoben, ${Date.now() - t0} ms`
+    )
+    await verworfeneWeg(a.verworfen)
+    metadatenAnstossen()
+    vorschauenAnstossen()
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? ''
+    if (code === 'ABGEBROCHEN') return
+    // Wurzel weg oder Dienst gestorben: der ganze Abgleich klärt es (auch „nicht erreichbar“)
+    logLine(`[bibliothek] Teil-Abgleich von Ordner ${id} gescheitert (${code})`)
+    if (laufzeit.get(id) === lz) einreihen(id)
+  } finally {
+    if (lz.auftrag === auftrag) lz.auftrag = undefined
+    melden()
+  }
+}
+
 async function abarbeiten(): Promise<void> {
   if (aktiv !== null) return
-  while (warteschlange.length) {
-    aktiv = warteschlange.shift() as number
+  for (;;) {
+    let arbeit: () => Promise<void>
+    if (warteschlange.length) {
+      const id = warteschlange.shift() as number
+      aktiv = id
+      arbeit = () => einlesen(id)
+    } else if (teile.size) {
+      const [id, t] = teile.entries().next().value as [
+        number,
+        { pfade: Set<string>; dateien: Set<string> }
+      ]
+      teile.delete(id)
+      aktiv = id
+      arbeit = () => teilEinlesen(id, [...t.pfade], [...t.dateien])
+    } else break
     try {
-      await einlesen(aktiv)
+      await arbeit()
     } catch (err) {
       logLine('[bibliothek] Fehler beim Einlesen:', String(err))
     }
@@ -187,10 +285,36 @@ async function abarbeiten(): Promise<void> {
 }
 
 function einreihen(id: number): void {
-  if (aktiv === id || warteschlange.includes(id)) return
+  if (warteschlange.includes(id)) return
+  // läuft er gerade, danach noch einmal: was während des Einlesens geschah, käme sonst nicht an
   warteschlange.push(id)
   void abarbeiten()
 }
+
+/** Vom Wächter gemeldete Pfade zum Teil-Abgleich vormerken. */
+function teilEinreihen(id: number, pfade: readonly string[], dateien: readonly string[]): void {
+  if (warteschlange.includes(id)) return // ein ganzer Abgleich steht ohnehin an
+  const t = teile.get(id) ?? { pfade: new Set<string>(), dateien: new Set<string>() }
+  for (const p of pfade) t.pfade.add(p)
+  for (const d of dateien) t.dateien.add(d)
+  if (t.pfade.size + t.dateien.size > TEIL_HOECHSTENS) {
+    teile.delete(id)
+    return einreihen(id)
+  }
+  teile.set(id, t)
+  void abarbeiten()
+}
+
+// Überwachen (ueberwachen.ts) reiht über dieselbe Warteschlange ein
+ueberwachenEinrichten({
+  ordner: () => repo.ordnerListe(db()),
+  status: (id) => laufzeit.get(id)?.status ?? 'bereit',
+  einlesen: (id) => einreihen(id),
+  teil: (id, pfade, dateien) => teilEinreihen(id, pfade, dateien),
+  erreichbar: (pfad) => isDirReachable(pfad),
+  melden: () => melden(),
+  beendet: () => beendet
+})
 
 // ── Metadaten (Grundfelder) ───────────────────────────────────────────────────────────────────
 
@@ -238,7 +362,9 @@ type Roh = Record<string, unknown> | null
  */
 async function lesen(dateien: readonly repo.MetaOffen[]): Promise<Map<number, Roh> | null> {
   try {
-    const r = await bilddienst.meta(dateien.map((o) => ({ id: o.id, pfad: dateiPfad(o) })))
+    const r = await bilddienst.meta(
+      dateien.map((o) => ({ id: o.id, pfad: dateiPfad(o), size: o.size, mtime: o.mtime }))
+    )
     return new Map(r.map((e) => [e.id, e.roh]))
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code ?? 'UNBEKANNT'
@@ -427,6 +553,8 @@ export async function inPapierkorb(
   }
 }
 
+export { beiFokus } from './ueberwachen'
+
 // ── Start und Ende ────────────────────────────────────────────────────────────────────────────
 
 /** Beim Start: Index öffnen, alle Ordner im Hintergrund abgleichen, offene Metadaten lesen. */
@@ -443,6 +571,7 @@ export function bibliothekStarten(): void {
 
 export function bibliothekBeenden(): void {
   beendet = true
+  ueberwachenBeenden()
   vorschauenBeenden()
   // eine gedrosselte Meldung öffnete den Index sonst nach schliesseDb() wieder
   if (meldeTimer) clearTimeout(meldeTimer)
@@ -528,6 +657,8 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
   if (response !== 0) return false
   laufzeit.get(id)?.auftrag?.abbrechen()
   laufzeit.delete(id)
+  nichtMehrUeberwachen(id)
+  teile.delete(id)
   const i = warteschlange.indexOf(id)
   if (i >= 0) warteschlange.splice(i, 1)
   // Kennungen vorher merken – nach dem Löschen der Zeilen fände sie niemand mehr

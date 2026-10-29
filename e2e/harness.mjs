@@ -219,14 +219,15 @@ function mitZeitlimit(promise, ms, name) {
  * `[Name, async () => …]`; er besteht, wenn er nicht wirft, und gilt als übersprungen, wenn
  * er `Skip` wirft. Schlägt einer fehl, wird der Exit-Code 1 (nie zurück auf 0 gesetzt, damit
  * mehrere Läufe in einem Prozess zusammenzählen). Jeder Schritt hat ein Zeitlimit (neu
- * gegenüber der Mottulbox: Dort hielt ein hängender Schritt den ganzen Lauf an).
+ * gegenüber der Mottulbox: Dort hielt ein hängender Schritt den ganzen Lauf an) – 60 s, für
+ * lange Messungen als drittes Element `[Name, fn, ms]`.
  */
 export async function runSteps(title, steps) {
   console.log(title)
   let failed = 0
-  for (const [name, fn] of steps) {
+  for (const [name, fn, ms = STEP_TIMEOUT_MS] of steps) {
     try {
-      await mitZeitlimit(fn(), STEP_TIMEOUT_MS, name)
+      await mitZeitlimit(fn(), ms, name)
       console.log(`  ✓ ${name}`)
     } catch (e) {
       if (e instanceof Skip) {

@@ -53,6 +53,29 @@ Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF al
 (`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
 Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
 Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
+Umgesetzt in 1.6: Überwachen – Wächter im Bilddienst (`beobachter.ts`: `fs.watch` rekursiv,
+Sammeln 300 ms/2 s, `pfadeZusammenfassen`: Unwichtiges weg, Unterpfade unter gemeldeten Ordnern
+weg, mehr als 50 Einträge eines Ordners → der Ordner, mehr als 500 → ganzer Abgleich),
+Teil-Scan `scanneTeile` (folgt keiner Verknüpfung, auch nicht auf dem Weg), `teilAbschliessen`
+(nur unter den Pfaden, `last_scan` bleibt), Verschoben-Erkennung in beiden Abschlüssen (neue
+Zeile mit gleicher Endung, Größe und Änderungszeit wie genau eine verschwundene oder schon
+fehlende → die alte übernimmt den Pfad; `hoechsteKennung` vor dem Scan merken; die neue fällt
+weg, ihre Vorschaubilder auch). `ueberwachen.ts`: live/periodisch (Netz per `realpath` → UNC),
+30-s-Takt (nicht erreichbar → erneut; periodisch nach 5 min; live → nur Erreichbarkeit), Fokus,
+Neustart des Dienstes legt die Wächter neu an, dreimal Wächter verloren in 10 min → periodisch.
+**Gemessen:** Windows meldet das Löschen des beobachteten Ordners als Endlos-Sturm absoluter Pfade
+(`\\?\C:\…`) statt als Fehler; Änderungen über einen Hardlink außerhalb des Ordners meldet
+`fs.watch` nicht (genutzt im E2E `galerie` für 409). Schon das **Lesen** einer Datei meldet
+Windows als „change“ (Datei und Ordner), sobald ihre letzte Zugriffszeit älter als eine Stunde ist
+(Standard „vom System verwaltet“) – darum zählt „change“ nur für Dateien und nur, wenn sich Größe
+oder Änderungszeit gegenüber dem eigenen Lesen geändert haben (`gelesenMerken` im Bilddienst);
+sonst lösten ExifTool und Vorschaubilder beim ersten Einlesen je einen ganzen Abgleich aus.
+**Gemessen mit 50.000 Bildern:** Ein UPSERT je Zeile kostete 47 ms je Stapel (7 s main-Zeit je
+ganzem Abgleich) – unveränderte Dateien markiert `stapelSchreiben` jetzt nur als gesehen (2 ms).
+Stapel des Bilddienstes kamen schneller, als der main sie schrieb, stauten sich und liefen am Stück
+(bis 6,8 s Stillstand, Neustart 18 s bis zur Galerie) – der Client arbeitet Nachrichten einzeln
+mit `setImmediate` dazwischen ab. Blockaden der Ereignisschleife schreibt der main ins Log
+(„[main] Ereignisschleife … ms blockiert“).
 Umgesetzt in 1.4: Abfrage mit Ordner-Filter (`sortFilter.ts`: Unterordner als Bereich auf
 `rel_key`, nutzt den Index `folder_id, rel_key`), Verzeichnisse mit Anzahl für den Ordnerbaum,
 Größensumme einer Auswahl, Vorschau-Vorrang für den gemeldeten Ausschnitt (`library.visible`:
@@ -81,10 +104,11 @@ sichtbar + nächste Seite, vor dem übrigen Hintergrund; `vorschauOffenUnter`).
   Größe oder Änderungszeit abweichen → Metadaten und Vorschaubild neu. Verschwundene Dateien
   auf einem nicht erreichbaren Laufwerk bleiben als „nicht erreichbar“ stehen, statt gelöscht
   zu werden; nur bei erreichbarem Ordner ist „fehlt“ endgültig.
-- **Überwachen:** `fs.watch(dir, { recursive: true })` (lokal); Ereignisse sammeln (Debounce
-  ~300 ms) und gezielt abgleichen; `error`/Überlauf → ganzen Ordner abgleichen. Netzlaufwerke
-  zusätzlich periodisch. Eigene Schreibvorgänge (Stapel, Metadaten) kurz vormerken, damit sie
-  nicht doppelt verarbeitet werden.
+- **Überwachen:** `fs.watch(dir, { recursive: true })` (lokal, im Bilddienst – der Aufruf öffnet
+  den Ordner synchron); Ereignisse sammeln (Debounce ~300 ms) und gezielt abgleichen;
+  `error`/Überlauf → ganzen Ordner abgleichen. Netzlaufwerke nur periodisch. Eigene
+  Schreibvorgänge (Stapel, Metadaten, ab Phase 3) kurz vormerken, damit sie nicht doppelt
+  verarbeitet werden – der Papierkorb braucht das nicht (seine Zeilen sind schon weg).
 - **Fehlercodes unterscheiden** (Review der Mottulbox): „fehlt“ nur bei `ENOENT`/`ENOTDIR`;
   `EBUSY`, `EPERM`, Zeitlimit = vorübergehend, später erneut versuchen, nie als gelöscht werten.
 

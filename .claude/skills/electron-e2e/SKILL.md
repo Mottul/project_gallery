@@ -21,6 +21,8 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `originale.mjs` | Prüfsummen aller Testbilder vor/nach den Schritten; nur ausdrücklich geänderte Dateien weichen ab; keine Fremddateien (`_original`, Temp) im Bibliotheksordner |
 | `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Liste, Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
 | `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad) |
+| `ueberwachen.mjs` | Änderungen von außen ohne „Neu einlesen“ (dazu, geändert, gelöscht), umbenannter Unterordner behält Kennungen und Vorschaubilder, 120 Dateien auf einmal, Versteckte draußen, Bibliotheksordner weg und wieder da (Fokus), UNC-Pfad `\\localhost\C$\…` periodisch, Log ohne Namen |
+| `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera), fehlende Werte am Ende – „Ohne Standort“ auch absteigend |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
@@ -107,7 +109,18 @@ try {
   immer auf die Bilderliste eingrenzen (`getByRole('listbox', { name: 'Bilder' })`) – sonst trifft
   es die Einträge der Sortier-Auswahl.
 - **Watcher:** nach einer Änderung von außen mit `waitFor` auf das Ergebnis warten (Debounce),
-  nie feste Pausen.
+  nie feste Pausen. Seit 1.6 gleicht die App jede Änderung im Ordner selbst ab – ein Test, der
+  „Datei geändert, Index weiß es noch nicht“ braucht (409), ändert über einen **Hardlink
+  außerhalb** des Ordners (`linkSync`, dann über den Link anhängen): Das meldet `fs.watch` nicht
+  (gemessen). Neue Testdateien mit gleicher Endung, Größe und Änderungszeit wie eine gerade
+  gelöschte gelten als verschoben (gleiche Kennung) – für „neu“ eine andere Größe nehmen.
+- **Fokus nachstellen:** `app.emit('browser-window-focus', {}, win)` per `app.evaluate` – die App
+  prüft dann nicht erreichbare und periodische Ordner.
+- **Lange Messungen:** `runSteps` hat 60 s je Schritt; drittes Element `[Name, fn, ms]` für mehr.
+  Ein abgelaufener Schritt läuft im Hintergrund weiter (das Zeitlimit hält ihn nicht an) – die
+  folgenden Schritte sehen dann eine App, die noch arbeitet (gesehen bei `abnahme50k`).
+- **Sichtbares Raster:** neue Dateien stehen je nach Sortierung unten (virtualisiert) – „ist da“
+  über die Statusleiste („N Bilder“) oder die Brücke prüfen, nicht über eine Kachel.
 
 ## Was sich in der Mottulbox bewährt hat
 

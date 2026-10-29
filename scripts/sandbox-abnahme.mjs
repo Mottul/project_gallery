@@ -2,7 +2,9 @@
 // windows-paket, „Prüfen“). Schreibt dist/abnahme/abnahme.wsb: Netz aus, Ordner des neuesten
 // Installers und Skript (scripts/sandbox/) nur lesend eingebunden, Ergebnisordner beschreibbar;
 // beim Anmelden läuft scripts/sandbox/abnahme.ps1. Mit --starten öffnet es die Sandbox und wartet
-// auf den Bericht. Der Installer darf auch in einem Unterordner von dist/ liegen (gebaut mit
+// auf den Bericht. Seit 1.6 erzeugt es vorher die synthetische Testbibliothek (scripts/testbilder.mjs)
+// und bindet sie, das Projekt (playwright-core, scripts/sandbox/galerie.mjs) und den Ordner des
+// laufenden Node nur lesend ein – damit steuert die Sandbox die installierte App mit Testbildern. Der Installer darf auch in einem Unterordner von dist/ liegen (gebaut mit
 // `-c.directories.output=dist/<name>`, wenn dist/win-unpacked gesperrt ist – docs/ENTWICKLUNG.md).
 //
 // Voraussetzung: Windows 10/11 Pro, Windows-Sandbox eingeschaltet (docs/ENTWICKLUNG.md),
@@ -21,6 +23,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { erzeugeTestbilder } from './testbilder.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -52,7 +55,7 @@ function neuesterInstaller() {
   return kandidaten[0] ?? null
 }
 
-function main() {
+async function main() {
   if (process.platform !== 'win32') throw new Error('Die Windows-Sandbox gibt es nur unter Windows')
   const setup = neuesterInstaller()
   if (!setup) throw new Error('Kein Installer in dist/ – zuerst npm run package')
@@ -65,6 +68,10 @@ function main() {
   }
   const ergebnis = join(ordner, 'ergebnis')
   mkdirSync(ergebnis, { recursive: true })
+  // Testbilder auf dem Rechner (braucht das gebündelte ExifTool und ffmpeg), in der Sandbox nur lesend
+  const testbilder = join(ordner, 'testbilder')
+  const manifest = await erzeugeTestbilder(join(testbilder, 'bib'))
+  console.log(`Testbilder: ${manifest.eintraege.length} Dateien`)
   const wsb = `<Configuration>
   <Networking>Disable</Networking>
   <vGPU>Disable</vGPU>
@@ -78,6 +85,21 @@ function main() {
     <MappedFolder>
       <HostFolder>${xml(join(ROOT, 'scripts', 'sandbox'))}</HostFolder>
       <SandboxFolder>C:\\Abnahme</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>${xml(testbilder)}</HostFolder>
+      <SandboxFolder>C:\\Testbilder</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>${xml(ROOT)}</HostFolder>
+      <SandboxFolder>C:\\Repo</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>${xml(dirname(process.execPath))}</HostFolder>
+      <SandboxFolder>C:\\Node</SandboxFolder>
       <ReadOnly>true</ReadOnly>
     </MappedFolder>
     <MappedFolder>
@@ -127,7 +149,7 @@ function main() {
     if (existsSync(fertig)) {
       clearInterval(warte)
       console.log('\n' + readFileSync(join(ergebnis, 'abnahme.txt'), 'utf8'))
-      console.log(`Bildschirmfoto: ${join(ergebnis, 'app.png')}`)
+      console.log(`Bildschirmfotos: ${ergebnis} (app.png, galerie.png, betrachter.png)`)
       process.exitCode = readFileSync(fertig, 'utf8').trim() === '0' ? 0 : 1
     } else if (vergangen > 4 * 60_000 && !existsSync(join(ergebnis, 'gestartet.txt'))) {
       // Der Anmeldebefehl lief gar nicht (Sandbox hängt beim Start) – nicht 10 Minuten warten
@@ -135,18 +157,16 @@ function main() {
       console.error('Der Anmeldebefehl der Sandbox lief nach 4 Minuten noch nicht.')
       spuren()
       process.exitCode = 1
-    } else if (vergangen > 10 * 60_000) {
+    } else if (vergangen > 15 * 60_000) {
       clearInterval(warte)
-      console.error('Kein Bericht nach 10 Minuten.')
+      console.error('Kein Bericht nach 15 Minuten.')
       spuren()
       process.exitCode = 1
     }
   }, 2000)
 }
 
-try {
-  main()
-} catch (err) {
+main().catch((err) => {
   console.error(err.message)
   process.exit(1)
-}
+})
