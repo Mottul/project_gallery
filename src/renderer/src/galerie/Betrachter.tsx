@@ -1,7 +1,13 @@
 // Betrachter (docs/PLAN.md, „Betrachter“; Entwurf „Betrachter“): Großansicht über bild:// (Kennung,
-// nie Pfad) mit dem Vorschaubild als Platzhalter, Anpassen / 100 % / Mausrad-Zoom am Mauszeiger,
-// Verschieben, Vor/Zurück (Pfeiltasten), Filmstreifen (virtualisiert), Diashow mit Intervall,
-// Vollbild (F11), Info, Papierkorb (Entf – Rückfrage im main). Nachbarbilder werden vorgeladen.
+// nie Pfad) mit dem Vorschaubild als Platzhalter, Anpassen / 100 % / Regler / Mausrad-Zoom am
+// Mauszeiger (sanft), Verschieben, Vor/Zurück (Pfeiltasten), Filmstreifen (virtualisiert), Diashow
+// mit Intervall, Vollbild (F11), Info, Papierkorb (Entf – Rückfrage im main).
+//
+// Kein Moment ohne Bild (Rückmeldung zu 1.5: die Diashow „blitzte“): Das gezeigte Bild bleibt
+// stehen, bis das nächste geladen und dekodiert ist; erst dann tauschen beide in einem Zug. Die
+// Nachbarn werden vorgeladen und dekodiert (Puffer unten) – Chromium nimmt das vorgeladene Bild für
+// dieselbe Adresse wieder, trotz no-store (gemessen, e2e/betrachter.mjs). Die Diashow schaltet erst
+// weiter, wenn das nächste Bild bereit ist.
 // Bewertung, Drehen und das volle Info-Panel (Ort, Histogramm) kommen mit Phase 2.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
@@ -9,26 +15,31 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Loader2,
   Maximize,
   Minimize,
-  Minus,
   Pause,
   Play,
-  Plus,
   Trash2
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '@renderer/lib/api'
 import { datumText, groesseText, zahl } from '@renderer/lib/format'
 import { cn, errorText } from '@renderer/lib/utils'
+import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
 import { bildUrl } from '@shared/bild'
 import type { ImageInfo } from '@shared/types'
 import { Vorschaubild } from './Vorschaubild'
+import { Zoomleiste } from './Zoomleiste'
 
-const ZOOM_SCHRITT = 1.25
-const ZOOM_MAX = 8
 const DIASHOW_INTERVALLE = [2, 3, 5, 10]
 const FILM = 72
+/** Rand über und unter den Bildern im Filmstreifen (Platz für den Rahmen des gewählten) */
+const FILM_RAND = 8
+/** So lange wartet die Diashow höchstens auf das nächste Bild, dann blättert sie trotzdem */
+const DIASHOW_WARTEN_MS = 10_000
+/** Erst nach dieser Zeit erscheint beim Laden eines Bildes ein Hinweis */
+const LADEN_HINWEIS_MS = 300
 
 const QUELLE_TEXT: Record<ImageInfo['takenSource'], string> = {
   exif: 'Kamera (Aufnahmezeit)',
@@ -38,7 +49,64 @@ const QUELLE_TEXT: Record<ImageInfo['takenSource'], string> = {
   'datei-geaendert': 'Datei (geändert) – nicht aus der Kamera'
 }
 
-type Zoom = { art: 'anpassen' } | { art: 'frei'; s: number; x: number; y: number }
+/** sanft = in die neue Stufe gleiten (nicht beim Verschieben und nicht beim Bildwechsel) */
+type Zoom =
+  | { art: 'anpassen'; sanft?: boolean }
+  | { art: 'frei'; s: number; x: number; y: number; sanft?: boolean }
+
+/** Das gezeigte Original: geladen und dekodiert */
+interface Gezeigt {
+  id: number
+  mtime: number
+  name: string
+  w: number
+  h: number
+}
+
+const schluessel = (b: { id: number; mtime: number }): string => `${b.id}:${b.mtime}`
+
+/**
+ * Vorgeladene, dekodierte Originale der Nachbarn. Das Image-Objekt bleibt hier, solange der
+ * Nachbar gebraucht wird – so findet Chromium das Bild für dieselbe Adresse im Speicher.
+ */
+class Bildpuffer {
+  private eintraege = new Map<string, { img: HTMLImageElement; bereit: Promise<boolean> }>()
+
+  /** Lädt und dekodiert die Bilder; alle anderen gibt der Puffer frei. */
+  behalten(bilder: readonly ImageInfo[]): void {
+    const keys = new Set(bilder.map(schluessel))
+    for (const k of this.eintraege.keys()) if (!keys.has(k)) this.eintraege.delete(k)
+    for (const b of bilder) this.holen(b)
+  }
+
+  /** true, sobald das Bild dekodiert ist; false, wenn es nicht geht (defekt, geändert). */
+  bereit(b: ImageInfo): Promise<boolean> {
+    return this.holen(b).bereit
+  }
+
+  leeren(): void {
+    this.eintraege.clear()
+  }
+
+  private holen(b: ImageInfo): { img: HTMLImageElement; bereit: Promise<boolean> } {
+    const k = schluessel(b)
+    let e = this.eintraege.get(k)
+    if (!e) {
+      const img = new Image()
+      img.decoding = 'async'
+      img.src = bildUrl(b.id, b.mtime)
+      e = {
+        img,
+        bereit: img.decode().then(
+          () => true,
+          () => false
+        )
+      }
+      this.eintraege.set(k, e)
+    }
+    return e
+  }
+}
 
 function InfoFeld({ bild }: { bild: ImageInfo }): JSX.Element {
   const zeile = (titel: string, wert: string): JSX.Element => (
@@ -108,14 +176,18 @@ function Filmstreifen({
   useEffect(() => {
     details.anfordern(ids.slice(von, bis))
   }, [ids, von, bis, details])
+  // Höhe aus dem Inhalt: Der Scrollbalken kommt unten dazu, statt die Bilder anzuschneiden
   return (
     <div
       ref={ref}
       role="listbox"
       aria-label="Filmstreifen"
-      className="h-[88px] shrink-0 overflow-x-auto overflow-y-hidden border-t bg-leiste"
+      className="shrink-0 overflow-x-auto overflow-y-hidden border-t bg-leiste"
     >
-      <div className="relative h-full" style={{ width: virt.getTotalSize() }}>
+      <div
+        className="relative"
+        style={{ width: virt.getTotalSize(), height: FILM + 2 * FILM_RAND }}
+      >
         {items.map((it) => {
           const id = ids[it.index]
           const b = details.get(id)
@@ -128,8 +200,8 @@ function Filmstreifen({
               aria-selected={aktuell}
               aria-label={b?.name ?? 'Bild'}
               onClick={() => onWahl(it.index)}
-              className="absolute top-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{ left: it.start + 3, width: FILM, height: FILM }}
+              className="absolute rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ left: it.start + 3, top: FILM_RAND, width: FILM, height: FILM }}
             >
               <Vorschaubild
                 key={b?.mtime}
@@ -169,9 +241,10 @@ export function Betrachter({
   const [index, setIndex] = useState(Math.min(start, ids.length - 1))
   const idRef = useRef<number | null>(ids[start] ?? null)
   const [zoom, setZoom] = useState<Zoom>({ art: 'anpassen' })
-  const [natur, setNatur] = useState<{ w: number; h: number } | null>(null)
+  const [gezeigt, setGezeigt] = useState<Gezeigt | null>(null)
   const [buehne, setBuehne] = useState({ w: 0, h: 0 })
   const [fehler, setFehler] = useState(false)
+  const [laedtLange, setLaedtLange] = useState(false)
   const [info, setInfo] = useState(false)
   const [diashow, setDiashow] = useState(false)
   const [intervall, setIntervall] = useState(3)
@@ -179,9 +252,20 @@ export function Betrachter({
   const [hinweis, setHinweis] = useState<string | null>(null)
   const wurzel = useRef<HTMLDivElement>(null)
   const buehneRef = useRef<HTMLDivElement>(null)
+  const puffer = useRef(new Bildpuffer())
+  useEffect(() => {
+    const p = puffer.current
+    return () => p.leeren()
+  }, [])
 
   const id = ids[index]
   const bild = id === undefined ? undefined : details.get(id)
+  /** Das Bild, das gezeigt werden soll; bis es dekodiert ist, bleibt `gezeigt` stehen */
+  const ziel = bild ? schluessel(bild) : null
+  const zielRef = useRef(ziel)
+  zielRef.current = ziel
+  const gk = gezeigt ? schluessel(gezeigt) : null
+  const bereit = ziel !== null && ziel === gk
 
   // Liste geändert (Papierkorb, Abgleich): beim selben Bild bleiben, sonst an derselben Stelle
   useEffect(() => {
@@ -192,18 +276,42 @@ export function Betrachter({
   }, [ids, onSchliessen])
   useEffect(() => {
     idRef.current = id ?? null
-    setZoom({ art: 'anpassen' })
-    setNatur(null)
-    setFehler(false)
   }, [id])
+  useEffect(() => {
+    setFehler(false)
+  }, [ziel])
 
-  // Details für das Bild und seine Nachbarn; die Nachbarn vorladen
+  // Lädt das neue Bild länger, zeigt eine kleine Anzeige (das alte bleibt solange stehen)
+  useEffect(() => {
+    setLaedtLange(false)
+    if (bereit || fehler || ziel === null) return
+    const t = setTimeout(() => setLaedtLange(true), LADEN_HINWEIS_MS)
+    return () => clearTimeout(t)
+  }, [ziel, bereit, fehler])
+
+  /** Das neue Original ist geladen: dekodieren, dann in einem Zug gegen das alte tauschen. */
+  const geladen = useCallback(async (img: HTMLImageElement, b: ImageInfo): Promise<void> => {
+    await img.decode().catch(() => {})
+    if (zielRef.current !== schluessel(b)) return // inzwischen weitergeblättert
+    setGezeigt({
+      id: b.id,
+      mtime: b.mtime,
+      name: b.name,
+      w: img.naturalWidth,
+      h: img.naturalHeight
+    })
+    setZoom({ art: 'anpassen' })
+  }, [])
+
+  // Details für das Bild und seine Nachbarn; die Nachbarn (die Diashow auch über das Ende hinaus)
+  // vorladen und dekodieren
   useEffect(() => {
     details.anfordern(ids.slice(Math.max(0, index - 2), index + 3))
-    for (const n of [ids[index + 1], ids[index - 1]]) {
-      const b = n === undefined ? undefined : details.get(n)
-      if (b) new Image().src = bildUrl(b.id, b.mtime)
-    }
+    const nachbarn = [index + 1 < ids.length ? index + 1 : 0, index - 1]
+      .filter((i) => i >= 0 && i !== index)
+      .map((i) => details.get(ids[i]))
+      .filter((b): b is ImageInfo => b !== undefined)
+    puffer.current.behalten(bild ? [bild, ...nachbarn] : nachbarn)
   }, [ids, index, details, bild])
 
   useEffect(() => {
@@ -219,12 +327,31 @@ export function Betrachter({
     [ids.length]
   )
 
-  // Diashow: weiter im Intervall, am Ende von vorn
+  // Diashow: steht das Bild (oder ließ es sich nicht zeigen), nach dem Intervall weiter – aber erst,
+  // wenn das nächste dekodiert ist (höchstens DIASHOW_WARTEN_MS); am Ende von vorn. Liste und
+  // Details über Refs: Kommen Details nach, soll das nicht den Takt neu starten.
+  const listeRef = useRef({ ids, details })
+  listeRef.current = { ids, details }
   useEffect(() => {
-    if (!diashow) return
-    const t = setInterval(() => setIndex((i) => (i + 1 < ids.length ? i + 1 : 0)), intervall * 1000)
-    return () => clearInterval(t)
-  }, [diashow, intervall, ids.length])
+    if (!diashow || !(bereit || fehler)) return
+    let vorbei = false
+    const t = setTimeout(() => {
+      const { ids, details } = listeRef.current
+      const n = index + 1 < ids.length ? index + 1 : 0
+      const b = details.get(ids[n])
+      const warten = b
+        ? Promise.race([puffer.current.bereit(b), schlafen(DIASHOW_WARTEN_MS)])
+        : Promise.resolve()
+      // nach dem Warten mit der dann gültigen Liste (Papierkorb, Abgleich)
+      void warten.then(() => {
+        if (!vorbei) setIndex((i) => (i + 1 < listeRef.current.ids.length ? i + 1 : 0))
+      })
+    }, intervall * 1000)
+    return () => {
+      vorbei = true
+      clearTimeout(t)
+    }
+  }, [diashow, intervall, bereit, fehler, index])
 
   useEffect(() => {
     const aendern = (): void => setVollbild(document.fullscreenElement !== null)
@@ -237,21 +364,28 @@ export function Betrachter({
   }, [])
 
   const passend =
-    natur && buehne.w && buehne.h ? Math.min(1, buehne.w / natur.w, buehne.h / natur.h) : 1
+    gezeigt && buehne.w && buehne.h ? Math.min(1, buehne.w / gezeigt.w, buehne.h / gezeigt.h) : 1
   const skala = zoom.art === 'anpassen' ? passend : zoom.s
   const verschoben = zoom.art === 'frei' ? { x: zoom.x, y: zoom.y } : { x: 0, y: 0 }
 
   /** Zoomen um den Punkt (px, py) relativ zur Bühnenmitte – er bleibt unter dem Mauszeiger. */
   const zoomen = useCallback(
     (faktor: number, px = 0, py = 0) => {
-      const s = Math.max(passend / 4, Math.min(ZOOM_MAX, skala * faktor))
+      const s = begrenzen(skala * faktor, passend)
       const k = s / skala
-      setZoom({ art: 'frei', s, x: px - (px - verschoben.x) * k, y: py - (py - verschoben.y) * k })
+      setZoom({
+        art: 'frei',
+        s,
+        x: px - (px - verschoben.x) * k,
+        y: py - (py - verschoben.y) * k,
+        sanft: true
+      })
     },
     [passend, skala, verschoben.x, verschoben.y]
   )
 
-  // Mausrad-Zoom (nicht passiv – sonst ließe sich das Scrollen nicht abfangen)
+  // Mausrad-Zoom (nicht passiv – sonst ließe sich das Scrollen nicht abfangen); stufenlos nach dem
+  // Ausschlag, damit das Touchpad nicht springt
   const zoomenRef = useRef(zoomen)
   zoomenRef.current = zoomen
   useEffect(() => {
@@ -261,7 +395,7 @@ export function Betrachter({
       e.preventDefault()
       const r = el.getBoundingClientRect()
       zoomenRef.current(
-        e.deltaY < 0 ? ZOOM_SCHRITT : 1 / ZOOM_SCHRITT,
+        radFaktor(e.deltaY, e.deltaMode),
         e.clientX - r.left - r.width / 2,
         e.clientY - r.top - r.height / 2
       )
@@ -298,10 +432,11 @@ export function Betrachter({
     }
   }, [id])
 
-  // Tasten (nur solange der Betrachter offen ist)
+  // Tasten (nur solange der Betrachter offen ist; nicht in Auswahl und Regler)
   useEffect(() => {
     const taste = (e: KeyboardEvent): void => {
-      if ((e.target as HTMLElement)?.tagName === 'SELECT') return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'SELECT' || tag === 'INPUT') return
       const weiter: Record<string, () => void> = {
         ArrowRight: () => gehe(index + 1),
         ArrowLeft: () => gehe(index - 1),
@@ -329,6 +464,11 @@ export function Betrachter({
   const knopf =
     'inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40'
 
+  // Ebenen der Bühne: das gezeigte Original und – unsichtbar, bis es dekodiert ist – das neue.
+  // Gleicher Schlüssel = gleiches <img>: Beim Tausch wird das neue nur sichtbar, nicht neu geladen.
+  const alt = gezeigt && !fehler ? gezeigt : null
+  const neu = bild && !bereit && !fehler ? bild : null
+
   return (
     <div
       ref={wurzel}
@@ -353,46 +493,15 @@ export function Betrachter({
             {zahl.format(index + 1)} / {zahl.format(ids.length)}
           </p>
         </div>
-        <div role="group" aria-label="Zoom" className="flex items-center">
-          <button
-            type="button"
-            className={knopf}
-            aria-label="Verkleinern"
-            onClick={() => zoomen(1 / ZOOM_SCHRITT)}
-          >
-            <Minus className="size-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className={knopf}
-            aria-pressed={zoom.art === 'anpassen'}
-            onClick={() => setZoom({ art: 'anpassen' })}
-          >
-            Anpassen
-          </button>
-          <button
-            type="button"
-            className={knopf}
-            aria-pressed={zoom.art === 'frei' && zoom.s === 1}
-            onClick={() => setZoom({ art: 'frei', s: 1, x: 0, y: 0 })}
-          >
-            100 %
-          </button>
-          <button
-            type="button"
-            className={knopf}
-            aria-label="Vergrößern"
-            onClick={() => zoomen(ZOOM_SCHRITT)}
-          >
-            <Plus className="size-4" aria-hidden />
-          </button>
-          <span
-            className="w-12 text-right text-xs tabular-nums text-muted-foreground"
-            aria-label="Zoomstufe"
-          >
-            {Math.round(skala * 100)} %
-          </span>
-        </div>
+        <Zoomleiste
+          skala={skala}
+          passend={passend}
+          angepasst={zoom.art === 'anpassen'}
+          knopf={knopf}
+          onZoom={(s) => zoomen(s / skala)}
+          onFaktor={(f) => zoomen(f)}
+          onAnpassen={() => setZoom({ art: 'anpassen', sanft: true })}
+        />
         <div className="flex items-center gap-1 border-l pl-2">
           <button
             type="button"
@@ -468,48 +577,63 @@ export function Betrachter({
           onMouseDown={ziehen}
           onDoubleClick={() =>
             setZoom(
-              zoom.art === 'anpassen' ? { art: 'frei', s: 1, x: 0, y: 0 } : { art: 'anpassen' }
+              zoom.art === 'anpassen'
+                ? { art: 'frei', s: 1, x: 0, y: 0, sanft: true }
+                : { art: 'anpassen', sanft: true }
             )
           }
         >
-          {bild && (
-            <>
-              {/* Platzhalter: das Vorschaubild, bis das Original da ist */}
-              {!natur && (
-                <Vorschaubild
-                  key={`v${bild.id}:${bild.mtime}`}
-                  bild={bild}
-                  stufe={768}
-                  className="absolute inset-0 size-full bg-transparent"
-                />
-              )}
-              {!fehler && (
-                <img
-                  key={`${bild.id}:${bild.mtime}`}
-                  src={bildUrl(bild.id, bild.mtime)}
-                  alt={bild.name}
-                  draggable={false}
-                  onLoad={(e) =>
-                    setNatur({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
-                  }
-                  onError={() => setFehler(true)}
-                  className={cn(
-                    'absolute left-1/2 top-1/2 max-w-none select-none',
-                    !natur && 'invisible'
-                  )}
-                  style={{
-                    width: natur?.w,
-                    height: natur?.h,
-                    transform: `translate(-50%, -50%) translate(${verschoben.x}px, ${verschoben.y}px) scale(${skala})`
-                  }}
-                />
-              )}
-              {fehler && (
-                <p className="absolute inset-x-0 bottom-6 mx-auto w-fit rounded-md bg-background/90 px-3 py-2 text-sm">
-                  Dieses Bild lässt sich gerade nicht anzeigen – geändert, verschoben oder defekt.
-                </p>
-              )}
-            </>
+          {/* Platzhalter: das Vorschaubild, bis das erste Original da ist (oder statt eines
+              Originals, das sich nicht zeigen lässt) */}
+          {bild && (fehler || !gezeigt) && (
+            <Vorschaubild
+              key={`v${schluessel(bild)}`}
+              bild={bild}
+              stufe={768}
+              className="absolute inset-0 size-full bg-transparent"
+            />
+          )}
+          {[
+            alt && (
+              <img
+                key={schluessel(alt)}
+                src={bildUrl(alt.id, alt.mtime)}
+                alt={alt.name}
+                draggable={false}
+                className={cn(
+                  'absolute left-1/2 top-1/2 max-w-none select-none',
+                  zoom.sanft &&
+                    'transition-transform duration-150 ease-out motion-reduce:transition-none'
+                )}
+                style={{
+                  width: alt.w,
+                  height: alt.h,
+                  transform: `translate(-50%, -50%) translate(${verschoben.x}px, ${verschoben.y}px) scale(${skala})`
+                }}
+              />
+            ),
+            neu && (
+              <img
+                key={schluessel(neu)}
+                src={bildUrl(neu.id, neu.mtime)}
+                alt={neu.name}
+                draggable={false}
+                onLoad={(e) => void geladen(e.currentTarget, neu)}
+                onError={() => setFehler(true)}
+                className="invisible absolute left-1/2 top-1/2 max-w-none select-none"
+              />
+            )
+          ]}
+          {fehler && (
+            <p className="absolute inset-x-0 bottom-6 mx-auto w-fit rounded-md bg-background/90 px-3 py-2 text-sm">
+              Dieses Bild lässt sich gerade nicht anzeigen – geändert, verschoben oder defekt.
+            </p>
+          )}
+          {laedtLange && (
+            <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-xs">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              Lädt …
+            </span>
           )}
           <button
             type="button"
@@ -537,3 +661,5 @@ export function Betrachter({
     </div>
   )
 }
+
+const schlafen = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

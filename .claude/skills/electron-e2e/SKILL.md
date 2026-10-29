@@ -20,6 +20,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `netz.mjs` | lokaler Spion-Server: kein einziger Zugriff während Scan, Ansicht, Export – auch mit Testbildern, die Fremd-URLs enthalten (SVG, XMP) |
 | `originale.mjs` | Prüfsummen aller Testbilder vor/nach den Schritten; nur ausdrücklich geänderte Dateien weichen ab; keine Fremddateien (`_original`, Temp) im Bibliotheksordner |
 | `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Liste, Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
+| `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad) |
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera), fehlende Werte am Ende – „Ohne Standort“ auch absteigend |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
@@ -76,6 +77,18 @@ try {
   Betrachter scheitert, lässt den Dialog über der Galerie liegen: Folgeschritte beginnen mit
   `betrachterZu()`. Ausrichtung lässt sich per CSS nicht abschalten (`image-orientation: none`
   gilt nicht für Bilder fremder Herkunft wie `bild:`) – Gegenprobe über die angezeigten Maße.
+- **„Kein Moment ohne Bild“ prüfen** (1.5+, `betrachter.mjs`): Wächter in der Seite per
+  `MutationObserver` auf dem Betrachter – er läuft nach jedem Commit von React, vor dem Zeichnen –
+  plus `requestAnimationFrame`. Nur mit `requestAnimationFrame` war die Diashow am alten Stand
+  zufällig grün: Ein verdecktes Fenster bekommt kaum Animationsbilder (13 in mehreren Sekunden).
+  Große Originale (4000 × 3000, Rauschen) erzeugt das Skript selbst – an den kleinen Testbildern
+  fällt eine Dekodier-Lücke kaum auf.
+- **Abrufe über eigene Protokolle zählen:** `page.context().newCDPSession(page)`,
+  `Network.enable`, `Network.requestWillBeSent` – `bild://`-Anfragen erscheinen dort wie
+  http-Anfragen. Gemessen: Chromium nimmt ein vorgeladenes Bild für dieselbe Adresse wieder,
+  obwohl die Antwort `no-store` trägt.
+- **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
+  Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
 - **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter
   Windows gelegentlich knapp unter der vollen Millisekunde (Sekunden als Kommazahl) – dann passt
   die Datei nicht mehr zum Index. `(Math.trunc(st.mtimeMs) + 0.5) / 1000` übergeben.

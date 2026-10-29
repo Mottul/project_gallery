@@ -562,7 +562,7 @@ try {
         const name = await angezeigt()
         assert.ok(await waitFor(() => geladen(name), 5_000))
         const stufe = () => betrachter().getByLabel('Zoomstufe').innerText()
-        await betrachter().getByRole('button', { name: '100 %' }).click()
+        await betrachter().getByRole('button', { name: '100 %', exact: true }).click()
         assert.equal(await stufe(), '100 %')
         await betrachter().locator(`img[alt="${name}"]`).hover()
         await ctx.page.mouse.wheel(0, -300)
@@ -570,9 +570,11 @@ try {
           await waitFor(async () => parseInt(await stufe(), 10) > 100, 3_000),
           await stufe()
         )
-        await betrachter().getByRole('button', { name: 'Anpassen' }).click()
+        await betrachter().getByRole('button', { name: 'Anpassen', exact: true }).click()
         assert.equal(
-          await betrachter().getByRole('button', { name: 'Anpassen' }).getAttribute('aria-pressed'),
+          await betrachter()
+            .getByRole('button', { name: 'Anpassen', exact: true })
+            .getAttribute('aria-pressed'),
           'true'
         )
         // Info: Quelle des Datums

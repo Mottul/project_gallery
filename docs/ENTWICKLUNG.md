@@ -173,7 +173,11 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   `bilddienst/vorschau.ts`), gemerkt nur im Arbeitsspeicher. Beide eigenen Protokolle meldet
   `protocols/schemata.ts` einmal vor `app.whenReady` an (`registerSchemesAsPrivileged` darf nur
   einmal laufen). Papierkorb: `library.trash` → `inPapierkorb` in `library.ts` (Rückfrage im main,
-  `shell.trashItem`).
+  `shell.trashItem`). Bildwechsel ohne leeren Moment: Die Bühne hat zwei Ebenen – das gezeigte
+  Original und, unsichtbar, das neue; ist es geladen und dekodiert (`img.decode()`), tauschen beide
+  in einem Zug (gleicher `key` = gleiches `<img>`, kein zweites Laden). Ein kleiner Puffer
+  (`Bildpuffer`) hält die Nachbarn vorgeladen und dekodiert; die Diashow wartet auf ihn. Zoom-
+  Rechnung (Grenzen, Regler, Mausrad) rein in `lib/zoom.ts`, die Leiste in `galerie/Zoomleiste.tsx`.
 
 ## Konventionen
 
@@ -191,7 +195,8 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
 - **E2E** (`e2e/`): `smoke` (Start, Design-Umschalter), `security` (Sandbox, CSP, Navigation,
   Berechtigungen, keine Dateien von außen, IPC-Prüfung), `netz` (Spion-Server bekommt nichts, mit
   Gegenprobe), `galerie` (Ordner, Abgleich, Vorschaubilder samt Cache und „privat“, Oberfläche,
-  Betrachter mit `bild://` und Papierkorb, Neustart, Entfernen, Log ohne Inhalte), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
+  Betrachter mit `bild://` und Papierkorb, Neustart, Entfernen, Log ohne Inhalte), `betrachter`
+  (kein Moment ohne Bild, Vorladen, Filmstreifen, Zoom), `sortieren` (Grundfelder, Reihenfolgen, Oberfläche, kein ExifTool
   nach dem Beenden), `originale` (Prüfsummen vorher/nachher); `paket` nur auf Wunsch (gepackte
   App samt Bilddienst). Jeder Schritt hat ein Zeitlimit von 60 s. Pixel aus `thumb://` und
   Bytes aus `bild://` prüft ein Test im main über `net.fetch` (derselbe Handler) – eine Canvas in
