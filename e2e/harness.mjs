@@ -91,6 +91,19 @@ export async function launchApp({
   )
   if (!shown)
     throw new Error(`Hauptfenster wird nicht angezeigt; Fehler: ${JSON.stringify(errors)}`)
+  // E2E_FENSTER=1024x768: Fenstergröße der CI nachstellen (virtualisierte Ansichten zeigen dann
+  // weniger; so ließ sich in 2.3 ein Fehler nachstellen, der nur in der Windows-CI auftrat)
+  const fenster = /^(\d+)x(\d+)$/.exec(process.env.E2E_FENSTER ?? '')
+  if (fenster) {
+    await app.evaluate(
+      ({ BrowserWindow }, [w, h]) => {
+        const win = BrowserWindow.getAllWindows().find((x) => x.isVisible())
+        win?.unmaximize()
+        win?.setSize(w, h)
+      },
+      [Number(fenster[1]), Number(fenster[2])]
+    )
+  }
   return {
     app,
     page,
@@ -194,6 +207,33 @@ export async function waitFor(fn, ms = 20_000, step = 200) {
     await sleep(step)
   }
   return null
+}
+
+/**
+ * Kachel `name` im virtualisierten Raster der Galerie: scrollt, bis sie im DOM steht, und holt sie
+ * ins Bild. Seit 2.3 schieben Gruppen-Überschriften Kacheln auf kleinen Bildschirmen (CI) aus dem
+ * gezeichneten Bereich – ein Locator allein wartet dann vergeblich.
+ */
+export async function kachel(page, name) {
+  const liste = page.getByRole('listbox', { name: 'Bilder' })
+  const k = liste.getByRole('option', { name, exact: true })
+  if (!(await k.count())) {
+    await liste.evaluate((el) => {
+      el.scrollTop = 0
+    })
+    for (let i = 0; i < 200 && !(await k.count()); i++) {
+      const amEnde = await liste.evaluate((el) => {
+        const vorher = el.scrollTop
+        el.scrollTop += Math.max(100, Math.floor(el.clientHeight * 0.7))
+        return el.scrollTop === vorher
+      })
+      await sleep(50)
+      if (amEnde) break
+    }
+  }
+  if (!(await k.count())) throw new Error(`Kachel „${name}“ nicht im Raster`)
+  await k.scrollIntoViewIfNeeded()
+  return k
 }
 
 /** Wirft den Marker für „Schritt übersprungen“ (wird von runSteps als – gezählt). */

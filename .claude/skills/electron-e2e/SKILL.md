@@ -141,9 +141,13 @@ try {
   Playwright gelegentlich „Resulting promise was garbage collected“).
 - **Beenden testen:** `app.quit()` per `app.evaluate` in `setTimeout`, auf `'exit'` warten; danach
   prüfen, dass kein Bilddienst/ExifTool-Prozess übrig ist.
-- **Die CI-Bildschirme sind klein** (Windows etwa 1024 × 768): vor Mausbewegungen
-  `scrollIntoViewIfNeeded()`; virtualisiertes Raster zeigt dort weniger Kacheln – nie eine
-  feste Zahl sichtbarer Kacheln erwarten.
+- **Die CI-Bildschirme sind klein** (Windows etwa 1024 × 768, abzüglich Taskleiste): vor
+  Mausbewegungen `scrollIntoViewIfNeeded()`; virtualisiertes Raster zeigt dort weniger Kacheln –
+  nie eine feste Zahl sichtbarer Kacheln erwarten. Eine Kachel per Namen immer über
+  `kachel(page, name)` aus dem Harness holen (scrollt, bis sie gezeichnet ist); ein Locator allein
+  wartet vergeblich, sobald sie außerhalb liegt (2.3: Gruppen-Überschriften schoben „Bild 2.jpg“
+  in der Windows-CI hinaus). **Nachstellen:** `E2E_FENSTER=1024x700 npm run e2e:run -- galerie`
+  setzt die Fenstergröße – damit wurde der CI-Fehler lokal rot, der neue Stand grün.
 - **Namen matchen als Teilstring:** `getByRole(…, { name, exact: true })` oder ein genaues Muster.
 - **Windows meldet minimierte Fenster als unsichtbar**; verdeckte Fenster bekommen kein
   `requestAnimationFrame`.

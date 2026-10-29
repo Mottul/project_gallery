@@ -27,6 +27,7 @@ import sharp from 'sharp'
 import { QUADRANTEN } from '../scripts/testbilder.mjs'
 import {
   erwarteteBilder,
+  kachel,
   launchApp,
   runSteps,
   sleep,
@@ -566,7 +567,7 @@ try {
         appendFileSync(link, Buffer.from([0]))
         try {
           assert.equal((await bild(kennung('muenchen.jpg'))).status, 409)
-          await raster().getByRole('option', { name: 'muenchen.jpg', exact: true }).dblclick()
+          await (await kachel(ctx.page, 'muenchen.jpg')).dblclick()
           await betrachter()
             .getByText(/lässt sich gerade nicht anzeigen/)
             .waitFor({ timeout: 5_000 })
@@ -634,7 +635,7 @@ try {
       'Diashow blättert im eingestellten Abstand weiter; Pause hält an',
       async () => {
         await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
-        await raster().getByRole('option', { name: 'Bild 2.jpg', exact: true }).dblclick()
+        await (await kachel(ctx.page, 'Bild 2.jpg')).dblclick()
         await betrachter().waitFor({ timeout: 5_000 })
         await betrachter()
           .getByRole('combobox', { name: 'Intervall der Diashow' })
@@ -879,7 +880,7 @@ try {
         }, papierkorbDir)
         const datei = join(bib.dir, 'namen', 'Bild 10.jpg')
         const vorher = (await zustand()).total
-        await raster().getByRole('option', { name: 'Bild 10.jpg', exact: true }).dblclick()
+        await (await kachel(ctx.page, 'Bild 10.jpg')).dblclick()
         await betrachter().waitFor({ timeout: 5_000 })
         // Modus ist „nur lesen“ (früherer Schritt): nichts passiert, Hinweis
         await ctx.page.keyboard.press('Delete')

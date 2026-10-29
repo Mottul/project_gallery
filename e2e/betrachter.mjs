@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import sharp from 'sharp'
 import {
   erwarteteBilder,
+  kachel,
   launchApp,
   runSteps,
   stubOrdnerDialog,
@@ -56,7 +57,7 @@ async function betrachterZu() {
 }
 async function oeffnen(name) {
   await betrachterZu()
-  await raster().getByRole('option', { name, exact: true }).dblclick()
+  await (await kachel(page, name)).dblclick()
   await betrachter().waitFor({ timeout: 5_000 })
   assert.ok(await waitFor(() => zeigt(name), 10_000), `${name} nicht angezeigt`)
 }
