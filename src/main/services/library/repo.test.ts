@@ -585,6 +585,23 @@ describe('Abfragen', () => {
     ])
   })
 
+  it('Seitenverhältnisse (2.3b): je Kennung in derselben Reihenfolge, unbekannt = 0', () => {
+    const k = mitDateien()
+    db.prepare('UPDATE images SET width = 300, height = 200 WHERE id = ?').run(k['A.jpg'])
+    db.prepare('UPDATE images SET width = 200, height = 300 WHERE id = ?').run(k['c.jpg'])
+    const s = { feld: 'name', richtung: 'auf' } as const
+    const r = repo.kennungenMitGruppen(db, s, undefined, null, 'monat', true, true)
+    expect(r.ids).toEqual(repo.kennungen(db, s))
+    expect(r.gruppen).toEqual([])
+    // A.jpg, b.png (noch ohne Maße), c.jpg
+    expect(r.seiten).toEqual([1.5, 0, 0.667])
+    // ohne Wunsch keine Seitenverhältnisse
+    expect(repo.kennungenMitGruppen(db, s, undefined, null, 'monat').seiten).toBeUndefined()
+    expect(repo.seitenVerhaeltnis(4000, 0)).toBe(0)
+    expect(repo.seitenVerhaeltnis(-1, 5)).toBe(0)
+    expect(repo.seitenVerhaeltnis(30000, 2000)).toBe(15)
+  })
+
   it('Gruppen nach Ordner: je Verzeichnis ein Block, auch wenn Namen dazwischen sortierten', () => {
     const seq = repo.scanBeginnen(db, id)
     repo.stapelSchreiben(

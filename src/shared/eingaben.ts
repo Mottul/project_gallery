@@ -36,6 +36,13 @@ export function pruefeGruppierungStreng(v: unknown): Gruppierung {
   return g
 }
 
+/** Ein Schalter aus dem Renderer: fehlt = aus, sonst nur true/false. */
+export function pruefeSchalterStreng(v: unknown): boolean {
+  if (v === undefined) return false
+  if (typeof v !== 'boolean') throw new Error('Ungültiger Schalter')
+  return v
+}
+
 export function pruefeOrdnerFilterStreng(v: unknown): OrdnerFilter {
   const f = pruefeOrdnerFilter(v)
   if (!f) throw new Error('Ungültiger Ordner-Filter')

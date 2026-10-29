@@ -23,8 +23,8 @@ const api: GalerieApi = {
     setFolderMode: (id, mode) => ipcRenderer.invoke(Channels.librarySetFolderMode, id, mode),
     rescan: (id) => ipcRenderer.invoke(Channels.libraryRescan, id),
     query: (sortierung, filter) => ipcRenderer.invoke(Channels.libraryQuery, sortierung, filter),
-    queryGroups: (sortierung, filter, gruppierung) =>
-      ipcRenderer.invoke(Channels.libraryQueryGroups, sortierung, filter, gruppierung),
+    queryGroups: (sortierung, filter, gruppierung, seiten) =>
+      ipcRenderer.invoke(Channels.libraryQueryGroups, sortierung, filter, gruppierung, seiten),
     details: (ids) => ipcRenderer.invoke(Channels.libraryDetails, ids),
     dirs: () => ipcRenderer.invoke(Channels.libraryDirs),
     trash: (ids) => ipcRenderer.invoke(Channels.libraryTrash, ids),

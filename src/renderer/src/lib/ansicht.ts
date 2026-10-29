@@ -13,11 +13,12 @@ import {
   type Sortierung
 } from '@shared/sortFilter'
 
-export type AnsichtArt = 'kacheln' | 'liste'
+export type AnsichtArt = 'kacheln' | 'blocksatz' | 'liste'
+const ARTEN: readonly AnsichtArt[] = ['kacheln', 'blocksatz', 'liste']
 
 export interface Ansicht {
   art: AnsichtArt
-  /** Kantenlänge der Kacheln in px */
+  /** Kantenlänge der Kacheln bzw. Zeilenhöhe im Blocksatz in px */
   groesse: number
   sortierung: Sortierung
   /** Gruppen-Überschriften (2.3): Stufe für Datumssortierungen; „aus“ blendet sie aus */
@@ -64,9 +65,9 @@ function pruefeAnsicht(v: unknown): Ansicht | null {
   if (!v || typeof v !== 'object') return null
   const { art, groesse, sortierung, gruppierung } = v as Record<string, unknown>
   const s = pruefeSortierung(sortierung)
-  if ((art !== 'kacheln' && art !== 'liste') || typeof groesse !== 'number' || !s) return null
+  if (!ARTEN.includes(art as AnsichtArt) || typeof groesse !== 'number' || !s) return null
   return {
-    art,
+    art: art as AnsichtArt,
     groesse: begrenzeGroesse(groesse),
     sortierung: s,
     // gemerkt vor 2.3 (ohne Gruppen): die Vorgabe

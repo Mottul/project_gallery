@@ -474,18 +474,21 @@ export function abfrage(sortierung: Sortierung, filter?: OrdnerFilter): number[]
 
 /**
  * Kennungen mit Gruppen-Überschriften (2.3): Die Gruppen folgen der Sortierung; ohne Gruppen
- * (Gruppierung „aus“ oder eine Sortierung ohne Gruppen) eine leere Liste.
+ * (Gruppierung „aus“ oder eine Sortierung ohne Gruppen) eine leere Liste. `mitSeiten` (2.3b):
+ * dazu je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt).
  */
 export function abfrageMitGruppen(
   sortierung: Sortierung,
   filter: OrdnerFilter | undefined,
-  gruppierung: Gruppierung
-): { ids: number[]; gruppen: Gruppe[] } {
-  const art = gruppenArt(sortierung.feld)
-  if (!art || gruppierung === 'aus') {
+  gruppierung: Gruppierung,
+  mitSeiten = false
+): { ids: number[]; gruppen: Gruppe[]; seiten?: number[] } {
+  const art = gruppierung === 'aus' ? null : gruppenArt(sortierung.feld)
+  if (!art && !mitSeiten) {
     return { ids: repo.kennungen(db(), sortierung, filter, WINDOWS), gruppen: [] }
   }
-  return repo.kennungenMitGruppen(db(), sortierung, filter, art, gruppierung, WINDOWS)
+  const stufe = gruppierung === 'aus' ? 'monat' : gruppierung
+  return repo.kennungenMitGruppen(db(), sortierung, filter, art, stufe, WINDOWS, mitSeiten)
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer direkten Dateien (Ordnerbaum). */

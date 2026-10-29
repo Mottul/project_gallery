@@ -136,6 +136,30 @@ const speicher = () =>
     return je
   })
 
+/** 4 s lang je Animationsbild 150 px weiterscrollen; Abstände der Bilder (ms) */
+const scrollMessen = () =>
+  ctx.page.evaluate(async () => {
+    const liste = document.querySelector('[role="listbox"][aria-label="Bilder"]')
+    let el = liste
+    while (el && el.scrollHeight <= el.clientHeight + 1) el = el.parentElement
+    if (!el) return null
+    const abstaende = []
+    await new Promise((fertig) => {
+      let start = 0
+      let letzte = 0
+      const schritt = (t) => {
+        if (!start) start = letzte = t
+        else abstaende.push(t - letzte)
+        letzte = t
+        el.scrollTop += 150
+        if (t - start < 4000) requestAnimationFrame(schritt)
+        else fertig()
+      }
+      requestAnimationFrame(schritt)
+    })
+    return { abstaende, hoehe: el.scrollHeight }
+  })
+
 try {
   await runSteps(`Abnahme mit ${ANZAHL.toLocaleString('de-DE')} Bildern`, [
     [
@@ -334,27 +358,7 @@ try {
         await obenauf(true)
         try {
           await sleep(500)
-          const r = await ctx.page.evaluate(async () => {
-            const liste = document.querySelector('[role="listbox"][aria-label="Bilder"]')
-            let el = liste
-            while (el && el.scrollHeight <= el.clientHeight + 1) el = el.parentElement
-            if (!el) return null
-            const abstaende = []
-            await new Promise((fertig) => {
-              let start = 0
-              let letzte = 0
-              const schritt = (t) => {
-                if (!start) start = letzte = t
-                else abstaende.push(t - letzte)
-                letzte = t
-                el.scrollTop += 150
-                if (t - start < 4000) requestAnimationFrame(schritt)
-                else fertig()
-              }
-              requestAnimationFrame(schritt)
-            })
-            return { abstaende, hoehe: el.scrollHeight }
-          })
+          const r = await scrollMessen()
           assert.ok(r, 'kein Scrollbereich gefunden')
           const a = r.abstaende
           ergebnis.scrollen = {
@@ -367,6 +371,56 @@ try {
           assert.ok(a.length > 60, `zu wenige Bilder (verdeckt?): ${a.length}`)
           assert.ok(p(a, 0.95) < 25, JSON.stringify(ergebnis.scrollen))
         } finally {
+          await obenauf(false)
+        }
+      }
+    ],
+    [
+      'Blocksatz (2.3b): Umschalten < 200 ms, Scrollen ohne Ruckeln',
+      async () => {
+        // Seitenverhältnisse aller 50.000 Bilder mit der Abfrage
+        const abfrage = await ctx.page.evaluate(async () => {
+          const t0 = performance.now()
+          const r = await window.api.library.queryGroups(
+            { feld: 'aufnahme', richtung: 'auf' },
+            undefined,
+            'monat',
+            true
+          )
+          return { ms: performance.now() - t0, anzahl: r.seiten?.length ?? 0 }
+        })
+        assert.equal(abfrage.anzahl, ANZAHL)
+        await obenauf(true)
+        try {
+          const umschalten = await ctx.page.evaluate(async () => {
+            const knopf = [...document.querySelectorAll('button')].find(
+              (b) => b.textContent?.trim() === 'Blocksatz'
+            )
+            const t0 = performance.now()
+            knopf.click()
+            for (;;) {
+              const k = document.querySelector(
+                '[role="listbox"][aria-label="Bilder"] [role="option"]'
+              )
+              if (k && !k.querySelector('p')) return performance.now() - t0
+              if (performance.now() - t0 > 5000) return -1
+              await new Promise((r) => setTimeout(r, 2))
+            }
+          })
+          await sleep(500)
+          const r = await scrollMessen()
+          assert.ok(r, 'kein Scrollbereich gefunden')
+          const a = r.abstaende
+          ergebnis.blocksatz = {
+            abfrageMitSeiten: ms(abfrage.ms),
+            umschalten: ms(umschalten),
+            scrollen: { bilder: a.length, p95: ms(p(a, 0.95)), max: ms(Math.max(...a)) }
+          }
+          assert.ok(umschalten >= 0 && umschalten < 200, JSON.stringify(ergebnis.blocksatz))
+          assert.ok(a.length > 60, `zu wenige Bilder (verdeckt?): ${a.length}`)
+          assert.ok(p(a, 0.95) < 25, JSON.stringify(ergebnis.blocksatz))
+        } finally {
+          await ctx.page.getByRole('button', { name: 'Kacheln', exact: true }).click()
           await obenauf(false)
         }
       }

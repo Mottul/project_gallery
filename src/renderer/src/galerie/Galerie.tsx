@@ -2,7 +2,7 @@
 // ohne Ordner der Einstieg; sonst eine Kopfzeile (gewählter Knoten, Kacheln/Liste, Sortieren,
 // Gruppen, Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
 // dabei nur die Datei-Objekte weiter, den Pfad liest der Preload (Schicht C).
-import { FolderInput, FolderPlus, Images, LayoutGrid, List } from 'lucide-react'
+import { BrickWall, FolderInput, FolderPlus, Images, LayoutGrid, List } from 'lucide-react'
 import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -55,6 +55,7 @@ function Umschalter({ art }: { art: AnsichtArt }): JSX.Element {
   return (
     <div role="group" aria-label="Ansicht" className="flex rounded-md bg-muted p-0.5">
       {knopf('kacheln', 'Kacheln', LayoutGrid)}
+      {knopf('blocksatz', 'Blocksatz', BrickWall)}
       {knopf('liste', 'Liste', List)}
     </div>
   )
@@ -71,7 +72,8 @@ export function Galerie(): JSX.Element | null {
     if (lib && gemerkt && !knoten) knotenWaehlen(null)
   }, [lib, gemerkt, knoten])
   const ansicht = useAnsicht()
-  const k = useKennungen(lib, knoten, ansicht.sortierung, ansicht.gruppierung)
+  const blocksatz = ansicht.art === 'blocksatz'
+  const k = useKennungen(lib, knoten, ansicht.sortierung, ansicht.gruppierung, blocksatz)
   const details = useDetails(k?.stand ?? 0)
   const sichtbarMelden = useSichtbarMelden()
   const [ziehen, setZiehen] = useState(false)
@@ -159,8 +161,8 @@ export function Galerie(): JSX.Element | null {
   const pfadText =
     ordner && knoten?.pfad ? `${ordner.name} › ${knoten.pfad.split('/').join(' › ')}` : null
   const liest = lib.folders.some((f) => f.status === 'liest')
-  // neu beim Wechsel von Ordner, Sortierung oder Gruppen: oben anfangen
-  const schluessel = JSON.stringify([knoten, ansicht.sortierung, ansicht.gruppierung])
+  // neu beim Wechsel von Ordner, Sortierung, Gruppen oder Kacheln/Blocksatz: oben anfangen
+  const schluessel = JSON.stringify([knoten, ansicht.sortierung, ansicht.gruppierung, blocksatz])
 
   return (
     <div className="relative flex h-full flex-col" {...zieh}>
@@ -174,7 +176,7 @@ export function Galerie(): JSX.Element | null {
           <Umschalter art={ansicht.art} />
           <Sortierwahl />
           <Gruppenwahl />
-          {ansicht.art === 'kacheln' && (
+          {ansicht.art !== 'liste' && (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               Größe
               <input
@@ -199,18 +201,22 @@ export function Galerie(): JSX.Element | null {
       {k &&
         !k.fehler &&
         k.ids.length > 0 &&
-        (ansicht.art === 'kacheln' ? (
-          <Raster
-            key={schluessel}
-            ids={k.ids}
-            gruppen={k.gruppen}
-            details={details}
-            groesse={ansicht.groesse}
-            onGroesse={(px) => ansichtAendern({ groesse: px })}
-            onSichtbar={sichtbarMelden}
-            onOeffnen={setBetrachter}
-            fokusId={fokusId}
-          />
+        (ansicht.art !== 'liste' ? (
+          // Blocksatz erst mit den Seitenverhältnissen (die Antwort kommt nach dem Umschalten)
+          (!blocksatz || k.seiten) && (
+            <Raster
+              key={schluessel}
+              ids={k.ids}
+              gruppen={k.gruppen}
+              seiten={blocksatz ? k.seiten : undefined}
+              details={details}
+              groesse={ansicht.groesse}
+              onGroesse={(px) => ansichtAendern({ groesse: px })}
+              onSichtbar={sichtbarMelden}
+              onOeffnen={setBetrachter}
+              fokusId={fokusId}
+            />
+          )
         ) : (
           <Liste
             key={schluessel}

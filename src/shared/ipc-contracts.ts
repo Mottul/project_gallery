@@ -63,12 +63,16 @@ export interface GalerieApi {
     /** Kennungen aller vorhandenen Dateien, geordnet (einmal je Sortierung); wahlweise nur ein
      *  Bibliotheksordner bzw. ein Unterordner samt allem darunter */
     query(sortierung: Sortierung, filter?: OrdnerFilter): Promise<number[]>
-    /** Wie query, dazu die Gruppen-Überschriften (folgen der Sortierung; „aus“ = keine) */
+    /**
+     * Wie query, dazu die Gruppen-Überschriften (folgen der Sortierung; „aus“ = keine) und mit
+     * `seiten` je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt)
+     */
     queryGroups(
       sortierung: Sortierung,
       filter: OrdnerFilter | undefined,
-      gruppierung: Gruppierung
-    ): Promise<{ ids: number[]; gruppen: Gruppe[] }>
+      gruppierung: Gruppierung,
+      seiten?: boolean
+    ): Promise<{ ids: number[]; gruppen: Gruppe[]; seiten?: number[] }>
     /** Details zu höchstens 1000 Kennungen (sichtbarer Ausschnitt), ohne Pfade */
     details(ids: number[]): Promise<ImageInfo[]>
     /** Unterordner je Bibliotheksordner mit Anzahl (Ordnerbaum) */

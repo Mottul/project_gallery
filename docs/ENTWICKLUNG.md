@@ -202,6 +202,11 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   bauen daraus Zeilen (`lib/zeilen.ts`: Kopfzeile, dann Bildzeilen; jede Gruppe in neuer Zeile).
   Die Höhen für den Virtualisierer und die Geometrie des Rahmens kommen aus demselben Feld der
   oberen Kanten – getrennt gerechnet liefen sie mit jeder Überschrift auseinander.
+- **Blocksatz (2.3b):** dieselbe Raster-Komponente; mit `seiten` (je Kennung Breite durch Höhe
+  aus `library.queryGroups(…, true)`) baut sie die Zeilen mit `lib/blocksatz.ts` statt
+  `zeilenBilden`: Zeilen samt Höhe und Breite je Bild. Höhen für den Virtualisierer, Lage der
+  Kacheln und die Rahmen-Geometrie kommen aus denselben Zeilen (`plaetze` in `Raster.tsx`).
+  Die Galerie zeigt den Blocksatz erst, wenn die Seitenverhältnisse da sind.
 - **Orte (2.2):** Die Ortsdaten liegen im Repository (`resources/geo/`, gebaut mit
   `npm run orte:bauen` aus GeoNames, selten und mit eigenem PR – GeoNames ändert sich täglich,
   eine feste Prüfsumme der Quelle ginge nicht). Der Bilddienst lädt sie beim ersten Bedarf,

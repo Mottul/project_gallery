@@ -4,6 +4,7 @@ import {
   pruefeKennung,
   pruefeKennungen,
   pruefeOrdnerFilterStreng,
+  pruefeSchalterStreng,
   pruefeOrdnerModus,
   pruefePfade,
   pruefeSortierungStreng
@@ -53,11 +54,12 @@ export function registerLibraryHandlers(): void {
   handle(Channels.libraryQuery, (_e, s, f) =>
     abfrage(pruefeSortierungStreng(s), f === undefined ? undefined : pruefeOrdnerFilterStreng(f))
   )
-  handle(Channels.libraryQueryGroups, (_e, s, f, g) =>
+  handle(Channels.libraryQueryGroups, (_e, s, f, g, seiten) =>
     abfrageMitGruppen(
       pruefeSortierungStreng(s),
       f === undefined || f === null ? undefined : pruefeOrdnerFilterStreng(f),
-      pruefeGruppierungStreng(g)
+      pruefeGruppierungStreng(g),
+      pruefeSchalterStreng(seiten)
     )
   )
   handle(Channels.libraryDetails, (_e, ids) => bildDetails(pruefeKennungen(ids, DETAILS_MAX)))

@@ -19,6 +19,7 @@ export function Vorschaubild({
   stufe = 256,
   passend = 'contain',
   groesse,
+  hoehe,
   className
 }: {
   bild: ImageInfo | undefined
@@ -27,6 +28,8 @@ export function Vorschaubild({
   passend?: 'cover' | 'contain'
   /** Kantenlänge in px (quadratisch); ohne = Größe aus `className` */
   groesse?: number
+  /** abweichende Höhe in px (Blocksatz: `groesse` ist dann die Breite) */
+  hoehe?: number
   className?: string
 }): JSX.Element {
   const [fehlt, setFehlt] = useState(false)
@@ -36,7 +39,7 @@ export function Vorschaubild({
       className={cn('flex items-center justify-center overflow-hidden bg-muted', className)}
       style={{
         ...(farbe ? { backgroundColor: farbe } : {}),
-        ...(groesse ? { width: groesse, height: groesse } : {})
+        ...(groesse ? { width: groesse, height: hoehe ?? groesse } : {})
       }}
     >
       {bild &&

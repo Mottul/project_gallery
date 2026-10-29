@@ -19,7 +19,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `security.mjs` | Sandbox, keine Navigation/neuen Fenster, Berechtigungen, `thumb://`/`bild://` mit erfundener Kennung, `..`, Symlink nach außen |
 | `netz.mjs` | lokaler Spion-Server: kein einziger Zugriff während Scan, Ansicht, Export – auch mit Testbildern, die Fremd-URLs enthalten (SVG, XMP) |
 | `originale.mjs` | Prüfsummen aller Testbilder vor/nach den Schritten; nur ausdrücklich geänderte Dateien weichen ab; keine Fremddateien (`_original`, Temp) im Bibliotheksordner |
-| `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Liste, Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
+| `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Blocksatz/Liste (Seitenverhältnis, bündige Zeilen, Rahmen), Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
 | `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad) |
 | `ueberwachen.mjs` | Änderungen von außen ohne „Neu einlesen“ (dazu, geändert, gelöscht), umbenannter Unterordner behält Kennungen und Vorschaubilder, 120 Dateien auf einmal, Versteckte draußen, Bibliotheksordner weg und wieder da (Fokus), UNC-Pfad `\\localhost\C$\…` periodisch, Log ohne Namen |
 | `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
@@ -124,6 +124,10 @@ try {
   Spaltenzahl: Zeilen nach `getBoundingClientRect().top` bilden, nie `index / spalten` rechnen.
   Geometrie-Tests (Rahmen) knapp an Kanten enden lassen (± 3 px) – großzügige Ziele lassen eine
   um eine Überschrift (40 px) verschobene Rechnung durch (Gegenprobe 2.3).
+- **Blocksatz** (2.3b): Kacheln ohne Text darunter; die Lage einer Kachel ist die Box ihres
+  ersten Kindes (das Bild). Erwartungen aus dem Gezeichneten ableiten (Rahmen: was die Box
+  schneidet) und mit den Maßen aus `library.details` vergleichen (Seitenverhältnis begrenzt auf
+  1:3 … 3:1). Am Ende auf Kacheln zurückschalten – spätere Schritte erwarten Text unter den Kacheln.
 - **Sichtbares Raster:** neue Dateien stehen je nach Sortierung unten (virtualisiert) – „ist da“
   über die Statusleiste („N Bilder“) oder die Brücke prüfen, nicht über eine Kachel.
 

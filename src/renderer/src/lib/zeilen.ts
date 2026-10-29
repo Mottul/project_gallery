@@ -1,15 +1,23 @@
 // Zeilen für Raster und Liste mit Gruppen-Überschriften (Phase 2.3) – rein, getestet in
 // zeilen.test.ts. Je Gruppe eine Kopfzeile, dann ihre Bilder in Zeilen zu `spalten` Stück (die
 // Liste nimmt 1); eine Gruppe beginnt immer in einer neuen Zeile. Ohne Gruppen nur Bildzeilen.
+// Der Blocksatz (2.3b, `blocksatz.ts`) baut dieselben Zeilen, dazu Höhe und Breiten je Bild.
 
 import type { Gruppe } from '@shared/gruppen'
 
 export type Zeile =
   | { art: 'kopf'; von: number; titel: string; anzahl: number }
-  | { art: 'bilder'; von: number; bis: number }
+  | {
+      art: 'bilder'
+      von: number
+      bis: number
+      /** nur Blocksatz: Höhe der Bilder dieser Zeile und Breite je Bild (px) */
+      hoehe?: number
+      breiten?: readonly number[]
+    }
 
 /** Passen die Gruppen lückenlos zu den Kennungen? Sonst ohne Überschriften (nie Bilder verlieren). */
-function passend(anzahl: number, gruppen: readonly Gruppe[]): boolean {
+export function gruppenPassend(anzahl: number, gruppen: readonly Gruppe[]): boolean {
   let erwartet = 0
   for (const g of gruppen) {
     if (g.von !== erwartet || g.anzahl < 1) return false
@@ -19,7 +27,7 @@ function passend(anzahl: number, gruppen: readonly Gruppe[]): boolean {
 }
 
 export function zeilenBilden(anzahl: number, gruppen: readonly Gruppe[], spalten: number): Zeile[] {
-  const mitKopf = gruppen.length > 0 && passend(anzahl, gruppen)
+  const mitKopf = gruppen.length > 0 && gruppenPassend(anzahl, gruppen)
   const bereiche = mitKopf ? gruppen : [{ titel: '', von: 0, anzahl }]
   const breite = Math.max(1, Math.floor(spalten))
   const out: Zeile[] = []
