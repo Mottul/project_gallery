@@ -127,6 +127,28 @@ describe('Index-Datenbank', () => {
     db.close()
   })
 
+  it('Version 4 → 5: alles wird nachgelesen (Ort-Feld), Ort-Spalten, kv, Indizes je Richtung', () => {
+    const db = new Database(':memory:')
+    migrieren(db, 4)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    db.prepare(
+      "INSERT INTO images (folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime, meta_read_at) VALUES (1, 'a.jpg', 'a.jpg', 'a.jpg', 'a.jpg', 'jpg', 1, 1, 5)"
+    ).run()
+    migrieren(db)
+    expect(
+      db.prepare('SELECT meta_read_at, place_name, place_source, place_missing FROM images').get()
+    ).toEqual({ meta_read_at: null, place_name: null, place_source: null, place_missing: 1 })
+    db.prepare("INSERT INTO kv (key, value) VALUES ('orte_stand', 'x')").run()
+    const indizes = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'images_ort%'")
+      .pluck()
+      .all()
+    expect(indizes.sort()).toEqual(['images_ort', 'images_ort_ab'])
+    db.close()
+  })
+
   it('Version 3 → 4: alles wird nachgelesen; Fehlende zählen ab jetzt; Stichwörter-Tabelle', () => {
     const db = new Database(':memory:')
     migrieren(db, 3)
