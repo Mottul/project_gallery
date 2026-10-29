@@ -57,7 +57,8 @@ Aus der Anfrage:
 12. **Hell- und Dunkelmodus**, freundlicher hellgrüner Akzent.
 
 **Nicht-Ziele (vorerst):** Cloud, Konten, Synchronisation, RAW-Entwicklung, Ebenen/Retusche wie
-in einem Grafikprogramm, Gesichtserkennung, Video-Schnitt und -Umwandlung.
+in einem Grafikprogramm, Gesichtserkennung, Video-Schnitt und -Umwandlung. (Eine Diashow als Video
+speichern ist kein Schnitt – vorgemerkt in [Phase 7](#phase-7--erweiterungen-nach-bedarf).)
 
 ## Leitplanken
 
@@ -259,12 +260,22 @@ kommen mit Phase 1 dazu).
 
 ### Betrachter
 
-- Doppelklick öffnet; Vollbild (F11), Anpassen / 100 % / Mausrad-Zoom am Mauszeiger, Verschieben,
-  Vor/Zurück (Pfeiltasten, auch über Gruppengrenzen), Filmstreifen, Diashow mit Intervall.
+- Doppelklick öffnet; Vollbild (F11), Anpassen / 100 % / Schieberegler / Mausrad-Zoom am
+  Mauszeiger (sanft gleitend, am Touchpad feine Schritte), Verschieben, Vor/Zurück (Pfeiltasten,
+  auch über Gruppengrenzen), Filmstreifen, Diashow mit Intervall.
+- **Kein Moment ohne Bild:** Das gezeigte Bild bleibt stehen, bis das nächste geladen und
+  dekodiert ist; die Diashow schaltet erst weiter, wenn das nächste bereit ist.
+- **Diashow mit Überblenden und Ken-Burns-Effekt** (Phase 2): Übergang Schnitt/Überblenden, Ken
+  Burns aus/automatisch (wechselnd Zoom rein/raus, Hochkant schwenkt senkrecht), Stärke sanft/
+  mittel/stark – als CSS-Animation der beiden Bild-Ebenen. Bahn und Übergänge nach dem
+  Video-Generator der Mottulbox (`shared/videoGenPlan.ts`: `kenBurnsPath`; `transitionCss.ts`),
+  kopiert und angepasst, nicht verknüpft.
 - Info-Panel: Aufnahme, Kamera, Ort, Datei, Beschreibung, „alle Felder“; Histogramm.
 - Schnell bewerten (Tasten 0–5), Farblabel (6–9), drehen (verlustfrei, siehe Stapel), löschen
   (Papierkorb).
-- Vorladen der Nachbarbilder; EXIF-Ausrichtung beachtet Chromium selbst, sharp bei Vorschaubildern.
+- Vorladen und Dekodieren der Nachbarbilder; Chromium nimmt das vorgeladene Bild für dieselbe
+  Adresse wieder, obwohl `bild://` mit `no-store` antwortet (gemessen, E2E `betrachter`).
+  EXIF-Ausrichtung beachtet Chromium selbst, sharp bei Vorschaubildern.
 - Vergleichsansicht (zwei Bilder nebeneinander, gekoppelter Zoom) – Phase 7.
 
 ### Videos
@@ -590,11 +601,14 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | 1.3 ✅ | **Vorschaubilder:** sharp im Bilddienst (halbe Thread-Zahl parallel, `concurrency(1)`, `UV_THREADPOOL_SIZE` passend; Datei erst in den Speicher gelesen – klare Fehlercodes, keine offene Datei), 768 px und daraus 256 px, JPEG 80 bzw. WebP bei Alpha-Kanal, EXIF-Ausrichtung, sRGB; BMP per ffmpeg (`-protocol_whitelist file`); vor dem Lesen: Datei passt zum Index, echter Pfad im Bibliotheksordner; AES-256-GCM-Cache (Zusatzdaten: Bild, Stufe, Größe, Änderungszeit, Verfahren) mit Schlüssel über `safeStorage`; Migration 3 (`color`, Teilindex); Warteschlange mit Vorrang für Abrufe über `thumb://` (lazy geladene Bilder = sichtbare zuerst), zweiter Absturz an einer Datei = defekt; Ordner „privat“ nur im Speicher, Wechsel nach „privat“ und Entfernen löschen die Cache-Dateien sofort | `galerie` (Bilder erscheinen, Ausrichtung pixelgenau, Cache verschlüsselt, „privat“, Neustart ohne Neuerzeugen, Entfernen ohne Reste, Log ohne Inhalte), `security` (`thumb://`), `paket` (Bilddienst im Paket); Labortest `vorschau.lab.test.ts` |
 | 1.4 ✅ | **Galerie-Oberfläche** nach dem Entwurf: Ordnerbaum („Alle Bilder“, Bibliotheksordner mit Unterordnern und Anzahl, Filter auf Ordner samt allem darunter), virtualisiertes Raster (`@tanstack/react-virtual`; Kacheln füllen die Breite, Größenregler 80–320 px und Strg + Mausrad), Liste/Details (wählbare Spalten, Sortieren per Überschrift), Ansicht/Größe/Sortierung je Ordner gemerkt, Auswahl wie im Explorer (Klick, Strg, Umschalt, Strg+A, Esc, Rahmen), Statusleiste mit Anzahl, Auswahl und Summe; der Renderer meldet den sichtbaren Ausschnitt (Vorschau-Vorrang); **neu auf Wunsch: Ordner per Drag & Drop** aus dem Explorer (Pfad liest der Preload aus dem gezogenen Datei-Objekt) | `galerie` (Baum, Auswahl, Rahmen, Größe, Liste, Ansicht je Ordner, echter Drop über das DevTools-Protokoll, 600 Bilder virtualisiert, untergeschobene Datei abgelehnt) |
 | 1.5 ✅ | **Betrachter:** `bild://id/<kennung>` (Original mit Range-Anfragen, TIFF im Bilddienst umgerechnet, Prüfung wie beim Vorschaubild, siehe „Protokolle“); Betrachter als Dialog über der Galerie (Doppelklick oder Enter, Esc zurück – das zuletzt gezeigte Bild bleibt gewählt): Vorschau 768 als Platzhalter, Anpassen / 100 % / Mausrad am Zeiger / Verschieben / Doppelklick, Vor/Zurück (Pfeile, Pos1/Ende), virtualisierter Filmstreifen, Diashow (2–10 s), Vollbild (F11), Info (Aufnahme mit Quelle des Datums, Kamera, Datei), Nachbarn vorgeladen; **Papierkorb** (Entf): Rückfrage im main mit Namen, nie in Ordnern „nur lesen“, nach der Rückfrage frischer Stand aus dem Index, je Datei Prüfung (mit Zeitlimit) und `shell.trashItem`, erst danach Index-Zeile und Vorschaubilder weg; geht der Papierkorb nicht (Netzlaufwerk), bleibt alles, wie es ist – endgültiges Löschen mit eigener Rückfrage ist noch offen | `galerie` (Blättern, Filmstreifen, `bild://` byte-gleich, Range, TIFF, Typ nach Inhalt, geänderte Datei 409, Zoom, Ausrichtung, Info, Diashow, Papierkorb), `security` (`bild://`), `originale` (jedes Bild einmal über `bild://`); Unit `anzeige.test.ts`, `library.test.ts` (Papierkorb), Labortest der Umrechnung |
+| 1.5+ ✅ | **Feinschliff Betrachter** nach eigener Probe mit Fotos (29.10.2026): Diashow und Blättern ohne „Blitzer“ (zwei Ebenen: das alte Bild bleibt, bis das neue dekodiert ist; Diashow wartet auf das nächste), Filmstreifen nicht mehr vom Scrollbalken angeschnitten, Zoom mit Schieberegler (logarithmisch), Stufen-Menü an der Prozentzahl, sanftem Übergang und feinen Touchpad-Schritten (`lib/zoom.ts`). Die Anordnung der Werkzeugleiste bleibt vorerst, wie sie ist | `betrachter` (kein Moment ohne Bild beim Blättern und in der Diashow – auch bei 4000 × 3000 –, Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom; Gegenprobe am alten Stand rot); Unit `zoom.test.ts` |
 | 1.6 | **Überwachen und Abnahme:** `fs.watch` mit Abgleich, Netzlaufwerke periodisch; Messung mit 50.000 Bildern; Sandbox-Abnahme mit Testbildern | alle |
 
 ### Phase 2 – Metadaten lesen, Filtern, Suchen
 
 - Vollständiges Lesen per ExifTool, Info-Panel, „alle Felder“.
+- Diashow mit Überblenden und Ken-Burns-Effekt (siehe [Betrachter](#betrachter)); nur im
+  Renderer, die zwei Bild-Ebenen dafür gibt es seit 1.5+.
 - Offline-Ortsnamen (GeoNames, Lizenz CC BY 4.0 – Hinweis in „Über“) und **Sortieren nach Ort
   (A–Z)** mit Gruppen.
 - Sortieren nach allen weiteren Feldern; Gruppieren (Tag/Monat/Jahr, Ordner, Kamera, Ort);
@@ -656,6 +670,24 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 Sortieren nach Entfernung zu einem Ort, Karte offline (Natural-Earth-Grundkarte), Duplikate
 (exakt per Hash, ähnlich per Wahrnehmungs-Hash), GPX-Zuordnung, Vergleichsansicht,
 Dateizuordnung, portable Variante.
+
+**Diashow als Video speichern** (Wunsch 29.10.2026, nach Phase 6 – Clips brauchen die Videos):
+aus der Auswahl ein Video mit Reihenfolge, Anzeigedauer, Übergängen, Ken Burns und Musik – der
+Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: in Stücken rechnen,
+`xfade`, concat, Ton getrennt), kopiert und angepasst. Bedingungen und offene Punkte:
+
+- Kein Schnittprogramm (Nicht-Ziel bleibt): je Clip höchstens ein Ausschnitt Start/Ende.
+- **Labor zuerst:** Das gebündelte ffmpeg ist ein LGPL-Build – ohne `libx264` und ohne den Filter
+  `perspective`, mit dem die Mottulbox Ken Burns rechnet (geprüft 29.10.2026 mit n9.0.2). Da sind:
+  `zoompan` (ganze Pixel, ruckelt – vorher hochskalieren?), H.264 über `libopenh264`, Media
+  Foundation (`h264_mf`) oder die Grafikkarte (`h264_nvenc`/`_qsv`/`_amf`), AV1 (`libsvtav1`),
+  VP9, AAC. Ken-Burns-Qualität, Geschwindigkeit und Lizenz im Labor vergleichen (Skill `bild-labor`).
+- Leitplanken: liest nur (Originale bleiben), schreibt nur die neue Datei in einen gewählten
+  Ordner, ohne Metadaten der Quellen (kein Standort, Schicht E); Zwischenstücke im lokalen
+  Datenordner, danach gelöscht; Abbrechen ohne halbe Dateien; ffmpeg nur mit
+  `-protocol_whitelist file`.
+- Vorschau live mit derselben Ken-Burns-Bahn wie die Diashow aus Phase 2 – eine reine Funktion für
+  Vorschau und Datei.
 
 ## Tests und Qualität
 

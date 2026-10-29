@@ -12,7 +12,8 @@ Windows-Sandbox. **Phase 1 läuft** (Bibliothek und Galerie) in den Teilschritte
 Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfelder per ExifTool,
 Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`), 1.4 (Galerie-Oberfläche:
 Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop) und 1.5 (Betrachter,
-`bild://`, Papierkorb) sind umgesetzt. Grundlage ist
+`bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) sind
+umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -84,7 +85,8 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   (`services/protocols/thumb.ts`); Ordner „privat“ nur im Arbeitsspeicher.
 - **Betrachter:** `renderer/src/galerie/Betrachter.tsx`; Original über `bild://id/<kennung>`
   (`services/protocols/bild.ts`, Nachschlagen und Prüfen in `library/anzeige.ts`, TIFF als
-  Umrechnung aus dem Bilddienst, nur im Arbeitsspeicher). Eigene Protokolle nur in
+  Umrechnung aus dem Bilddienst, nur im Arbeitsspeicher); Bildwechsel über zwei Ebenen (das alte
+  Bild bleibt, bis das neue dekodiert ist), Zoom rein in `lib/zoom.ts`. Eigene Protokolle nur in
   `protocols/schemata.ts` anmelden. Vor jedem Lesen einer Nutzerdatei `dateien/pruefeDatei.ts`.
   Papierkorb nur über `inPapierkorb` (`library.ts`: Rückfrage, nie „nur lesen“, `shell.trashItem`).
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),

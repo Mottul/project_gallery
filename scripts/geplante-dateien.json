@@ -24,6 +24,7 @@
   ],
   "anderswo": [
     "convert/runFfmpeg.ts",
+    "docs/PLAN-VIDEO-GENERATOR.md",
     "e2e/ffmpeg-update.mjs",
     "e2e/fotos.mjs",
     "ffmpegUpdatePlan.ts",
@@ -31,6 +32,8 @@
     "player.lab.test.ts",
     "services/ffmpeg/ffmpegUpdate.ts",
     "services/fotos/fotoImage.ts",
+    "shared/videoGenPlan.ts",
+    "transitionCss.ts",
     "update.json"
   ]
 }
