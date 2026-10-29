@@ -9,6 +9,7 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
 import { landName } from '@shared/geo'
+import { gruppenArt, type Gruppe, type Gruppierung } from '@shared/gruppen'
 import { grundfelderAus, type Grundfelder } from '@shared/grundfelder'
 import { Channels } from '@shared/ipc-contracts'
 import { konfliktText, ordnerKonflikt } from '@shared/ordnerPruefen'
@@ -469,6 +470,22 @@ async function metaRunde(): Promise<void> {
 /** Kennungen aller vorhandenen Dateien in der gewünschten Reihenfolge, wahlweise nur eines Ordners. */
 export function abfrage(sortierung: Sortierung, filter?: OrdnerFilter): number[] {
   return repo.kennungen(db(), sortierung, filter, WINDOWS)
+}
+
+/**
+ * Kennungen mit Gruppen-Überschriften (2.3): Die Gruppen folgen der Sortierung; ohne Gruppen
+ * (Gruppierung „aus“ oder eine Sortierung ohne Gruppen) eine leere Liste.
+ */
+export function abfrageMitGruppen(
+  sortierung: Sortierung,
+  filter: OrdnerFilter | undefined,
+  gruppierung: Gruppierung
+): { ids: number[]; gruppen: Gruppe[] } {
+  const art = gruppenArt(sortierung.feld)
+  if (!art || gruppierung === 'aus') {
+    return { ids: repo.kennungen(db(), sortierung, filter, WINDOWS), gruppen: [] }
+  }
+  return repo.kennungenMitGruppen(db(), sortierung, filter, art, gruppierung, WINDOWS)
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer direkten Dateien (Ordnerbaum). */

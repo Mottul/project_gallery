@@ -1,8 +1,9 @@
 // Liste/Details der Galerie: virtualisierte Tabelle mit kleinem Vorschaubild, wählbaren Spalten
-// (gemerkt) und Sortieren per Klick auf die Spaltenüberschrift; Auswahl wie im Raster.
+// (gemerkt) und Sortieren per Klick auf die Spaltenüberschrift; Auswahl wie im Raster,
+// Gruppen-Überschriften (2.3) als eigene Zeilen.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Columns3 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ansichtAendern } from '@renderer/lib/ansicht'
 import {
   auswahlAlle,
@@ -13,11 +14,15 @@ import {
 } from '@renderer/lib/auswahl'
 import { datumText, groesseText, zahl } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
+import { zeilenBilden } from '@renderer/lib/zeilen'
+import type { Gruppe } from '@shared/gruppen'
 import type { SortFeld, Sortierung } from '@shared/sortFilter'
 import type { ImageInfo } from '@shared/types'
 import { Vorschaubild } from './Vorschaubild'
 
 const ZEILE = 40
+/** Höhe einer Gruppen-Überschrift */
+const KOPF = 36
 
 interface Spalte {
   key: string
@@ -55,12 +60,21 @@ const SPALTEN: readonly Spalte[] = [
     key: 'kamera',
     label: 'Kamera',
     breite: 'minmax(8rem,1fr)',
+    sortiert: 'kamera',
     wert: (b) => [b.cameraMake, b.cameraModel].filter(Boolean).join(' ') || '–'
+  },
+  {
+    key: 'ort',
+    label: 'Ort',
+    breite: 'minmax(8rem,1fr)',
+    sortiert: 'ort',
+    wert: (b) => (b.place ? [b.place.name, b.place.country].filter(Boolean).join(', ') : '–')
   },
   {
     key: 'masse',
     label: 'Maße',
     breite: '7.5rem',
+    sortiert: 'aufloesung',
     wert: (b) => (b.width && b.height ? `${zahl.format(b.width)} × ${zahl.format(b.height)}` : '–')
   },
   {
@@ -147,12 +161,15 @@ function Spaltenwahl({
 
 export function Liste({
   ids,
+  gruppen,
   details,
   sortierung,
   onSichtbar,
   onOeffnen
 }: {
   ids: number[]
+  /** Gruppen-Überschriften (leer = keine) */
+  gruppen: readonly Gruppe[]
   details: {
     get: (id: number) => ImageInfo | undefined
     anfordern: (ids: readonly number[]) => void
@@ -167,15 +184,20 @@ export function Liste({
   const spalten = SPALTEN.filter((s) => sichtbar.includes(s.key))
   const raster = `3.5rem ${spalten.map((s) => s.breite).join(' ')}`
 
+  const zeilen = useMemo(() => zeilenBilden(ids.length, gruppen, 1), [ids, gruppen])
   const virt = useVirtualizer({
-    count: ids.length,
+    count: zeilen.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ZEILE,
+    estimateSize: (i) => (zeilen[i]?.art === 'kopf' ? KOPF : ZEILE),
     overscan: 8
   })
+  useEffect(() => {
+    virt.measure()
+  }, [virt, zeilen])
   const items = virt.getVirtualItems()
-  const von = items[0]?.index ?? 0
-  const bis = (items.at(-1)?.index ?? -1) + 1
+  const von = zeilen[items[0]?.index ?? 0]?.von ?? 0
+  const letzte = zeilen[items.at(-1)?.index ?? -1]
+  const bis = letzte ? (letzte.art === 'bilder' ? letzte.bis : letzte.von) : 0
   useEffect(() => {
     const s = ids.slice(von, bis)
     details.anfordern(s)
@@ -201,7 +223,7 @@ export function Liste({
         role="grid"
         aria-label="Bilder"
         aria-multiselectable="true"
-        aria-rowcount={ids.length + 1}
+        aria-rowcount={zeilen.length + 1}
         tabIndex={0}
         className="min-h-0 flex-1 select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onKeyDown={(e) => {
@@ -269,7 +291,32 @@ export function Liste({
         </div>
         <div className="relative w-full" style={{ height: virt.getTotalSize() }}>
           {items.map((z) => {
-            const id = ids[z.index]
+            const zeile = zeilen[z.index]
+            if (zeile.art === 'kopf') {
+              return (
+                <div
+                  key={`kopf-${zeile.von}`}
+                  role="row"
+                  aria-rowindex={z.index + 2}
+                  data-gruppe={zeile.titel}
+                  className="absolute inset-x-0 flex items-end border-b px-4 pb-1.5"
+                  style={{ top: z.start, height: KOPF }}
+                >
+                  <span
+                    role="gridcell"
+                    aria-colspan={spalten.length + 1}
+                    className="flex min-w-0 items-baseline gap-2"
+                  >
+                    <span className="truncate text-sm font-semibold">{zeile.titel}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {zeile.anzahl === 1 ? '1 Bild' : `${zahl.format(zeile.anzahl)} Bilder`}
+                    </span>
+                  </span>
+                </div>
+              )
+            }
+            const index = zeile.von
+            const id = ids[index]
             const b = details.get(id)
             const gewaehlt = auswahl.has(id)
             return (
@@ -285,9 +332,9 @@ export function Liste({
                 )}
                 style={{ top: z.start, height: ZEILE, gridTemplateColumns: raster }}
                 onClick={(e) =>
-                  auswahlKlick(ids, z.index, { strg: e.ctrlKey || e.metaKey, umschalt: e.shiftKey })
+                  auswahlKlick(ids, index, { strg: e.ctrlKey || e.metaKey, umschalt: e.shiftKey })
                 }
-                onDoubleClick={() => onOeffnen(z.index)}
+                onDoubleClick={() => onOeffnen(index)}
               >
                 <span role="gridcell" className="py-1">
                   <Vorschaubild key={b?.mtime} bild={b} groesse={32} className="rounded-sm" />

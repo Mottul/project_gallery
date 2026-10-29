@@ -23,7 +23,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad) |
 | `ueberwachen.mjs` | Änderungen von außen ohne „Neu einlesen“ (dazu, geändert, gelöscht), umbenannter Unterordner behält Kennungen und Vorschaubilder, 120 Dateien auf einmal, Versteckte draußen, Bibliotheksordner weg und wieder da (Fokus), UNC-Pfad `\\localhost\C$\…` periodisch, Log ohne Namen |
 | `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
-| `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera), fehlende Werte am Ende – „Ohne Standort“ auch absteigend |
+| `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |
@@ -119,6 +119,11 @@ try {
 - **Lange Messungen:** `runSteps` hat 60 s je Schritt; drittes Element `[Name, fn, ms]` für mehr.
   Ein abgelaufener Schritt läuft im Hintergrund weiter (das Zeitlimit hält ihn nicht an) – die
   folgenden Schritte sehen dann eine App, die noch arbeitet (gesehen bei `abnahme50k`).
+- **Gruppen-Überschriften** (2.3) tragen `data-gruppe` (Titel) – im Raster `role="presentation"`,
+  in der Liste eine Zeile (`role="row"`). Mit Gruppen kann eine Kachelzeile kürzer sein als die
+  Spaltenzahl: Zeilen nach `getBoundingClientRect().top` bilden, nie `index / spalten` rechnen.
+  Geometrie-Tests (Rahmen) knapp an Kanten enden lassen (± 3 px) – großzügige Ziele lassen eine
+  um eine Überschrift (40 px) verschobene Rechnung durch (Gegenprobe 2.3).
 - **Sichtbares Raster:** neue Dateien stehen je nach Sortierung unten (virtualisiert) – „ist da“
   über die Statusleiste („N Bilder“) oder die Brücke prüfen, nicht über eine Kachel.
 

@@ -1,6 +1,7 @@
 // Eingaben aus dem Renderer prüfen – rein, getestet in eingaben.test.ts. Auch der eigene Renderer
 // gilt als fremde Eingabe (Skill ipc-kanal): Ungültiges ist ein Fehler, nie still „korrigiert“.
 
+import { pruefeGruppierung, type Gruppierung } from './gruppen'
 import {
   pruefeOrdnerFilter,
   pruefeSortierung,
@@ -27,6 +28,12 @@ export function pruefeSortierungStreng(v: unknown): Sortierung {
   const s = pruefeSortierung(v)
   if (!s) throw new Error('Ungültige Sortierung')
   return s
+}
+
+export function pruefeGruppierungStreng(v: unknown): Gruppierung {
+  const g = pruefeGruppierung(v)
+  if (!g) throw new Error('Ungültige Gruppierung')
+  return g
 }
 
 export function pruefeOrdnerFilterStreng(v: unknown): OrdnerFilter {

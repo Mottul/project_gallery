@@ -2,6 +2,7 @@
 // bereitstellt. Einzige Quelle für main (Handler) und renderer (Aufruf); neue Fläche nach Skill
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
+import type { Gruppe, Gruppierung } from './gruppen'
 import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
   AddFolderResult,
@@ -27,6 +28,7 @@ export const Channels = {
   librarySetFolderMode: 'library:setFolderMode',
   libraryRescan: 'library:rescan',
   libraryQuery: 'library:query',
+  libraryQueryGroups: 'library:queryGroups',
   libraryDetails: 'library:details',
   libraryDirs: 'library:dirs',
   librarySize: 'library:size',
@@ -61,6 +63,12 @@ export interface GalerieApi {
     /** Kennungen aller vorhandenen Dateien, geordnet (einmal je Sortierung); wahlweise nur ein
      *  Bibliotheksordner bzw. ein Unterordner samt allem darunter */
     query(sortierung: Sortierung, filter?: OrdnerFilter): Promise<number[]>
+    /** Wie query, dazu die Gruppen-Überschriften (folgen der Sortierung; „aus“ = keine) */
+    queryGroups(
+      sortierung: Sortierung,
+      filter: OrdnerFilter | undefined,
+      gruppierung: Gruppierung
+    ): Promise<{ ids: number[]; gruppen: Gruppe[] }>
     /** Details zu höchstens 1000 Kennungen (sichtbarer Ausschnitt), ohne Pfade */
     details(ids: number[]): Promise<ImageInfo[]>
     /** Unterordner je Bibliotheksordner mit Anzahl (Ordnerbaum) */

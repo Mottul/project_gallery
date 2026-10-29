@@ -180,8 +180,9 @@ resources/ffmpeg/win/             # gebündeltes ffmpeg/ffprobe (nicht im Git, p
    ohne Namen → ganzer Abgleich. Verschobene/umbenannte Dateien behalten Kennung, Metadaten und
    Vorschaubild. Netzlaufwerke (UNC, auch verbundene Laufwerke) periodisch (5 min) und beim Fokus;
    nicht erreichbare Ordner alle 30 s und beim Fokus. Abgleich beim Start wie bisher.
-6. **Renderer** fragt `library.query({ sortierung, filter, gruppierung })` → geordnete Liste der
-   Kennungen + Anzahl; Details nur für den sichtbaren Ausschnitt; Bilder über `thumb://id/<kennung>/<stufe>`.
+6. **Renderer** fragt `library.queryGroups(sortierung, filter, gruppierung)` → geordnete Liste
+   der Kennungen + Gruppen-Grenzen (Titel, Anfang, Anzahl; seit 2.3); Details nur für den
+   sichtbaren Ausschnitt; Bilder über `thumb://id/<kennung>/<stufe>`.
 
 ### Index (Skizze)
 
@@ -234,7 +235,11 @@ kommen mit Phase 1 dazu).
 - **Blocksatz** (Justified, Zeilen gleicher Höhe wie in Google Fotos/Lightroom) – Phase 2.
 - **Liste/Details:** Tabelle mit wählbaren, sortierbaren Spalten (Name, Datum, Kamera, Maße,
   Größe, Dauer, Bewertung, Ort …) und kleinem Vorschaubild.
-- **Gruppen-Überschriften** (Tag, Monat, Jahr, Ordner, Kamera, Ort) in allen Ansichten.
+- **Gruppen-Überschriften** in allen Ansichten; sie **folgen der Sortierung** (entschieden
+  29.10.2026): nach Aufnahme- oder Änderungsdatum je Monat (umschaltbar Tag/Monat/Jahr/keine),
+  nach Ort je Ort, nach Kamera, Objektiv, Bewertung, Ordner, Typ je Wert („Ohne Standort“,
+  „Ohne Kamera“ … zuletzt); nach Name, Größe und den Aufnahmewerten (ISO, Blende …) keine. Ein
+  Schalter „Gruppen“ blendet sie aus; gemerkt je Bibliotheksordner wie die Sortierung.
 - Auswahl wie im Explorer (Klick, Strg, Umschalt, Strg+A, Rahmen ziehen), Statusleiste mit
   Anzahl und Summe.
 - Videos tragen eine Marke mit Abspielsymbol und Dauer.
@@ -648,8 +653,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
   Renderer, die zwei Bild-Ebenen dafür gibt es seit 1.5+.
 - Offline-Ortsnamen (GeoNames, Lizenz CC BY 4.0 – Hinweis in „Über“) und **Sortieren nach Ort
   (A–Z)** mit Gruppen.
-- Sortieren nach allen weiteren Feldern; Gruppieren (Tag/Monat/Jahr, Ordner, Kamera, Ort);
-  Blocksatz-Ansicht.
+- Sortieren nach allen weiteren Feldern; Gruppen-Überschriften, die der Sortierung folgen
+  (2.3 ✅); Blocksatz-Ansicht (2.3b).
 - Filterleiste, gespeicherte Ansichten, Volltextsuche.
 - **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet, „Ohne
   Standort“ am Ende in beiden Richtungen).
@@ -660,7 +665,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 |---|---|
 | 2.1 ✅ | **Alle Metadaten lesen und Info-Panel:** Migration 4 (Stichwörter-Tabelle, `gps_alt`, `missing_since`; alle Dateien im Hintergrund nachlesen); Objektiv, Blende, Belichtungszeit, ISO, Brennweite, GPS (Composite vor XMP, 0/0 ohne Höhe = keiner), Bewertung 0–5, Farblabel, Titel/Beschreibung (XMP vor IPTC vor EXIF), Stichwörter aus XMP, IPTC und Windows zusammengeführt – alles mit Grenzen geprüft (`grundfelder.ts`); Info-Panel im Betrachter (`InfoPanel.tsx`, Farblabel auf Deutsch); „alle Felder“ auf Abruf frisch aus der Datei über den Bilddienst (Prüfung wie vor jedem Lesen, ohne Pfade, höchstens 3.000 Felder, `alleFelder.ts`); **Fehlende entfernen** (Menüpunkt mit Rückfrage, automatisch nach 30 Tagen samt Vorschaubildern); Testbibliothek um Objektiv, Belichtung, Beschreibung, Farblabel und IPTC-Stichwörter ergänzt | `sortieren` (alle neuen Felder exakt wie in der Datei, Info-Panel mit „alle Felder“), `galerie` (Fehlende entfernen, Abbrechen behält, Vorschaubilder weg); Gegenprobe am alten Stand rot; Unit `grundfelder.test.ts`, `alleFelder.test.ts`, `repo.test.ts`, `db.test.ts` (Migration 3 → 4), `format.test.ts` |
 | 2.2 ✅ | **Orte offline:** Ortsdaten aus GeoNames `cities1000` mit deutschen Namen aus `alternateNamesV2` (`npm run orte:bauen`; GeoNames erzeugt täglich neu, darum liegt das Ergebnis im Repository: `resources/geo/orte.tsv.gz`, 162.014 Orte, 2,7 MB, Prüfsumme in `orte.json`, Lizenzhinweis `LIZENZ.txt`, im Paket unter `resources/geo`); nächster Ort im Bilddienst (`shared/geo.ts`: Raster aus 1°-Zellen, 50 km, eine mindestens zehnmal größere Stadt im Umkreis √Einwohner × 5 m geht vor – sonst hieße der Eiffelturm „Paris 16 Passy“); Ort-Feld der Metadaten (XMP/IPTC City, Country) hat Vorrang; Ländernamen deutsch über ICU; Migration 5 (Ort, Land, Quelle, `kv` mit dem Stand der Ortsdaten – neuer Stand = Orte neu bestimmen, je Richtung ein Index); **Sortieren nach Ort (A–Z)**, gleichnamige Orte nach Land getrennt, ohne Ort immer am Ende (auch absteigend); Ort im Info-Panel. Gruppen-Überschriften folgen mit 2.3; der Lizenzhinweis in „Über“ mit der Über-Seite | `sortieren` (Ort jeder Testdatei exakt, A–Z und absteigend, ohne Standort am Ende), `paket` (Ortsdaten im Paket); Gegenprobe am alten Stand rot; Unit `geo.test.ts`, `orte.test.ts` (echte Daten: Eiffelturm → Paris, Dom → Köln, Brandenburger Tor → Berlin, München, Wien; verfälschte Datei abgelehnt), `repo.test.ts`, `library.test.ts`, `sortFilter.test.ts`, `grundfelder.test.ts` |
-| 2.3 | **Weitere Sortierfelder und Gruppen-Überschriften** (Tag/Monat/Jahr, Ordner, Kamera, Ort) in Raster und Liste; Blocksatz-Ansicht |
+| 2.3 ✅ | **Weitere Sortierfelder und Gruppen-Überschriften:** Sortieren auch nach Kamera, Objektiv, Bewertung, ISO, Blende, Belichtungszeit, Brennweite, Auflösung und Ordner (ohne eigenen Index, im Speicher sortiert; fehlende Werte immer am Ende); Gruppen folgen der Sortierung (`shared/gruppen.ts`: fester SQL-Ausdruck je Art, Titel deutsch, Grenzen aus einem Durchlauf in `repo.kennungenMitGruppen`); `library.queryGroups` mit geprüfter Gruppierung; Werkzeugleiste „Gruppen“ (Datum: Keine/Tag/Monat/Jahr, sonst an/aus, ohne Gruppen gar nicht da), Vorgabe Monat, je Ordner gemerkt; Überschriften als eigene Zeilen in Raster und Liste (`lib/zeilen.ts`: jede Gruppe beginnt in neuer Zeile; Rahmen-Auswahl und Sprung zum Bild über dieselben Zeilen-Kanten wie das Zeichnen); Liste: Spalte „Ort“ wählbar, Kamera und Maße sortierbar | `sortieren` (weitere Felder, Gruppen exakt aus den Testbildern – Monat, Jahr, Tag, Ort mit „Ohne Standort“ –, Ungültiges abgelehnt, Schalter in Raster und Liste, gemerkt nach dem Neuladen), `galerie` (Rahmen über Überschriften auf wenige Pixel genau; Gegenprobe mit einer Rahmen-Geometrie ohne Überschriften rot), `abnahme50k` (Sortierwechsel mit Gruppen auch für die neuen Felder: Abfrage höchstens 195 ms, Raster höchstens 94 ms – gemessen, während daneben ein anderer E2E-Lauf lief; „Ordner“ war mit `rtrim` das langsamste Feld, 211 ms, direkt in SQLite samt Gruppen jetzt 95 statt 151 ms); Unit `gruppen.test.ts`, `zeilen.test.ts`, `repo.test.ts`, `eingaben.test.ts` |
+| 2.3b | **Blocksatz-Ansicht** (eigener PR, entschieden 29.10.2026): Zeilen gleicher Höhe im Seitenverhältnis, mit denselben Gruppen-Überschriften |
 | 2.4 | **Filterleiste, gespeicherte Ansichten, Volltextsuche** (FTS5) |
 | 2.5 | **Diashow mit Überblenden und Ken Burns** (Wunsch 29.10.2026) |
 

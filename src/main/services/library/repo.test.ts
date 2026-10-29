@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lokalAusMs } from '@shared/dates'
 import { grundfelderAus } from '@shared/grundfelder'
-import { orderBy, SORT_FELDER } from '@shared/sortFilter'
+import { INDEX_FELDER, orderBy, SORT_FELDER } from '@shared/sortFilter'
 import type { GefundeneDatei, OrtWert } from './repo'
 
 vi.mock('../log', () => ({ logLine: vi.fn() }))
@@ -528,9 +528,103 @@ describe('Abfragen', () => {
     }
   })
 
-  it('jede Sortierung nutzt einen Index (kein Umsortieren im Speicher)', () => {
+  it('weitere Felder (2.3): Werte geordnet, fehlende in beiden Richtungen am Ende', () => {
+    const k = mitDateien() // A.jpg, b.png, c.jpg
+    const setze = db.prepare(
+      'UPDATE images SET camera_make = ?, camera_model = ?, rating = ?, width = ?, height = ? WHERE id = ?'
+    )
+    setze.run('Canon', 'R5', 5, 4000, 3000, k['A.jpg'])
+    setze.run('Apple', 'iPhone', 2, 100, 100, k['c.jpg'])
+    // b.png ohne Kamera, Bewertung, Maße
+    const namen = (feld: (typeof SORT_FELDER)[number], richtung: 'auf' | 'ab'): string[] =>
+      repo
+        .kennungen(db, { feld, richtung })
+        .map((i) => Object.keys(k).find((n) => k[n] === i) as string)
+    expect(namen('kamera', 'auf')).toEqual(['c.jpg', 'A.jpg', 'b.png'])
+    expect(namen('kamera', 'ab')).toEqual(['A.jpg', 'c.jpg', 'b.png'])
+    expect(namen('bewertung', 'ab')).toEqual(['A.jpg', 'c.jpg', 'b.png'])
+    expect(namen('aufloesung', 'auf')).toEqual(['c.jpg', 'A.jpg', 'b.png'])
+    expect(namen('objektiv', 'ab')).toHaveLength(3) // keiner hat eins: alle „fehlend“, kein Fehler
+    // Ordner: nach Pfad des Bibliotheksordners, darin nach Pfad der Datei
+    const zweiter = repo.ordnerAnlegen(db, 'C:\\Archiv', true, 1)
+    const seq = repo.scanBeginnen(db, zweiter)
+    repo.stapelSchreiben(db, zweiter, seq, [datei('z.jpg')], true)
+    const ordnerReihe = repo
+      .details(db, repo.kennungen(db, { feld: 'ordner', richtung: 'auf' }))
+      .map((d) => d.name)
+    expect(ordnerReihe[0]).toBe('z.jpg') // c:/archiv vor d:/bilder
+  })
+
+  it('Kennungen mit Gruppen (2.3): ein Durchlauf, Grenzen passen zur Reihenfolge', () => {
+    const k = mitDateien()
+    db.prepare("UPDATE images SET taken_at = '2024-07-01T10:00:00' WHERE id = ?").run(k['A.jpg'])
+    db.prepare("UPDATE images SET taken_at = '2024-07-20T10:00:00' WHERE id = ?").run(k['c.jpg'])
+    db.prepare("UPDATE images SET taken_at = '2025-01-02T10:00:00' WHERE id = ?").run(k['b.png'])
+    const r = repo.kennungenMitGruppen(
+      db,
+      { feld: 'aufnahme', richtung: 'auf' },
+      undefined,
+      'aufnahme',
+      'monat'
+    )
+    expect(r.ids).toEqual(repo.kennungen(db, { feld: 'aufnahme', richtung: 'auf' }))
+    expect(r.gruppen).toEqual([
+      { titel: 'Juli 2024', von: 0, anzahl: 2 },
+      { titel: 'Januar 2025', von: 2, anzahl: 1 }
+    ])
+    const ab = repo.kennungenMitGruppen(
+      db,
+      { feld: 'aufnahme', richtung: 'ab' },
+      { ordner: id, pfad: '' },
+      'aufnahme',
+      'jahr'
+    )
+    expect(ab.gruppen.map((g) => [g.titel, g.anzahl])).toEqual([
+      ['2025', 1],
+      ['2024', 2]
+    ])
+  })
+
+  it('Gruppen nach Ordner: je Verzeichnis ein Block, auch wenn Namen dazwischen sortierten', () => {
+    const seq = repo.scanBeginnen(db, id)
+    repo.stapelSchreiben(
+      db,
+      id,
+      seq,
+      [
+        datei('z.jpg', 101),
+        datei('Urlaub/b.jpg', 102),
+        datei('Urlaub/2024/c.jpg', 103),
+        datei('Urlaub/d.jpg', 104),
+        datei('urlaub-x/e.jpg', 105)
+      ],
+      true
+    )
+    const r = repo.kennungenMitGruppen(
+      db,
+      { feld: 'ordner', richtung: 'auf' },
+      undefined,
+      'ordner',
+      'monat'
+    )
+    expect(repo.details(db, r.ids).map((d) => d.name)).toEqual([
+      'z.jpg',
+      'b.jpg',
+      'd.jpg',
+      'c.jpg',
+      'e.jpg'
+    ])
+    expect(r.gruppen.map((g) => [g.titel, g.anzahl])).toEqual([
+      ['Bilder', 1],
+      ['Bilder › Urlaub', 2],
+      ['Bilder › Urlaub › 2024', 1],
+      ['Bilder › urlaub-x', 1]
+    ])
+  })
+
+  it('die Hauptsortierungen nutzen einen Index (kein Umsortieren im Speicher)', () => {
     mitDateien()
-    for (const feld of SORT_FELDER) {
+    for (const feld of INDEX_FELDER) {
       for (const richtung of ['auf', 'ab'] as const) {
         const plan = (
           db
