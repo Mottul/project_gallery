@@ -127,6 +127,32 @@ describe('Index-Datenbank', () => {
     db.close()
   })
 
+  it('Version 3 → 4: alles wird nachgelesen; Fehlende zählen ab jetzt; Stichwörter-Tabelle', () => {
+    const db = new Database(':memory:')
+    migrieren(db, 3)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    const ein = db.prepare(
+      "INSERT INTO images (folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime, meta_read_at, status) VALUES (1, ?, ?, ?, ?, 'jpg', 1, 1, 5, ?)"
+    )
+    ein.run('a.jpg', 'a.jpg', 'a.jpg', 'a.jpg', 'ok')
+    ein.run('b.jpg', 'b.jpg', 'b.jpg', 'b.jpg', 'fehlt')
+    const vorher = Date.now() - 1000
+    migrieren(db)
+    const rows = db
+      .prepare('SELECT name, meta_read_at, missing_since FROM images ORDER BY name')
+      .all() as { name: string; meta_read_at: number | null; missing_since: number | null }[]
+    expect(rows[0]).toEqual({ name: 'a.jpg', meta_read_at: null, missing_since: null })
+    // fehlende werden nicht nachgelesen
+    expect(rows[1].meta_read_at).toBe(5)
+    expect(rows[1].missing_since).toBeGreaterThanOrEqual(vorher)
+    db.prepare("INSERT INTO keywords (image_id, keyword) VALUES (1, 'Urlaub')").run()
+    db.prepare('DELETE FROM images WHERE id = 1').run()
+    expect(db.prepare('SELECT count(*) FROM keywords').pluck().get()).toBe(0)
+    db.close()
+  })
+
   it('Version 2 → 3: alle Dateien warten auf ihr Vorschaubild, Farbe leer', () => {
     const db = new Database(':memory:')
     migrieren(db, 2)

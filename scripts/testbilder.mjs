@@ -152,9 +152,23 @@ function exifArgs(e) {
     )
   }
   if (e.kamera) a.push(`-Make=${e.kamera.hersteller}`, `-Model=${e.kamera.modell}`)
+  if (e.objektiv) a.push(`-EXIF:LensModel=${e.objektiv}`)
+  if (e.belichtung) {
+    const b = e.belichtung
+    a.push(
+      `-FNumber=${b.blende}`,
+      `-ExposureTime=${b.zeit}`,
+      `-ISO=${b.iso}`,
+      `-FocalLength=${b.brennweite}`
+    )
+  }
   if (e.bewertung !== undefined) a.push(`-XMP-xmp:Rating=${e.bewertung}`)
+  if (e.farblabel) a.push(`-XMP-xmp:Label=${e.farblabel}`)
   if (e.titel) a.push(`-XMP-dc:Title=${e.titel}`)
+  if (e.beschreibung) a.push(`-XMP-dc:Description=${e.beschreibung}`)
   for (const k of e.stichwoerter ?? []) a.push(`-XMP-dc:Subject+=${k}`)
+  // nur in IPTC (ältere Programme) – die Galerie führt beide Listen zusammen
+  for (const k of e.iptcStichwoerter ?? []) a.push(`-IPTC:Keywords+=${k}`)
   if (e.ausrichtung) a.push(`-Orientation#=${e.ausrichtung}`)
   return a
 }
@@ -239,7 +253,11 @@ export async function erzeugeTestbilder(ziel, { gross = false, videos = true } =
       aufnahme: { lokal: '2024-07-14T18:30:05', offset: '+02:00' },
       bewertung: 5,
       titel: 'Altstadt am Abend',
+      beschreibung: 'Blick über die Stadtmauer',
       stichwoerter: ['Urlaub', 'Meer'],
+      farblabel: 'Red',
+      objektiv: 'Galeria 35mm F1.8',
+      belichtung: { blende: 8, zeit: 0.004, iso: 100, brennweite: 35 },
       farbe: '#d97706'
     },
     {
@@ -248,6 +266,7 @@ export async function erzeugeTestbilder(ziel, { gross = false, videos = true } =
       aufnahme: { lokal: '2023-12-24T16:00:00' },
       bewertung: 3,
       stichwoerter: ['Familie', 'Weihnachten'],
+      iptcStichwoerter: ['Weihnachten', 'Winter'],
       farbe: '#2563eb'
     },
     {

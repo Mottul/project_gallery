@@ -188,6 +188,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   (Endung, Größe, Änderungszeit eindeutig): Die alte Zeile übernimmt den neuen Pfad. „change“
   zählt nur für Dateien, deren Größe oder Änderungszeit sich gegenüber dem eigenen Lesen des
   Bilddienstes geändert hat (Windows meldet schon das Lesen).
+- **Metadaten (2.1):** Der Bilddienst liest per ExifTool die Tags aus `GRUNDFELD_TAGS`
+  (`shared/grundfelder.ts` prüft und wählt: XMP vor IPTC vor EXIF, Stichwörter zusammengeführt);
+  `repo.metaSchreiben` schreibt Spalten und die Tabelle `keywords`. Das Info-Panel
+  (`galerie/InfoPanel.tsx`) zeigt die Details; „alle Felder“ fragt `library.allFields` – main
+  schlägt die Kennung nach, der Bilddienst prüft die Datei und liest sie frisch (`alleFelder.ts`,
+  nichts davon im Index). Fehlende Dateien: `missing_since` beim Fehlen, `library.removeMissing`
+  (Rückfrage) bzw. automatisch nach 30 Tagen (`fehlendeAufraeumen` in `library.ts`).
 - **Leistung des main:** Der Client des Bilddienstes arbeitet Nachrichten einzeln ab und gibt
   dazwischen an die Ereignisschleife ab; `stapelSchreiben` schreibt nur Geändertes. Steht die
   Ereignisschleife länger als 250 ms, steht das im Log („[main] Ereignisschleife … ms blockiert“)

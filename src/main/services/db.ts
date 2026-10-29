@@ -85,6 +85,24 @@ const MIGRATIONEN: readonly string[] = [
   ALTER TABLE images ADD COLUMN color TEXT;
   UPDATE images SET thumb_state = NULL;
   CREATE INDEX images_thumb_offen ON images (id) WHERE thumb_state IS NULL;
+  `,
+  // 4 – Phase 2.1: alle Metadaten. Höhe zum Standort, Stichwörter als eigene Tabelle (für Filter
+  // und Gruppen, 2.3/2.4), missing_since = seit wann eine Datei fehlt (nach 30 Tagen fällt sie
+  // samt Vorschaubildern weg; vorhandene fehlende zählen ab jetzt). Alle vorhandenen Dateien zum
+  // Nachlesen vormerken – die neuen Felder kommen im Hintergrund dazu.
+  `
+  ALTER TABLE images ADD COLUMN gps_alt REAL;
+  ALTER TABLE images ADD COLUMN missing_since INTEGER;
+  CREATE TABLE keywords (
+    image_id INTEGER NOT NULL REFERENCES images (id) ON DELETE CASCADE,
+    keyword  TEXT NOT NULL,
+    PRIMARY KEY (image_id, keyword)
+  ) WITHOUT ROWID;
+  CREATE INDEX keywords_keyword ON keywords (keyword);
+  UPDATE images SET missing_since = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+   WHERE status = 'fehlt';
+  CREATE INDEX images_fehlt ON images (missing_since) WHERE status = 'fehlt';
+  UPDATE images SET meta_read_at = NULL WHERE status != 'fehlt';
   `
 ]
 

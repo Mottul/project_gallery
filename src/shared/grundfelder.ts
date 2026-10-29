@@ -1,5 +1,6 @@
 // Grundfelder einer Datei aus der ExifTool-Ausgabe (-json -n -G0) – rein, getestet in
-// grundfelder.test.ts. Die Werte stammen aus fremden Dateien: Typ und Grenzen prüfen, nichts
+// grundfelder.test.ts. Seit 2.1 auch Objektiv, Belichtung, GPS, Bewertung, Farblabel, Titel,
+// Beschreibung und Stichwörter (XMP vor IPTC vor EXIF, Stichwörter aus allen zusammengeführt). Die Werte stammen aus fremden Dateien: Typ und Grenzen prüfen, nichts
 // ungeprüft übernehmen (Review-Checkliste, „Fremde Eingaben“).
 //
 // Breite/Höhe im Index sind die AUFGERICHTETEN Maße (Review-Checkliste, „Ausrichtung“):
@@ -23,6 +24,31 @@ export const GRUNDFELD_TAGS: readonly string[] = [
   '-File:FileTypeExtension',
   '-EXIF:Make',
   '-EXIF:Model',
+  // seit 2.1
+  '-EXIF:LensModel',
+  '-XMP:Lens',
+  '-XMP:LensModel',
+  '-EXIF:FNumber',
+  '-EXIF:ExposureTime',
+  '-EXIF:ISO',
+  '-EXIF:FocalLength',
+  '-Composite:GPSLatitude',
+  '-Composite:GPSLongitude',
+  '-Composite:GPSAltitude',
+  '-XMP:GPSLatitude',
+  '-XMP:GPSLongitude',
+  '-XMP:Rating',
+  '-EXIF:Rating',
+  '-XMP:Label',
+  '-XMP:Title',
+  '-IPTC:ObjectName',
+  '-EXIF:XPTitle',
+  '-XMP:Description',
+  '-IPTC:Caption-Abstract',
+  '-EXIF:ImageDescription',
+  '-XMP:Subject',
+  '-IPTC:Keywords',
+  '-EXIF:XPKeywords',
   // ohne diese beiden erscheinen Lesefehler bei einer Tag-Auswahl gar nicht (Labor 1.2)
   '-ExifTool:Error',
   '-ExifTool:Warning'
@@ -37,6 +63,22 @@ export interface Grundfelder {
   format: string | null
   kameraHersteller: string | null
   kameraModell: string | null
+  objektiv: string | null
+  /** Blendenzahl (f/…) */
+  blende: number | null
+  /** Belichtungszeit in Sekunden */
+  belichtung: number | null
+  iso: number | null
+  /** Brennweite in mm */
+  brennweite: number | null
+  /** Standort in Dezimalgrad (Süd/West negativ); null = keiner (auch 0/0 ohne Höhe) */
+  gps: { breite: number; laenge: number; hoehe: number | null } | null
+  /** 0–5 */
+  bewertung: number | null
+  farblabel: string | null
+  titel: string | null
+  beschreibung: string | null
+  stichwoerter: string[]
   aufnahme: Aufnahme
   /** Lesefehler von ExifTool (Datei leer, nicht lesbar …) */
   fehler: string | null
@@ -53,6 +95,54 @@ function text(v: unknown, max = 64): string | null {
     .replace(/\s+/g, ' ')
     .trim()
   return t ? t.slice(0, max) : null
+}
+
+/** Zahl in [min, max], sonst null (fremde Werte: „inf“, Text, Unsinn) */
+function zahl(v: unknown, min: number, max: number): number | null {
+  if (typeof v !== 'number' && typeof v !== 'string') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= min && n <= max ? n : null
+}
+
+/** Erster brauchbarer Text aus mehreren Quellen (Rangfolge) */
+function ersterText(werte: unknown[], max: number): string | null {
+  for (const v of werte) {
+    const t = text(v, max)
+    if (t) return t
+  }
+  return null
+}
+
+/** Höchstens so viele Stichwörter je Datei, je höchstens so lang */
+const STICHWORT_MAX = 200
+const STICHWORT_LAENGE = 100
+
+/** Stichwörter aus XMP, IPTC und Windows (XPKeywords, „;“-getrennt) – zusammengeführt, ohne Doppelte. */
+function stichwoerterAus(r: Record<string, unknown>): string[] {
+  const roh = [r['XMP:Subject'], r['IPTC:Keywords']].flatMap((v) => (Array.isArray(v) ? v : [v]))
+  const xp = r['EXIF:XPKeywords']
+  if (typeof xp === 'string') roh.push(...xp.split(';'))
+  const out: string[] = []
+  const gesehen = new Set<string>()
+  for (const v of roh) {
+    const t = text(v, STICHWORT_LAENGE)
+    if (!t || gesehen.has(t.toLowerCase())) continue
+    gesehen.add(t.toLowerCase())
+    out.push(t)
+    if (out.length >= STICHWORT_MAX) break
+  }
+  return out
+}
+
+/** Standort: Composite (EXIF mit Ref, vorzeichenrichtig) vor XMP; 0/0 gilt als keiner. */
+function gpsAus(r: Record<string, unknown>): Grundfelder['gps'] {
+  const breite = zahl(r['Composite:GPSLatitude'], -90, 90) ?? zahl(r['XMP:GPSLatitude'], -90, 90)
+  const laenge =
+    zahl(r['Composite:GPSLongitude'], -180, 180) ?? zahl(r['XMP:GPSLongitude'], -180, 180)
+  if (breite === null || laenge === null) return null
+  const hoehe = zahl(r['Composite:GPSAltitude'], -1000, 100_000)
+  if (breite === 0 && laenge === 0 && hoehe === null) return null
+  return { breite, laenge, hoehe }
 }
 
 function kante(v: string | undefined): number | null {
@@ -84,6 +174,26 @@ export function grundfelderAus(
     format: typ ? typ.toLowerCase() : null,
     kameraHersteller: text(r['EXIF:Make']),
     kameraModell: text(r['EXIF:Model']),
+    objektiv: ersterText([r['EXIF:LensModel'], r['XMP:Lens'], r['XMP:LensModel']], 100),
+    blende: zahl(r['EXIF:FNumber'], 0.5, 128),
+    belichtung: zahl(r['EXIF:ExposureTime'], 1e-6, 86_400),
+    iso: (() => {
+      const n = zahl(r['EXIF:ISO'], 1, 10_000_000)
+      return n === null ? null : Math.round(n)
+    })(),
+    brennweite: zahl(r['EXIF:FocalLength'], 0.1, 10_000),
+    gps: gpsAus(r),
+    bewertung: (() => {
+      const n = zahl(r['XMP:Rating'] ?? r['EXIF:Rating'], 0, 5)
+      return n === null ? null : Math.round(n)
+    })(),
+    farblabel: text(r['XMP:Label'], 30),
+    titel: ersterText([r['XMP:Title'], r['IPTC:ObjectName'], r['EXIF:XPTitle']], 500),
+    beschreibung: ersterText(
+      [r['XMP:Description'], r['IPTC:Caption-Abstract'], r['EXIF:ImageDescription']],
+      2000
+    ),
+    stichwoerter: stichwoerterAus(r),
     aufnahme: aufnahmeDatum(
       {
         dateTimeOriginal: r['EXIF:DateTimeOriginal'],

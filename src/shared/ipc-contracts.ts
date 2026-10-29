@@ -10,6 +10,7 @@ import type {
   ImageInfo,
   LibraryDirs,
   LibraryState,
+  MetaFeld,
   SettingsPatch,
   TrashResult
 } from './types'
@@ -32,6 +33,8 @@ export const Channels = {
   libraryVisible: 'library:visible', // Renderer -> main, Einweg: sichtbare Kennungen
   libraryAddDropped: 'library:addDropped',
   libraryTrash: 'library:trash',
+  libraryAllFields: 'library:allFields',
+  libraryRemoveMissing: 'library:removeMissing',
   libraryChanged: 'library:changed' // Event: LibraryState (Ordner, Anzahl, Einlesen)
 } as const
 
@@ -73,6 +76,10 @@ export interface GalerieApi {
     addDropped(files: File[]): Promise<AddFolderResult[]>
     /** Bilder in den Papierkorb – Rückfrage im main, nie in Ordnern „nur lesen“ */
     trash(ids: number[]): Promise<TrashResult>
+    /** „Alle Felder“ eines Bildes, frisch aus der Datei gelesen (Info-Panel); null = nicht lesbar */
+    allFields(id: number): Promise<MetaFeld[] | null>
+    /** Fehlende Dateien eines Ordners aus der Galerie nehmen – Rückfrage im main; Anzahl */
+    removeMissing(folderId: number): Promise<number>
     /** Änderungen (auch Fortschritt beim Einlesen); Rückgabe = Abmelden */
     onChanged(cb: (state: LibraryState) => void): () => void
   }

@@ -122,6 +122,7 @@ export function stapelSchreiben(
       seen_scan    = excluded.seen_scan,
       meta_read_at = CASE WHEN size != excluded.size OR mtime != excluded.mtime THEN NULL ELSE meta_read_at END,
       thumb_state  = CASE WHEN size != excluded.size OR mtime != excluded.mtime THEN NULL ELSE thumb_state END,
+      missing_since = CASE WHEN status = 'fehlt' THEN NULL ELSE missing_since END,
       status       = CASE WHEN size != excluded.size OR mtime != excluded.mtime OR status = 'fehlt'
                           THEN 'ok' ELSE status END,
       taken_offset = CASE WHEN taken_source IS NULL OR taken_source LIKE 'datei-%'
@@ -269,10 +270,13 @@ function abschliessen(
   const umziehen = db.prepare(`
     UPDATE images SET rel_path = @rel_path, rel_key = @rel_key, name = @name,
                       name_sort = @name_sort, seen_scan = @seq,
+                      missing_since = NULL,
                       status = CASE WHEN status = 'fehlt' THEN 'ok' ELSE status END
      WHERE id = @id
   `)
-  const markieren = db.prepare("UPDATE images SET status = 'fehlt' WHERE id = ?")
+  // seit wann sie fehlt: nach 30 Tagen fällt sie weg (fehlendeAelterAls)
+  const jetzt = Date.now()
+  const markieren = db.prepare("UPDATE images SET status = 'fehlt', missing_since = ? WHERE id = ?")
   db.transaction(() => {
     for (const [a, n] of paare) {
       // erst die neue Zeile weg – rel_key ist je Ordner eindeutig
@@ -286,7 +290,7 @@ function abschliessen(
         seq
       })
     }
-    for (const f of fehlend) markieren.run(f.id)
+    for (const f of fehlend) markieren.run(jetzt, f.id)
   })()
   return {
     fehlend: fehlend.length,
@@ -417,16 +421,21 @@ export function metaSchreiben(
   const st = db.prepare(`
     UPDATE images SET
       width = @breite, height = @hoehe, orientation = @ausrichtung, format = @format,
-      camera_make = @kameraHersteller, camera_model = @kameraModell,
+      camera_make = @kameraHersteller, camera_model = @kameraModell, lens = @objektiv,
+      aperture = @blende, exposure = @belichtung, iso = @iso, focal = @brennweite,
+      gps_lat = @gpsBreite, gps_lon = @gpsLaenge, gps_alt = @gpsHoehe,
+      rating = @bewertung, color_label = @farblabel, title = @titel, description = @beschreibung,
       taken_at = @takenAt, taken_offset = @takenOffset, taken_source = @takenSource,
       meta_read_at = @jetzt
     WHERE id = @id AND size = @size AND mtime = @mtime
   `)
+  const stichwoerterWeg = db.prepare('DELETE FROM keywords WHERE image_id = ?')
+  const stichwort = db.prepare('INSERT OR IGNORE INTO keywords (image_id, keyword) VALUES (?, ?)')
   let n = 0
   db.transaction(() => {
     for (const z of zeilen) {
       const f = z.felder
-      n += st.run({
+      const geaendert = st.run({
         id: z.id,
         size: z.size,
         mtime: z.mtime,
@@ -436,11 +445,27 @@ export function metaSchreiben(
         format: f.format,
         kameraHersteller: f.kameraHersteller,
         kameraModell: f.kameraModell,
+        objektiv: f.objektiv,
+        blende: f.blende,
+        belichtung: f.belichtung,
+        iso: f.iso,
+        brennweite: f.brennweite,
+        gpsBreite: f.gps?.breite ?? null,
+        gpsLaenge: f.gps?.laenge ?? null,
+        gpsHoehe: f.gps?.hoehe ?? null,
+        bewertung: f.bewertung,
+        farblabel: f.farblabel,
+        titel: f.titel,
+        beschreibung: f.beschreibung,
         takenAt: f.aufnahme.lokal,
         takenOffset: f.aufnahme.offset,
         takenSource: f.aufnahme.quelle,
         jetzt
       }).changes
+      if (!geaendert) continue
+      n += geaendert
+      stichwoerterWeg.run(z.id)
+      for (const w of f.stichwoerter) stichwort.run(z.id, w)
     }
   })()
   return n
@@ -531,6 +556,18 @@ interface DetailZeile {
   status: ImageInfo['status']
   meta_read_at: number | null
   color: string | null
+  lens: string | null
+  aperture: number | null
+  exposure: number | null
+  iso: number | null
+  focal: number | null
+  gps_lat: number | null
+  gps_lon: number | null
+  gps_alt: number | null
+  rating: number | null
+  color_label: string | null
+  title: string | null
+  description: string | null
 }
 
 /** Details zu Kennungen, in der Reihenfolge der Anfrage; unbekannte fehlen in der Antwort. */
@@ -540,11 +577,21 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
     .prepare(
       `SELECT id, folder_id, name, ext, format, size, mtime, width, height, orientation,
               taken_at, taken_offset, taken_source, camera_make, camera_model, status, meta_read_at,
-              color
+              color, lens, aperture, exposure, iso, focal, gps_lat, gps_lon, gps_alt, rating,
+              color_label, title, description
          FROM images WHERE id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as DetailZeile[]
   const nachId = new Map(rows.map((r) => [r.id, r]))
+  const woerter = new Map<number, string[]>()
+  for (const w of db
+    .prepare(
+      `SELECT image_id, keyword FROM keywords WHERE image_id IN (SELECT value FROM json_each(?))
+        ORDER BY image_id, keyword`
+    )
+    .all(JSON.stringify(ids)) as { image_id: number; keyword: string }[]) {
+    woerter.set(w.image_id, [...(woerter.get(w.image_id) ?? []), w.keyword])
+  }
   return ids.flatMap((id) => {
     const r = nachId.get(id)
     if (!r) return []
@@ -567,7 +614,21 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
         cameraModel: r.camera_model,
         status: r.status,
         metaRead: r.meta_read_at !== null,
-        color: r.color
+        color: r.color,
+        lens: r.lens,
+        aperture: r.aperture,
+        exposure: r.exposure,
+        iso: r.iso,
+        focal: r.focal,
+        gps:
+          r.gps_lat !== null && r.gps_lon !== null
+            ? { lat: r.gps_lat, lon: r.gps_lon, alt: r.gps_alt }
+            : null,
+        rating: r.rating,
+        colorLabel: r.color_label,
+        title: r.title,
+        description: r.description,
+        keywords: woerter.get(r.id) ?? []
       }
     ]
   })
@@ -710,6 +771,27 @@ export function ordnerKennungen(db: DB, folderId: number): number[] {
 /** Alle fertigen Vorschaubilder als offen markieren (neuer Schlüssel: der Cache ist leer). */
 export function vorschauAlleOffen(db: DB): number {
   return db.prepare("UPDATE images SET thumb_state = NULL WHERE thumb_state = 'ok'").run().changes
+}
+
+/**
+ * Kennungen fehlender Dateien – eines Ordners (Menü „Fehlende entfernen“) bzw. aller, die seit
+ * mindestens `vor` (ms seit 1970) fehlen (automatisch nach 30 Tagen). Das Entfernen samt
+ * Vorschaubildern macht library.ts (bilderEntfernen + Cache).
+ */
+export function fehlende(db: DB, auswahl: { ordner: number } | { vor: number }): number[] {
+  return (
+    'ordner' in auswahl
+      ? db
+          .prepare("SELECT id FROM images WHERE folder_id = ? AND status = 'fehlt' ORDER BY id")
+          .pluck()
+          .all(auswahl.ordner)
+      : db
+          .prepare(
+            "SELECT id FROM images WHERE status = 'fehlt' AND missing_since <= ? ORDER BY id"
+          )
+          .pluck()
+          .all(auswahl.vor)
+  ) as number[]
 }
 
 /** Index-Zeilen von Dateien entfernen, die es nicht mehr gibt (Papierkorb); liefert die Zahl. */

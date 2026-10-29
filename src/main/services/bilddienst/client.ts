@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { vorschauEinrichtung } from '../cache/vorschauCache'
 import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
+import type { MetaFeld } from '@shared/types'
 import { logLine } from '../log'
 import type { Meldung } from './beobachter'
 import {
@@ -145,6 +146,7 @@ class Bilddienst {
     if (n.typ === 'fertig') l.resolve({ gefunden: n.gefunden, unlesbar: n.unlesbar })
     else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
     else if (n.typ === 'anzeige-ergebnis') l.resolve(n.ergebnis)
+    else if (n.typ === 'alle-felder-ergebnis') l.resolve(n.felder)
     else if (n.typ === 'beobachtet') l.resolve({ netz: n.netz })
     else l.reject(fehler(n.code, n.meldung))
   }
@@ -202,6 +204,12 @@ class Bilddienst {
         this.kind?.postMessage({ typ: 'abbrechen', auftrag } satisfies AnDienst)
       }
     }
+  }
+
+  /** „Alle Felder“ einer Datei, frisch gelesen (Info-Panel); null = nicht lesbar. */
+  alleFelder(datei: AnzeigeDatei): Promise<MetaFeld[] | null> {
+    return this.auftrag<MetaFeld[] | null>((a) => ({ typ: 'alle-felder', auftrag: a, datei }))
+      .antwort
   }
 
   /** Ordner überwachen (Änderungen kommen über onAenderung); netz = nicht überwacht. */

@@ -8,7 +8,10 @@
 import { realpath } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import sharp from 'sharp'
+import { alleFelderAus } from '@shared/alleFelder'
+import type { MetaFeld } from '@shared/types'
 import { GRUNDFELD_TAGS } from '@shared/grundfelder'
+import { mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
 import { ExifToolPool, leseTags } from '../exiftool/exiftool'
 import type { GefundeneDatei } from '../library/repo'
 import {
@@ -155,6 +158,28 @@ async function anzeige(auftrag: number, datei: AnzeigeDatei): Promise<void> {
   senden({ typ: 'anzeige-ergebnis', auftrag, ergebnis })
 }
 
+/**
+ * „Alle Felder“ einer Datei (Info-Panel): erst dieselbe Prüfung wie vor jedem Lesen, dann
+ * ExifTool mit lesbaren Werten (ohne -n), Gruppen der Familie 1, auch doppelte Tags.
+ */
+async function alleFelder(auftrag: number, datei: AnzeigeDatei): Promise<void> {
+  let felder: MetaFeld[] | null = null
+  try {
+    if (!exiftoolBin) throw Object.assign(new Error('ExifTool fehlt'), { code: 'KEIN_EXIFTOOL' })
+    await mitZeitlimit(pruefeDatei(datei.pfad, datei.ordner, datei.size, datei.mtime), 5000)
+    pool ??= new ExifToolPool(exiftoolBin, poolGroesse())
+    gelesenMerken([datei])
+    const a = await pool.ausfuehren(['-json', '-G1', '-a', '-s', datei.pfad])
+    const liste: unknown = JSON.parse(a.ausgabe || '[]')
+    if (Array.isArray(liste)) felder = alleFelderAus(liste[0])
+  } catch {
+    // nicht lesbar (geändert, fehlt, ExifTool fehlt): felder bleibt null
+  }
+  if (abgebrochen.has(auftrag)) return
+  abgebrochen.delete(auftrag)
+  senden({ typ: 'alle-felder-ergebnis', auftrag, felder })
+}
+
 async function meta(auftrag: number, dateien: MetaDatei[]): Promise<void> {
   try {
     if (!exiftoolBin) throw Object.assign(new Error('ExifTool fehlt'), { code: 'KEIN_EXIFTOOL' })
@@ -192,6 +217,7 @@ port.on('message', (e: { data: AnDienst }) => {
   } else if (n.typ === 'meta') void meta(n.auftrag, n.dateien)
   else if (n.typ === 'vorschau') void vorschau(n.auftrag, n.dateien)
   else if (n.typ === 'anzeige') void anzeige(n.auftrag, n.datei)
+  else if (n.typ === 'alle-felder') void alleFelder(n.auftrag, n.datei)
   else if (n.typ === 'abbrechen') abgebrochen.add(n.auftrag)
   else if (n.typ === 'beenden') {
     for (const b of beobachter.values()) b.schliessen()

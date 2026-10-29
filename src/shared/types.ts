@@ -114,6 +114,30 @@ export interface ImageInfo {
   metaRead: boolean
   /** Durchschnittsfarbe „#rrggbb“ für den Platzhalter, sobald das Vorschaubild entstand */
   color: string | null
+  // seit 2.1 – null, bis ExifTool gelesen hat bzw. wenn die Datei es nicht enthält
+  lens: string | null
+  /** Blendenzahl (f/…) */
+  aperture: number | null
+  /** Belichtungszeit in Sekunden */
+  exposure: number | null
+  iso: number | null
+  /** Brennweite in mm */
+  focal: number | null
+  /** Standort in Dezimalgrad (Süd/West negativ), Höhe in m */
+  gps: { lat: number; lon: number; alt: number | null } | null
+  /** 0–5 */
+  rating: number | null
+  colorLabel: string | null
+  title: string | null
+  description: string | null
+  keywords: string[]
+}
+
+/** Ein Feld aus „alle Felder“ (frisch aus der Datei gelesen, ExifTool-Gruppe und -Name) */
+export interface MetaFeld {
+  gruppe: string
+  name: string
+  wert: string
 }
 
 /** Ergebnis von „In den Papierkorb“ */
