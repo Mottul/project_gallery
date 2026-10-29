@@ -21,6 +21,9 @@ import {
 const bib = await testbibliothek()
 const erwartet = erwarteteBilder(bib.manifest)
 const bilder = bib.manifest.eintraege.filter((e) => e.art === 'bild')
+const defektNamen = bib.manifest.eintraege
+  .filter((e) => e.art === 'defekt')
+  .map((e) => e.datei.split('/').pop())
 const name = (e) => e.datei.split('/').pop()
 const FELDER = ['aufnahme', 'name', 'geaendert', 'groesse', 'typ']
 
@@ -299,9 +302,51 @@ try {
       }
     ],
     [
+      'Orte (2.2): nächster Ort aus GPS (deutsch); nach Ort A–Z, ohne Standort am Ende – auch absteigend',
+      async () => {
+        const ort = (e) => zeilenUeber.get(name(e)).place
+        for (const e of bilder.filter((x) => x.gps)) {
+          assert.deepEqual(ort(e), { name: e.gps.ort, country: e.gps.land, source: 'gps' }, e.datei)
+        }
+        const mitOrt = ['dubrovnik.jpg', 'muenchen.jpg', 'paris.jpg', 'paris-texas.jpg']
+        const ohne = bilder.filter((e) => !e.gps).map(name)
+        const auf = (await liste('ort', 'auf')).map((b) => b.name)
+        assert.deepEqual(auf.slice(0, 4), mitOrt)
+        const ab = (await liste('ort', 'ab')).map((b) => b.name)
+        assert.deepEqual(ab.slice(0, 4), [...mitOrt].reverse())
+        // ohne Standort immer am Ende (in beiden Richtungen), innerhalb nach Aufnahme
+        for (const r of [auf, ab]) {
+          assert.deepEqual(new Set(r.slice(4)), new Set([...ohne, ...defektNamen]))
+        }
+        const imRaster = await ctx.page
+          .getByRole('combobox', { name: 'Sortieren nach' })
+          .selectOption('ort')
+        assert.deepEqual(imRaster, ['ort'])
+      }
+    ],
+    [
       'Info-Panel im Betrachter: Felder lesbar, „Alle Felder“ frisch aus der Datei',
       async () => {
         await ctx.page.getByRole('combobox', { name: 'Sortieren nach' }).selectOption('name')
+        // das Raster baut sich nach dem Wechsel neu auf: warten, bis vorn das erste nach Name steht
+        const ab =
+          (await ctx.page
+            .getByRole('button', { name: 'Absteigend' })
+            .getAttribute('aria-pressed')) === 'true'
+        const erstes = (await liste('name', ab ? 'ab' : 'auf'))[0].name
+        assert.ok(
+          await waitFor(
+            async () =>
+              (await ctx.page
+                .getByRole('listbox', { name: 'Bilder' })
+                .getByRole('option')
+                .first()
+                .getAttribute('aria-label')
+                .catch(() => null)) === erstes,
+            5_000
+          ),
+          'Raster zeigt die Sortierung nach Name nicht'
+        )
         const kachel = ctx.page
           .getByRole('listbox', { name: 'Bilder' })
           .getByRole('option', { name: 'dubrovnik.jpg', exact: true })

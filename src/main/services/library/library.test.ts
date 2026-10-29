@@ -34,7 +34,11 @@ const h = vi.hoisted(() => ({
   /** Ordner liegt auf einem Netzlaufwerk (Antwort des Bilddienstes auf „beobachten“) */
   netz: false,
   /** Scans in Reihenfolge: null = ganzer Ordner, sonst die Pfade des Teil-Scans */
-  scans: [] as (string[] | null)[]
+  scans: [] as (string[] | null)[],
+  /** Antwort des Bilddienstes auf „orte“ (nächster Ort) */
+  orte: (async () => []) as (
+    p: { id: number; lat: number; lon: number }[]
+  ) => Promise<{ id: number; name: string | null; land: string | null }[]>
 }))
 
 vi.mock('electron', () => ({
@@ -94,6 +98,7 @@ vi.mock('../bilddienst/client', () => ({
       }
     },
     beobachten: vi.fn(async () => ({ netz: h.netz })),
+    orte: vi.fn((p: { id: number; lat: number; lon: number }[]) => h.orte(p)),
     nichtBeobachten: vi.fn(),
     onAenderung: null,
     onEnde: null,
@@ -159,6 +164,7 @@ beforeEach(async () => {
   h.dateien = ['a.jpg', 'gift.jpg', 'c.jpg'].map(datei)
   h.netz = false
   h.scans = []
+  h.orte = async () => []
   beobachten.mockClear()
   repo.ordnerAnlegen(h.db, 'D:\\Bilder', true, 1)
   lib = await import('./library')
@@ -536,5 +542,36 @@ describe('Überwachen (1.6)', () => {
     bilddienst.onAenderung?.(id, { art: 'pfade', pfade: ['sub/a.jpg'], dateien: [] })
     await new Promise((r) => setTimeout(r, 50))
     expect(h.scans).toEqual([null])
+  })
+})
+
+describe('Orte (2.2)', () => {
+  it('Ort-Feld der Datei geht vor, sonst der nächste Ort aus GPS; ohne Ortsdaten nur Koordinaten', async () => {
+    const gps = { 'Composite:GPSLatitude': 42.65, 'Composite:GPSLongitude': 18.09 }
+    h.meta = async (d) =>
+      d.map((x) => ({
+        id: x.id,
+        roh:
+          name(x.pfad) === 'a.jpg'
+            ? { ...gps, 'XMP:City': 'Köln', 'XMP:CountryCode': 'DE' }
+            : name(x.pfad) === 'gift.jpg'
+              ? gps
+              : {}
+      }))
+    h.orte = async (p) => p.map((x) => ({ id: x.id, name: 'Dubrovnik', land: 'Kroatien' }))
+    lib.bibliothekStarten()
+    await vi.waitFor(() => expect(lib.zustand()).toMatchObject({ total: 3, metaPending: 0 }))
+    const orte = Object.fromEntries(
+      lib
+        .bildDetails(h.db.prepare('SELECT id FROM images ORDER BY id').pluck().all() as number[])
+        .map((b) => [b.name, b.place])
+    )
+    expect(orte).toEqual({
+      'a.jpg': { name: 'Köln', country: 'Deutschland', source: 'metadaten' },
+      'gift.jpg': { name: 'Dubrovnik', country: 'Kroatien', source: 'gps' },
+      'c.jpg': null
+    })
+    // nur die Datei ohne Ort-Feld fragt nach dem nächsten Ort
+    expect(vi.mocked(bilddienst.orte).mock.calls.flatMap(([p]) => p.length)).toEqual([1])
   })
 })

@@ -49,6 +49,13 @@ export const GRUNDFELD_TAGS: readonly string[] = [
   '-XMP:Subject',
   '-IPTC:Keywords',
   '-EXIF:XPKeywords',
+  // seit 2.2: Ort-Feld (MWG City/Country) – hat Vorrang vor dem nächsten Ort aus GPS
+  '-XMP:City',
+  '-IPTC:City',
+  '-XMP:Country',
+  '-IPTC:Country-PrimaryLocationName',
+  '-XMP:CountryCode',
+  '-IPTC:Country-PrimaryLocationCode',
   // ohne diese beiden erscheinen Lesefehler bei einer Tag-Auswahl gar nicht (Labor 1.2)
   '-ExifTool:Error',
   '-ExifTool:Warning'
@@ -79,6 +86,8 @@ export interface Grundfelder {
   titel: string | null
   beschreibung: string | null
   stichwoerter: string[]
+  /** Ort aus den Metadaten (City, Land als Text oder ISO-Code); null = keiner eingetragen */
+  ortMeta: { name: string; land: string | null; landCode: string | null } | null
   aufnahme: Aufnahme
   /** Lesefehler von ExifTool (Datei leer, nicht lesbar …) */
   fehler: string | null
@@ -194,6 +203,16 @@ export function grundfelderAus(
       2000
     ),
     stichwoerter: stichwoerterAus(r),
+    ortMeta: (() => {
+      const name = ersterText([r['XMP:City'], r['IPTC:City']], 100)
+      if (!name) return null
+      const code = ersterText([r['XMP:CountryCode'], r['IPTC:Country-PrimaryLocationCode']], 3)
+      return {
+        name,
+        land: ersterText([r['XMP:Country'], r['IPTC:Country-PrimaryLocationName']], 100),
+        landCode: code && /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : null
+      }
+    })(),
     aufnahme: aufnahmeDatum(
       {
         dateTimeOriginal: r['EXIF:DateTimeOriginal'],

@@ -129,7 +129,7 @@ try {
       }
     ],
     [
-      'Bilddienst im Paket: ExifTool liest, sharp erzeugt Vorschaubilder, BMP über ffmpeg',
+      'Bilddienst im Paket: ExifTool liest, sharp erzeugt Vorschaubilder, BMP über ffmpeg, Ortsdaten',
       async () => {
         const bib = await testbibliothek()
         try {
@@ -164,6 +164,12 @@ try {
             [200, 200, 200]
           )
           assert.equal(bilder.find((x) => x.name === 'dubrovnik.jpg').format, 'jpeg')
+          // Ortsdaten aus resources/geo (2.2): nächster Ort im Bilddienst des Pakets
+          assert.deepEqual(bilder.find((x) => x.name === 'dubrovnik.jpg').place, {
+            name: 'Dubrovnik',
+            country: 'Kroatien',
+            source: 'gps'
+          })
           // Ordner wieder weg, damit das Beenden nichts mehr zu tun hat
           await stubConfirm(app, true)
           const [o] = s.folders

@@ -4,7 +4,8 @@
 //
 // Jede Sortierung endet mit der Kennung, damit die Reihenfolge bei Gleichstand fest ist (sonst
 // springt das Raster). Absteigend kehrt die GANZE Reihenfolge um – „ab“ ist genau „auf“ rückwärts,
-// und SQLite liest denselben Index von hinten. Alle Felder dieser Stufe sind nie leer (`taken_at`
+// und SQLite liest denselben Index von hinten. Ausnahme „Ort“ (2.2): Bilder ohne Ort bleiben auch
+// absteigend am Ende (entschieden) – dafür ein eigener Index mit DESC-Spalten. Alle Felder dieser Stufe sind nie leer (`taken_at`
 // hat mindestens die Dateizeit); kommen Felder mit fehlenden Werten hinzu (Ort, Kamera), stehen
 // diese immer am Ende – dafür eine eigene Spalte vorn in den Index (wie `place_missing`).
 //
@@ -12,7 +13,7 @@
 // Pfad wird geprüft und nur als Parameter (Vergleichsschlüssel) verwendet. Weitere Filter und
 // Gruppen kommen in Phase 2 (docs/PLAN.md).
 
-export type SortFeld = 'aufnahme' | 'name' | 'geaendert' | 'groesse' | 'typ'
+export type SortFeld = 'aufnahme' | 'name' | 'geaendert' | 'groesse' | 'typ' | 'ort'
 export type Richtung = 'auf' | 'ab'
 
 export interface Sortierung {
@@ -27,7 +28,9 @@ const SPALTEN: ReadonlyMap<SortFeld, readonly string[]> = new Map([
   ['geaendert', ['mtime']],
   ['groesse', ['size']],
   // nach Endung, darin nach Name (Index images_typ)
-  ['typ', ['ext', 'name_sort']]
+  ['typ', ['ext', 'name_sort']],
+  // Orte A–Z, darin nach Aufnahme; ohne Ort am Ende (Sonderfall in orderBy, Indizes images_ort*)
+  ['ort', ['place_missing', 'place_sort', 'taken_at']]
 ])
 
 export const SORT_FELDER: readonly SortFeld[] = [...SPALTEN.keys()]
@@ -50,6 +53,9 @@ export function orderBy(s: Sortierung): string {
   const spalten = SPALTEN.get(s.feld)
   if (!spalten) throw new Error('Unbekanntes Sortierfeld')
   const r = s.richtung === 'ab' ? ' DESC' : ''
+  // „ohne Ort“ bleibt auch absteigend am Ende: place_missing immer aufsteigend
+  if (s.feld === 'ort')
+    return ['place_missing', ...[...spalten.slice(1), 'id'].map((sp) => sp + r)].join(', ')
   return [...spalten, 'id'].map((sp) => sp + r).join(', ')
 }
 

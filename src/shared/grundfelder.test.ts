@@ -39,6 +39,7 @@ describe('grundfelderAus', () => {
       titel: null,
       beschreibung: null,
       stichwoerter: [],
+      ortMeta: null,
       aufnahme: { lokal: '2024-05-06T12:00:00', offset: null, quelle: 'exif' },
       fehler: null
     })
@@ -80,6 +81,24 @@ describe('grundfelderAus', () => {
       beschreibung: 'Blick über die Stadtmauer', // Zeilenumbruch zu Leerzeichen
       stichwoerter: ['Urlaub', 'Meer', 'Kroatien', 'Sommer'] // ohne Doppelte, Groß/Klein egal
     })
+  })
+
+  it('Ort-Feld (2.2): Ort mit Land oder Ländercode; ohne Ort kein Ort-Feld', () => {
+    expect(
+      grundfelderAus(
+        { 'XMP:City': 'Köln', 'XMP:Country': 'Deutschland', 'XMP:CountryCode': 'de' },
+        DATEI,
+        JETZT
+      ).ortMeta
+    ).toEqual({ name: 'Köln', land: 'Deutschland', landCode: 'DE' })
+    expect(
+      grundfelderAus(
+        { 'IPTC:City': 'Split', 'IPTC:Country-PrimaryLocationCode': 'HRV' },
+        DATEI,
+        JETZT
+      ).ortMeta
+    ).toEqual({ name: 'Split', land: null, landCode: null })
+    expect(grundfelderAus({ 'XMP:Country': 'Frankreich' }, DATEI, JETZT).ortMeta).toBeNull()
   })
 
   it('fremde Werte geprüft: Unsinn, Grenzen, 0/0 ohne Höhe = kein Standort', () => {

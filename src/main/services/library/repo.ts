@@ -413,9 +413,27 @@ export function metaOffenAnzahl(db: DB, ohneOrdner: readonly number[] = []): num
  * eingetragen, gehört das Ergebnis zur alten Fassung und wird verworfen (sie wird neu gelesen).
  * Liefert die Zahl der geschriebenen Zeilen.
  */
+/** Ort einer Datei (2.2): Ort-Feld der Metadaten oder nächster Ort aus GPS */
+export interface OrtWert {
+  name: string
+  land: string | null
+  quelle: 'metadaten' | 'gps'
+}
+
+/** Sortierschlüssel „Ort A–Z, dann Land“ (gleichnamige Orte verschiedener Länder getrennt) */
+export function ortSchluessel(o: OrtWert): string {
+  return `${nameSortKey(o.name)}\u0001${nameSortKey(o.land ?? '')}`
+}
+
 export function metaSchreiben(
   db: DB,
-  zeilen: readonly { id: number; size: number; mtime: number; felder: Grundfelder }[],
+  zeilen: readonly {
+    id: number
+    size: number
+    mtime: number
+    felder: Grundfelder
+    ort?: OrtWert | null
+  }[],
   jetzt: number
 ): number {
   const st = db.prepare(`
@@ -425,6 +443,8 @@ export function metaSchreiben(
       aperture = @blende, exposure = @belichtung, iso = @iso, focal = @brennweite,
       gps_lat = @gpsBreite, gps_lon = @gpsLaenge, gps_alt = @gpsHoehe,
       rating = @bewertung, color_label = @farblabel, title = @titel, description = @beschreibung,
+      place_name = @ortName, place_country = @ortLand, place_source = @ortQuelle,
+      place_sort = @ortSort, place_missing = @ortFehlt,
       taken_at = @takenAt, taken_offset = @takenOffset, taken_source = @takenSource,
       meta_read_at = @jetzt
     WHERE id = @id AND size = @size AND mtime = @mtime
@@ -457,6 +477,11 @@ export function metaSchreiben(
         farblabel: f.farblabel,
         titel: f.titel,
         beschreibung: f.beschreibung,
+        ortName: z.ort?.name ?? null,
+        ortLand: z.ort?.land ?? null,
+        ortQuelle: z.ort?.quelle ?? null,
+        ortSort: z.ort ? ortSchluessel(z.ort) : null,
+        ortFehlt: z.ort ? 0 : 1,
         takenAt: f.aufnahme.lokal,
         takenOffset: f.aufnahme.offset,
         takenSource: f.aufnahme.quelle,
@@ -568,6 +593,9 @@ interface DetailZeile {
   color_label: string | null
   title: string | null
   description: string | null
+  place_name: string | null
+  place_country: string | null
+  place_source: 'metadaten' | 'gps' | null
 }
 
 /** Details zu Kennungen, in der Reihenfolge der Anfrage; unbekannte fehlen in der Antwort. */
@@ -578,7 +606,7 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
       `SELECT id, folder_id, name, ext, format, size, mtime, width, height, orientation,
               taken_at, taken_offset, taken_source, camera_make, camera_model, status, meta_read_at,
               color, lens, aperture, exposure, iso, focal, gps_lat, gps_lon, gps_alt, rating,
-              color_label, title, description
+              color_label, title, description, place_name, place_country, place_source
          FROM images WHERE id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as DetailZeile[]
@@ -628,7 +656,11 @@ export function details(db: DB, ids: readonly number[]): ImageInfo[] {
         colorLabel: r.color_label,
         title: r.title,
         description: r.description,
-        keywords: woerter.get(r.id) ?? []
+        keywords: woerter.get(r.id) ?? [],
+        place:
+          r.place_name && r.place_source
+            ? { name: r.place_name, country: r.place_country, source: r.place_source }
+            : null
       }
     ]
   })
@@ -771,6 +803,31 @@ export function ordnerKennungen(db: DB, folderId: number): number[] {
 /** Alle fertigen Vorschaubilder als offen markieren (neuer Schlüssel: der Cache ist leer). */
 export function vorschauAlleOffen(db: DB): number {
   return db.prepare("UPDATE images SET thumb_state = NULL WHERE thumb_state = 'ok'").run().changes
+}
+
+/** Kleiner Schlüssel-Wert-Speicher im Index (Stand der Ortsdaten …). */
+export function kvLesen(db: DB, key: string): string | null {
+  return (db.prepare('SELECT value FROM kv WHERE key = ?').pluck().get(key) as string) ?? null
+}
+
+export function kvSchreiben(db: DB, key: string, value: string): void {
+  db.prepare(
+    'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'
+  ).run(key, value)
+}
+
+/**
+ * Neue Ortsdaten: Dateien mit Koordinaten, deren Ort aus GPS kam (oder noch keinen hat), zum
+ * Nachlesen vormerken – dabei wird der Ort neu bestimmt. Ein Ort aus dem Ort-Feld bleibt.
+ */
+export function orteNeuBestimmen(db: DB): number {
+  return db
+    .prepare(
+      `UPDATE images SET meta_read_at = NULL
+        WHERE gps_lat IS NOT NULL AND status != 'fehlt'
+          AND (place_source IS NULL OR place_source = 'gps')`
+    )
+    .run().changes
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   type VorschauDatei
 } from './protokoll'
 import { Beobachter, istNetzpfad } from './beobachter'
+import { orteSuchen } from './orte'
 import { scanne, scanneTeile } from './scan'
 import { anzeigeFuer, vorschauFuer, type Einrichtung } from './vorschau'
 
@@ -80,6 +81,21 @@ async function scan(
     fehler(auftrag, err)
   } finally {
     abgebrochen.delete(auftrag)
+  }
+}
+
+/** Ordner der Ortsdaten (kommt mit „einrichten“) */
+let geoOrdner: string | null = null
+
+/** Nächster Ort zu Koordinaten (lädt die Ortsdaten beim ersten Mal) */
+async function orte(
+  auftrag: number,
+  punkte: { id: number; lat: number; lon: number }[]
+): Promise<void> {
+  try {
+    senden({ typ: 'orte-ergebnis', auftrag, orte: await orteSuchen(geoOrdner, punkte) })
+  } catch (err) {
+    fehler(auftrag, err)
   }
 }
 
@@ -207,6 +223,7 @@ port.on('message', (e: { data: AnDienst }) => {
   const n = e.data
   if (n.typ === 'einrichten') {
     einrichtung = { schluessel: n.schluessel, cacheOrdner: n.cacheOrdner, ffmpeg: n.ffmpeg }
+    geoOrdner = n.geo
   } else if (n.typ === 'scan') void scan(n.auftrag, n.wurzel, null)
   else if (n.typ === 'teilscan')
     void scan(n.auftrag, n.wurzel, { pfade: n.pfade, dateien: n.dateien })
@@ -218,6 +235,7 @@ port.on('message', (e: { data: AnDienst }) => {
   else if (n.typ === 'vorschau') void vorschau(n.auftrag, n.dateien)
   else if (n.typ === 'anzeige') void anzeige(n.auftrag, n.datei)
   else if (n.typ === 'alle-felder') void alleFelder(n.auftrag, n.datei)
+  else if (n.typ === 'orte') void orte(n.auftrag, n.punkte)
   else if (n.typ === 'abbrechen') abgebrochen.add(n.auftrag)
   else if (n.typ === 'beenden') {
     for (const b of beobachter.values()) b.schliessen()

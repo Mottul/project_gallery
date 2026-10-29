@@ -103,6 +103,19 @@ const MIGRATIONEN: readonly string[] = [
    WHERE status = 'fehlt';
   CREATE INDEX images_fehlt ON images (missing_since) WHERE status = 'fehlt';
   UPDATE images SET meta_read_at = NULL WHERE status != 'fehlt';
+  `,
+  // 5 – Phase 2.2: Orte. Name und Land (Anzeige), Quelle ('metadaten' = Ort-Feld der Datei,
+  // 'gps' = nächster Ort aus den Ortsdaten); place_sort/place_missing gab es schon. Je Richtung
+  // ein Index: „ohne Ort“ steht in beiden am Ende, absteigend nur die Orte umgekehrt. kv merkt
+  // sich den Stand der Ortsdaten (neue Daten = Orte neu bestimmen). Alles nachlesen (Ort-Feld).
+  `
+  ALTER TABLE images ADD COLUMN place_name TEXT;
+  ALTER TABLE images ADD COLUMN place_country TEXT;
+  ALTER TABLE images ADD COLUMN place_source TEXT;
+  CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT) WITHOUT ROWID;
+  CREATE INDEX images_ort ON images (place_missing, place_sort, taken_at, id);
+  CREATE INDEX images_ort_ab ON images (place_missing, place_sort DESC, taken_at DESC, id DESC);
+  UPDATE images SET meta_read_at = NULL WHERE status != 'fehlt';
   `
 ]
 

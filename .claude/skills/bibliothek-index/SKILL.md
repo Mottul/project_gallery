@@ -53,6 +53,11 @@ Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF al
 (`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
 Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
 Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
+Umgesetzt in 2.2: Schema 5 (`place_name`, `place_country`, `place_source`, Tabelle `kv`, Indizes
+`images_ort` und `images_ort_ab` mit DESC-Spalten – „ohne Ort“ bleibt auch absteigend am Ende),
+nächster Ort im Bilddienst (`bilddienst/orte.ts` lädt `resources/geo/orte.tsv.gz` nach
+Prüfsumme, `shared/geo.ts` mit der Regel „größere Stadt im Umkreis geht vor“), Ort-Feld der
+Metadaten vor GPS, `ortSchluessel` (Ort, dann Land), `orteNeuBestimmen` bei neuem Datenstand.
 Umgesetzt in 2.1: Schema 4 (`keywords`-Tabelle mit `ON DELETE CASCADE`, `gps_alt`,
 `missing_since` + Teilindex `images_fehlt`; Migration merkt alle vorhandenen Dateien zum
 Nachlesen vor), weitere Felder in `grundfelder.ts` (Grenzen je Feld, Rangfolge XMP → IPTC → EXIF,

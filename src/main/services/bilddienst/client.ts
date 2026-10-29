@@ -13,7 +13,9 @@ import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
 import type { MetaFeld } from '@shared/types'
 import { logLine } from '../log'
+import { geoOrdner } from '../geo/geoPfad'
 import type { Meldung } from './beobachter'
+import type { OrtsAntwort } from './orte'
 import {
   ARG_EXIFTOOL,
   vorschauParallel,
@@ -79,7 +81,8 @@ class Bilddienst {
       typ: 'einrichten',
       schluessel: e.schluessel,
       cacheOrdner: e.cacheOrdner,
-      ffmpeg: e.ffmpeg
+      ffmpeg: e.ffmpeg,
+      geo: geoOrdner()
     } satisfies AnDienst)
     kind.on('exit', (code) => {
       if (this.kind !== kind) return
@@ -147,6 +150,7 @@ class Bilddienst {
     else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
     else if (n.typ === 'anzeige-ergebnis') l.resolve(n.ergebnis)
     else if (n.typ === 'alle-felder-ergebnis') l.resolve(n.felder)
+    else if (n.typ === 'orte-ergebnis') l.resolve(n.orte)
     else if (n.typ === 'beobachtet') l.resolve({ netz: n.netz })
     else l.reject(fehler(n.code, n.meldung))
   }
@@ -204,6 +208,11 @@ class Bilddienst {
         this.kind?.postMessage({ typ: 'abbrechen', auftrag } satisfies AnDienst)
       }
     }
+  }
+
+  /** Nächster Ort je Punkt (Ortsdaten im Bilddienst). */
+  orte(punkte: { id: number; lat: number; lon: number }[]): Promise<OrtsAntwort[]> {
+    return this.auftrag<OrtsAntwort[]>((a) => ({ typ: 'orte', auftrag: a, punkte })).antwort
   }
 
   /** „Alle Felder“ einer Datei, frisch gelesen (Info-Panel); null = nicht lesbar. */

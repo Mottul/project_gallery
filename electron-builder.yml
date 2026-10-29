@@ -42,6 +42,9 @@ extraResources:
     to: exiftool
   - from: resources/ffmpeg/${os}
     to: ffmpeg
+  # Ortsdaten (GeoNames, CC BY 4.0; Phase 2.2) – im Repository, Lizenzhinweis liegt dabei
+  - from: resources/geo
+    to: geo
   - from: build/icon.png
     to: icon.png
 

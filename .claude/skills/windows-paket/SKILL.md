@@ -23,7 +23,7 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0), 187
 - `productName: Galeria Beata`, `artifactName: Galeria-Beata-${version}-setup.${ext}` (ohne
   Leerzeichen im Dateinamen).
 - `extraResources`: `resources/exiftool/win` → `exiftool`, `resources/ffmpeg/win` → `ffmpeg`,
-  Ortsdaten → `geo`; Pfade zur Laufzeit über `process.resourcesPath` (gepackt) bzw. `resources/`
+  Ortsdaten `resources/geo` → `geo` (seit 2.2; liegen im Repository, nicht per Download); Pfade zur Laufzeit über `process.resourcesPath` (gepackt) bzw. `resources/`
   (Entwicklung) – je Programm nur an einer Stelle (`exiftool/binPath.ts`, `ffmpeg/ffmpegPath.ts`).
 - `win.signExecutable: false` – der Installer bleibt bewusst unsigniert (entschieden 25.10.2026),
   aber Symbol und Versionsangaben kommen in die exe (seit electron-builder 26.17; die Mottulbox

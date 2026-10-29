@@ -204,11 +204,18 @@ export function InfoPanel({ bild }: { bild: ImageInfo }): JSX.Element {
         </Zeile>
         {bild.lens && <Zeile titel="Objektiv">{bild.lens}</Zeile>}
         {belichtung.length > 0 && <Zeile titel="Belichtung">{belichtung.join(' · ')}</Zeile>}
-        {bild.gps && (
-          <Zeile titel="Standort">
-            {gpsText(bild.gps.lat, bild.gps.lon)}
-            {bild.gps.alt !== null && (
-              <span className="text-muted-foreground"> · {dezimalText(bild.gps.alt)} m</span>
+        {(bild.place || bild.gps) && (
+          <Zeile titel="Ort">
+            {bild.place && (
+              <span className="block" aria-label="Ortsname">
+                {[bild.place.name, bild.place.country].filter(Boolean).join(' · ')}
+              </span>
+            )}
+            {bild.gps && (
+              <span className={cn('block', bild.place && 'text-xs text-muted-foreground')}>
+                {gpsText(bild.gps.lat, bild.gps.lon)}
+                {bild.gps.alt !== null && ` · ${dezimalText(bild.gps.alt)} m`}
+              </span>
             )}
           </Zeile>
         )}

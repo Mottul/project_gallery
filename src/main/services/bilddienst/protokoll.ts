@@ -5,6 +5,7 @@ import { cpus } from 'node:os'
 import type { MetaFeld } from '@shared/types'
 import type { GefundeneDatei } from '../library/repo'
 import type { Meldung } from './beobachter'
+import type { OrtsAntwort } from './orte'
 
 /** Datei, deren Grundfelder gelesen werden sollen (Kennung aus dem Index, absoluter Pfad;
  *  Größe und Änderungszeit laut Index – der Wächter übergeht damit das eigene Lesen) */
@@ -61,6 +62,8 @@ export type AnDienst =
       schluessel: Uint8Array
       cacheOrdner: string
       ffmpeg: string | null
+      /** Ordner der Ortsdaten (resources/geo); null = keine */
+      geo: string | null
     }
   | { typ: 'scan'; auftrag: number; wurzel: string }
   /** Teil-Scan nach dem Überwachen: relative Pfade („/“) samt allem darunter, Dateien für sich */
@@ -71,6 +74,8 @@ export type AnDienst =
   | { typ: 'meta'; auftrag: number; dateien: MetaDatei[] }
   | { typ: 'vorschau'; auftrag: number; dateien: VorschauDatei[] }
   | { typ: 'anzeige'; auftrag: number; datei: AnzeigeDatei }
+  /** Nächster Ort zu Koordinaten (2.2) */
+  | { typ: 'orte'; auftrag: number; punkte: { id: number; lat: number; lon: number }[] }
   /** „alle Felder“ einer Datei für das Info-Panel (2.1), frisch gelesen */
   | { typ: 'alle-felder'; auftrag: number; datei: AnzeigeDatei }
   | { typ: 'abbrechen'; auftrag: number }
@@ -83,6 +88,7 @@ export type VomDienst =
   | { typ: 'meta-ergebnis'; auftrag: number; ergebnisse: MetaErgebnis[] }
   | { typ: 'vorschau-ergebnis'; auftrag: number; ergebnisse: VorschauErgebnis[] }
   | { typ: 'anzeige-ergebnis'; auftrag: number; ergebnis: AnzeigeErgebnis }
+  | { typ: 'orte-ergebnis'; auftrag: number; orte: OrtsAntwort[] }
   /** null = nicht lesbar (geändert, fehlt, ExifTool fehlt) */
   | { typ: 'alle-felder-ergebnis'; auftrag: number; felder: MetaFeld[] | null }
   /** netz = Netzlaufwerk: nicht überwacht, der main gleicht periodisch ab */

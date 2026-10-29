@@ -131,6 +131,8 @@ export interface ImageInfo {
   title: string | null
   description: string | null
   keywords: string[]
+  /** Ort (2.2): aus dem Ort-Feld der Datei oder der nächste Ort zu den Koordinaten */
+  place: { name: string; country: string | null; source: 'metadaten' | 'gps' } | null
 }
 
 /** Ein Feld aus „alle Felder“ (frisch aus der Datei gelesen, ExifTool-Gruppe und -Name) */
