@@ -159,6 +159,15 @@ sichtbar + nächste Seite, vor dem übrigen Hintergrund; `vorschauOffenUnter`).
   Entfernung (Haversine) in `geo.ts`; Ergebnis cachen, solange der Bezugspunkt gleich bleibt.
 - Für das Raster: geordnete **Liste der Kennungen** (+ Gruppen-Grenzen) einmal je Abfrage,
   Details nur für den sichtbaren Ausschnitt. Nie 100.000 Objekte über IPC.
+- **Gruppen (seit 2.3):** folgen der Sortierung (`shared/gruppen.ts`: `gruppenArt`, fester
+  SQL-Ausdruck je Art, Titel). Grenzen nicht im Renderer aus Details rechnen (die kennt er nur
+  für das Sichtbare), sondern im main in einem Durchlauf mit der Sortierung
+  (`repo.kennungenMitGruppen`). Fehlende Werte bilden die letzte Gruppe („Ohne …“) – das passt nur,
+  solange die Sortierung sie ans Ende stellt (`fehlend` in `sortFilter.ts`). Neue Gruppen-Art:
+  Ausdruck, Titel, Test in `gruppen.test.ts` und `repo.test.ts`.
+- **Sortieren ohne Index** (seit 2.3: Kamera, Objektiv, Bewertung, ISO, Blende, Belichtung,
+  Brennweite, Auflösung, Ordner): SQLite sortiert im Speicher; `INDEX_FELDER` in `sortFilter.ts`
+  nennt die mit Index (Test mit `EXPLAIN QUERY PLAN`). Messen mit `abnahme50k` (Sortierwechsel).
 - Neue Sortierspalte = Index in der Migration (mit `folder_id`, wenn nach Ordner gefiltert wird);
   `EXPLAIN QUERY PLAN` im Test prüfen, dass er benutzt wird.
 

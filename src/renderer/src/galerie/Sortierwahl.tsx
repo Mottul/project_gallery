@@ -1,8 +1,11 @@
-// Auswahl der Sortierung (je Bibliotheksordner gemerkt): Feld und Richtung. Gruppen und weitere
-// Felder (Ort, Kamera, Bewertung) kommen mit Phase 2 (docs/PLAN.md, „Sortieren, Filtern, Gruppieren, Suchen“).
-import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react'
+// Auswahl der Sortierung (je Bibliotheksordner gemerkt): Feld und Richtung, dazu die Gruppen, die
+// der Sortierung folgen (docs/PLAN.md, „Sortieren, Filtern, Gruppieren, Suchen“): nach Datum mit
+// Stufe Tag/Monat/Jahr, nach Ort, Kamera … an/aus, nach Name, Größe, ISO … keine.
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Rows3 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { ansichtAendern, useAnsicht } from '@renderer/lib/ansicht'
+import { cn } from '@renderer/lib/utils'
+import { GRUPPIERUNGEN, gruppenArt, hatStufen, type Gruppierung } from '@shared/gruppen'
 import type { SortFeld } from '@shared/sortFilter'
 
 export const FELD_TEXT: Record<SortFeld, string> = {
@@ -11,8 +14,27 @@ export const FELD_TEXT: Record<SortFeld, string> = {
   geaendert: 'Änderungsdatum',
   groesse: 'Dateigröße',
   typ: 'Dateityp',
-  ort: 'Ort (A–Z)'
+  ort: 'Ort (A–Z)',
+  kamera: 'Kamera',
+  objektiv: 'Objektiv',
+  bewertung: 'Bewertung',
+  iso: 'ISO',
+  blende: 'Blende',
+  belichtung: 'Belichtungszeit',
+  brennweite: 'Brennweite',
+  aufloesung: 'Auflösung',
+  ordner: 'Ordner'
 }
+
+const STUFE_TEXT: Record<Gruppierung, string> = {
+  aus: 'Keine',
+  tag: 'Tag',
+  monat: 'Monat',
+  jahr: 'Jahr'
+}
+
+const AUSWAHL =
+  'h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70'
 
 export function Sortierwahl(): JSX.Element {
   const s = useAnsicht().sortierung
@@ -26,7 +48,7 @@ export function Sortierwahl(): JSX.Element {
         id="sortierung"
         value={s.feld}
         onChange={(e) => ansichtAendern({ sortierung: { ...s, feld: e.target.value as SortFeld } })}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+        className={AUSWAHL}
       >
         {(Object.keys(FELD_TEXT) as SortFeld[]).map((f) => (
           <option key={f} value={f}>
@@ -50,5 +72,47 @@ export function Sortierwahl(): JSX.Element {
         )}
       </Button>
     </div>
+  )
+}
+
+/** Gruppen-Überschriften; ohne Gruppen zur Sortierung (Name, Größe …) gar nicht da. */
+export function Gruppenwahl(): JSX.Element | null {
+  const { sortierung, gruppierung } = useAnsicht()
+  const art = gruppenArt(sortierung.feld)
+  if (!art) return null
+  if (hatStufen(art)) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <label htmlFor="gruppen" className="text-xs text-muted-foreground">
+          Gruppen
+        </label>
+        <select
+          id="gruppen"
+          value={gruppierung}
+          onChange={(e) => ansichtAendern({ gruppierung: e.target.value as Gruppierung })}
+          className={AUSWAHL}
+        >
+          {GRUPPIERUNGEN.map((g) => (
+            <option key={g} value={g}>
+              {STUFE_TEXT[g]}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+  const an = gruppierung !== 'aus'
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-pressed={an}
+      title={an ? 'Gruppen ausblenden' : 'Gruppen zeigen'}
+      className={cn('h-8 gap-1.5', an ? 'bg-muted text-foreground' : 'text-muted-foreground')}
+      onClick={() => ansichtAendern({ gruppierung: an ? 'aus' : 'monat' })}
+    >
+      <Rows3 className="size-3.5" aria-hidden />
+      Gruppen
+    </Button>
   )
 }

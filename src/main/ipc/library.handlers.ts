@@ -1,5 +1,6 @@
 import { Channels } from '@shared/ipc-contracts'
 import {
+  pruefeGruppierungStreng,
   pruefeKennung,
   pruefeKennungen,
   pruefeOrdnerFilterStreng,
@@ -10,6 +11,7 @@ import {
 import { DETAILS_MAX } from '../services/library/repo'
 import {
   abfrage,
+  abfrageMitGruppen,
   auswahlGroesse,
   bildDetails,
   fensterVon,
@@ -50,6 +52,13 @@ export function registerLibraryHandlers(): void {
   // Sortierfeld nur aus der Allowlist (sortFilter.ts) – nie Text aus dem Renderer ins SQL
   handle(Channels.libraryQuery, (_e, s, f) =>
     abfrage(pruefeSortierungStreng(s), f === undefined ? undefined : pruefeOrdnerFilterStreng(f))
+  )
+  handle(Channels.libraryQueryGroups, (_e, s, f, g) =>
+    abfrageMitGruppen(
+      pruefeSortierungStreng(s),
+      f === undefined || f === null ? undefined : pruefeOrdnerFilterStreng(f),
+      pruefeGruppierungStreng(g)
+    )
   )
   handle(Channels.libraryDetails, (_e, ids) => bildDetails(pruefeKennungen(ids, DETAILS_MAX)))
   handle(Channels.libraryDirs, () => verzeichnisBaum())

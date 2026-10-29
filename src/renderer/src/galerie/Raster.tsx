@@ -1,9 +1,10 @@
 // Raster der Galerie: virtualisiert (@tanstack/react-virtual – nur sichtbare Zeilen im DOM, flüssig
 // auch bei 100.000 Bildern), quadratische Kacheln mit Größenregler und Strg + Mausrad, Auswahl wie
-// im Explorer (Klick, Strg, Umschalt, Strg+A, Esc, Rahmen ziehen). Details und Vorschau-Vorrang
-// nur für den sichtbaren Bereich plus die nächste Seite (Skill bibliothek-index).
+// im Explorer (Klick, Strg, Umschalt, Strg+A, Esc, Rahmen ziehen). Gruppen-Überschriften (2.3) als
+// eigene Zeilen, jede Gruppe beginnt in einer neuen Zeile (`lib/zeilen.ts`). Details und
+// Vorschau-Vorrang nur für den sichtbaren Bereich plus die nächste Seite (Skill bibliothek-index).
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   auswahlAlle,
   auswahlKlick,
@@ -12,8 +13,10 @@ import {
   ersteGewaehlte,
   useAuswahl
 } from '@renderer/lib/auswahl'
-import { tagText } from '@renderer/lib/format'
+import { tagText, zahl } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
+import { ersteZeileAb, zeileFuer, zeilenBilden, zeilenOben } from '@renderer/lib/zeilen'
+import type { Gruppe } from '@shared/gruppen'
 import type { ImageInfo } from '@shared/types'
 import { stufeFuer, Vorschaubild } from './Vorschaubild'
 
@@ -22,6 +25,8 @@ const ABSTAND = 8
 const RAND = 16
 /** Höhe der beiden Textzeilen unter dem Bild (Name, Datum) */
 const TEXT = 38
+/** Höhe einer Gruppen-Überschrift */
+const KOPF = 40
 /** Strg + Mausrad: so viele px je Raste */
 const RAD_SCHRITT = 16
 
@@ -34,6 +39,7 @@ interface Rahmen {
 
 export function Raster({
   ids,
+  gruppen,
   details,
   groesse,
   onGroesse,
@@ -42,6 +48,8 @@ export function Raster({
   fokusId
 }: {
   ids: number[]
+  /** Gruppen-Überschriften (leer = keine) */
+  gruppen: readonly Gruppe[]
   details: {
     get: (id: number) => ImageInfo | undefined
     anfordern: (ids: readonly number[]) => void
@@ -74,30 +82,37 @@ export function Raster({
     breite > 0
       ? Math.max(groesse, Math.floor((breite - 2 * RAND - (spalten - 1) * ABSTAND) / spalten))
       : groesse
-  const zeilen = Math.ceil(ids.length / spalten)
   const zeilenHoehe = kante + TEXT + ABSTAND
+  const zeilen = useMemo(() => zeilenBilden(ids.length, gruppen, spalten), [ids, gruppen, spalten])
+  // obere Kanten (Rand + Summe der Höhen): Höhen für den Virtualisierer, Geometrie für den Rahmen
+  const oben = useMemo(
+    () => zeilenOben(zeilen, (z) => (z.art === 'kopf' ? KOPF : zeilenHoehe), RAND),
+    [zeilen, zeilenHoehe]
+  )
   const virt = useVirtualizer({
-    count: zeilen,
+    count: zeilen.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => zeilenHoehe,
+    estimateSize: (i) => oben[i + 1] - oben[i],
     overscan: 3,
     paddingStart: RAND,
     paddingEnd: RAND
   })
   useEffect(() => {
     virt.measure()
-  }, [virt, zeilenHoehe, spalten])
+  }, [virt, zeilen, zeilenHoehe])
 
   useEffect(() => {
     const i = fokusId === null ? -1 : ids.indexOf(fokusId)
-    if (i >= 0) virt.scrollToIndex(Math.floor(i / spalten), { align: 'auto' })
+    const z = i >= 0 ? zeileFuer(zeilen, i) : -1
+    if (z >= 0) virt.scrollToIndex(z, { align: 'auto' })
     // nur wenn sich der Fokus ändert, nicht bei jeder neuen Liste
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fokusId, spalten > 0])
 
   const items = virt.getVirtualItems()
-  const von = (items[0]?.index ?? 0) * spalten
-  const bis = Math.min(ids.length, ((items.at(-1)?.index ?? -1) + 1) * spalten)
+  const von = zeilen[items[0]?.index ?? 0]?.von ?? 0
+  const letzte = zeilen[items.at(-1)?.index ?? -1]
+  const bis = Math.min(ids.length, letzte ? (letzte.art === 'bilder' ? letzte.bis : letzte.von) : 0)
   useEffect(() => {
     const sichtbar = ids.slice(von, bis)
     details.anfordern(sichtbar)
@@ -125,16 +140,13 @@ export function Raster({
     const [xa, xb] = r.x0 < r.x1 ? [r.x0, r.x1] : [r.x1, r.x0]
     const [ya, yb] = r.y0 < r.y1 ? [r.y0, r.y1] : [r.y1, r.y0]
     const out: number[] = []
-    const z0 = Math.max(0, Math.floor((ya - RAND) / zeilenHoehe))
-    const z1 = Math.min(zeilen - 1, Math.floor((yb - RAND) / zeilenHoehe))
-    for (let z = z0; z <= z1; z++) {
-      const oben = RAND + z * zeilenHoehe
-      if (oben > yb || oben + kante + TEXT < ya) continue
-      for (let s = 0; s < spalten; s++) {
+    for (let z = ersteZeileAb(oben, ya); z < zeilen.length && oben[z] <= yb; z++) {
+      const zeile = zeilen[z]
+      if (zeile.art !== 'bilder' || oben[z] + kante + TEXT < ya) continue
+      for (let s = 0; s < zeile.bis - zeile.von; s++) {
         const links = RAND + s * (kante + ABSTAND)
         if (links > xb || links + kante < xa) continue
-        const i = z * spalten + s
-        if (i < ids.length) out.push(ids[i])
+        out.push(ids[zeile.von + s])
       }
     }
     return out
@@ -194,59 +206,78 @@ export function Raster({
       }}
     >
       <div className="relative w-full" style={{ height: virt.getTotalSize() }}>
-        {items.map((zeile) => (
-          <div
-            key={zeile.key}
-            role="presentation"
-            className="absolute inset-x-0"
-            style={{ top: zeile.start, height: zeilenHoehe }}
-          >
-            {Array.from({ length: spalten }, (_, s) => {
-              const index = zeile.index * spalten + s
-              const id = ids[index]
-              if (id === undefined) return null
-              const bild = details.get(id)
-              const gewaehlt = auswahl.has(id)
-              return (
-                <div
-                  key={id}
-                  role="option"
-                  aria-selected={gewaehlt}
-                  aria-label={bild?.name ?? 'Bild'}
-                  data-id={id}
-                  className="absolute cursor-default"
-                  style={{ left: RAND + s * (kante + ABSTAND), width: kante }}
-                  onClick={(e) =>
-                    auswahlKlick(ids, index, {
-                      strg: e.ctrlKey || e.metaKey,
-                      umschalt: e.shiftKey
-                    })
-                  }
-                  onDoubleClick={() => onOeffnen(index)}
-                >
-                  <Vorschaubild
-                    key={bild?.mtime}
-                    bild={bild}
-                    stufe={stufeFuer(kante)}
-                    passend="cover"
-                    className={cn(
-                      'rounded-md',
-                      gewaehlt &&
-                        'ring-[3px] ring-primary-line ring-offset-2 ring-offset-background'
-                    )}
-                    groesse={kante}
-                  />
-                  <p className="mt-1 truncate text-xs" title={bild?.name}>
-                    {bild?.name ?? ' '}
-                  </p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {bild ? tagText(bild.takenAt) : ' '}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        ))}
+        {items.map((v) => {
+          const zeile = zeilen[v.index]
+          if (zeile.art === 'kopf') {
+            return (
+              <div
+                key={v.key}
+                role="presentation"
+                data-gruppe={zeile.titel}
+                className="absolute flex items-end gap-2 pb-2"
+                style={{ top: v.start, height: KOPF, left: RAND, right: RAND }}
+              >
+                <span className="truncate text-sm font-semibold">{zeile.titel}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {zeile.anzahl === 1 ? '1 Bild' : `${zahl.format(zeile.anzahl)} Bilder`}
+                </span>
+              </div>
+            )
+          }
+          return (
+            <div
+              key={v.key}
+              role="presentation"
+              className="absolute inset-x-0"
+              style={{ top: v.start, height: zeilenHoehe }}
+            >
+              {Array.from({ length: zeile.bis - zeile.von }, (_, s) => {
+                const index = zeile.von + s
+                const id = ids[index]
+                if (id === undefined) return null
+                const bild = details.get(id)
+                const gewaehlt = auswahl.has(id)
+                return (
+                  <div
+                    key={id}
+                    role="option"
+                    aria-selected={gewaehlt}
+                    aria-label={bild?.name ?? 'Bild'}
+                    data-id={id}
+                    className="absolute cursor-default"
+                    style={{ left: RAND + s * (kante + ABSTAND), width: kante }}
+                    onClick={(e) =>
+                      auswahlKlick(ids, index, {
+                        strg: e.ctrlKey || e.metaKey,
+                        umschalt: e.shiftKey
+                      })
+                    }
+                    onDoubleClick={() => onOeffnen(index)}
+                  >
+                    <Vorschaubild
+                      key={bild?.mtime}
+                      bild={bild}
+                      stufe={stufeFuer(kante)}
+                      passend="cover"
+                      className={cn(
+                        'rounded-md',
+                        gewaehlt &&
+                          'ring-[3px] ring-primary-line ring-offset-2 ring-offset-background'
+                      )}
+                      groesse={kante}
+                    />
+                    <p className="mt-1 truncate text-xs" title={bild?.name}>
+                      {bild?.name ?? ' '}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {bild ? tagText(bild.takenAt) : ' '}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
         {rahmen && (
           <div
             aria-hidden

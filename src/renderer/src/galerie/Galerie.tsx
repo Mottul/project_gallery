@@ -1,6 +1,6 @@
 // Hauptfläche der Galerie (docs/PLAN.md, „Galerie-Ansichten“; Entwurf „Galerie – Kacheln/Liste“):
 // ohne Ordner der Einstieg; sonst eine Kopfzeile (gewählter Knoten, Kacheln/Liste, Sortieren,
-// Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
+// Gruppen, Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
 // dabei nur die Datei-Objekte weiter, den Pfad liest der Preload (Schicht C).
 import { FolderInput, FolderPlus, Images, LayoutGrid, List } from 'lucide-react'
 import { useCallback, useEffect, useState, type DragEvent } from 'react'
@@ -31,7 +31,7 @@ import { cn } from '@renderer/lib/utils'
 import { Betrachter } from './Betrachter'
 import { Liste } from './Liste'
 import { Raster } from './Raster'
-import { Sortierwahl } from './Sortierwahl'
+import { Gruppenwahl, Sortierwahl } from './Sortierwahl'
 
 const istDateien = (e: DragEvent): boolean => Array.from(e.dataTransfer.types).includes('Files')
 
@@ -71,7 +71,7 @@ export function Galerie(): JSX.Element | null {
     if (lib && gemerkt && !knoten) knotenWaehlen(null)
   }, [lib, gemerkt, knoten])
   const ansicht = useAnsicht()
-  const k = useKennungen(lib, knoten, ansicht.sortierung)
+  const k = useKennungen(lib, knoten, ansicht.sortierung, ansicht.gruppierung)
   const details = useDetails(k?.stand ?? 0)
   const sichtbarMelden = useSichtbarMelden()
   const [ziehen, setZiehen] = useState(false)
@@ -159,8 +159,8 @@ export function Galerie(): JSX.Element | null {
   const pfadText =
     ordner && knoten?.pfad ? `${ordner.name} › ${knoten.pfad.split('/').join(' › ')}` : null
   const liest = lib.folders.some((f) => f.status === 'liest')
-  // neu beim Wechsel von Ordner oder Sortierung: oben anfangen
-  const schluessel = JSON.stringify([knoten, ansicht.sortierung])
+  // neu beim Wechsel von Ordner, Sortierung oder Gruppen: oben anfangen
+  const schluessel = JSON.stringify([knoten, ansicht.sortierung, ansicht.gruppierung])
 
   return (
     <div className="relative flex h-full flex-col" {...zieh}>
@@ -173,6 +173,7 @@ export function Galerie(): JSX.Element | null {
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <Umschalter art={ansicht.art} />
           <Sortierwahl />
+          <Gruppenwahl />
           {ansicht.art === 'kacheln' && (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               Größe
@@ -202,6 +203,7 @@ export function Galerie(): JSX.Element | null {
           <Raster
             key={schluessel}
             ids={k.ids}
+            gruppen={k.gruppen}
             details={details}
             groesse={ansicht.groesse}
             onGroesse={(px) => ansichtAendern({ groesse: px })}
@@ -213,6 +215,7 @@ export function Galerie(): JSX.Element | null {
           <Liste
             key={schluessel}
             ids={k.ids}
+            gruppen={k.gruppen}
             details={details}
             sortierung={ansicht.sortierung}
             onSichtbar={sichtbarMelden}

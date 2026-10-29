@@ -162,7 +162,7 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   das Sichtbare (`lib/bildliste.ts`); das Raster und die Liste sind virtualisiert
   (`@tanstack/react-virtual`) und melden den sichtbaren Ausschnitt (`library.visible`), dort
   entstehen Vorschaubilder zuerst. Ansicht, Größe und Sortierung je Bibliotheksordner merkt
-  `lib/ansicht.ts` (localStorage, geprüft), die Auswahl (Kennungen, nie Positionen) `lib/auswahl.ts`.
+  `lib/ansicht.ts` (localStorage, geprüft; seit 2.3 auch die Gruppierung), die Auswahl (Kennungen, nie Positionen) `lib/auswahl.ts`.
   Ordner per Drag & Drop: Die Seite reicht die Datei-Objekte an `library.addDropped`, der Preload
   liest den Pfad (`webUtils.getPathForFile`); ein in der Seite erzeugtes File hat keinen.
 - **Betrachter:** `galerie/Betrachter.tsx` (Dialog über der Galerie, Filmstreifen virtualisiert)
@@ -195,6 +195,13 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   schlägt die Kennung nach, der Bilddienst prüft die Datei und liest sie frisch (`alleFelder.ts`,
   nichts davon im Index). Fehlende Dateien: `missing_since` beim Fehlen, `library.removeMissing`
   (Rückfrage) bzw. automatisch nach 30 Tagen (`fehlendeAufraeumen` in `library.ts`).
+- **Gruppen (2.3):** `library.queryGroups` liefert zu den Kennungen die Gruppen-Grenzen
+  (`{ titel, von, anzahl }`). Welche Gruppen eine Sortierung hat, der SQL-Ausdruck des
+  Schlüssels (nur feste Texte) und die Titel stehen rein in `shared/gruppen.ts`;
+  `repo.kennungenMitGruppen` fragt Kennung und Schlüssel in einem Durchlauf ab. Raster und Liste
+  bauen daraus Zeilen (`lib/zeilen.ts`: Kopfzeile, dann Bildzeilen; jede Gruppe in neuer Zeile).
+  Die Höhen für den Virtualisierer und die Geometrie des Rahmens kommen aus demselben Feld der
+  oberen Kanten – getrennt gerechnet liefen sie mit jeder Überschrift auseinander.
 - **Orte (2.2):** Die Ortsdaten liegen im Repository (`resources/geo/`, gebaut mit
   `npm run orte:bauen` aus GeoNames, selten und mit eigenem PR – GeoNames ändert sich täglich,
   eine feste Prüfsumme der Quelle ginge nicht). Der Bilddienst lädt sie beim ersten Bedarf,

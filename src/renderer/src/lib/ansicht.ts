@@ -1,9 +1,10 @@
 // Ansicht der Galerie: gewählter Knoten im Ordnerbaum und je Bibliotheksordner Ansicht (Kacheln/
-// Liste), Kachelgröße und Sortierung – Bedienzustand in localStorage, nicht in settings.json
+// Liste), Kachelgröße, Sortierung und Gruppen – Bedienzustand in localStorage, nicht in settings.json
 // (docs/PLAN.md: „Ansicht, Größe und Sortierung je Ordner gemerkt“). Alles Gelesene wird geprüft;
 // fehlt localStorage, gilt der Stand nur für diese Sitzung.
 
 import { create } from 'zustand'
+import { pruefeGruppierung, type Gruppierung } from '@shared/gruppen'
 import {
   pruefeOrdnerFilter,
   pruefeSortierung,
@@ -19,11 +20,18 @@ export interface Ansicht {
   /** Kantenlänge der Kacheln in px */
   groesse: number
   sortierung: Sortierung
+  /** Gruppen-Überschriften (2.3): Stufe für Datumssortierungen; „aus“ blendet sie aus */
+  gruppierung: Gruppierung
 }
 
 export const GROESSE_MIN = 80
 export const GROESSE_MAX = 320
-const STANDARD: Ansicht = { art: 'kacheln', groesse: 160, sortierung: STANDARD_SORTIERUNG }
+const STANDARD: Ansicht = {
+  art: 'kacheln',
+  groesse: 160,
+  sortierung: STANDARD_SORTIERUNG,
+  gruppierung: 'monat'
+}
 
 /** Knoten im Ordnerbaum: null = alle Bilder */
 export type Knoten = OrdnerFilter | null
@@ -54,10 +62,16 @@ export function begrenzeGroesse(n: number): number {
 
 function pruefeAnsicht(v: unknown): Ansicht | null {
   if (!v || typeof v !== 'object') return null
-  const { art, groesse, sortierung } = v as Record<string, unknown>
+  const { art, groesse, sortierung, gruppierung } = v as Record<string, unknown>
   const s = pruefeSortierung(sortierung)
   if ((art !== 'kacheln' && art !== 'liste') || typeof groesse !== 'number' || !s) return null
-  return { art, groesse: begrenzeGroesse(groesse), sortierung: s }
+  return {
+    art,
+    groesse: begrenzeGroesse(groesse),
+    sortierung: s,
+    // gemerkt vor 2.3 (ohne Gruppen): die Vorgabe
+    gruppierung: pruefeGruppierung(gruppierung) ?? STANDARD.gruppierung
+  }
 }
 
 function gemerkteAnsichten(): Map<string, Ansicht> {

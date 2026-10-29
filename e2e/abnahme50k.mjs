@@ -236,11 +236,25 @@ try {
       3 * 60_000
     ],
     [
-      'Sortierwechsel < 200 ms (Abfrage und Raster)',
+      'Sortierwechsel < 200 ms (Abfrage mit Gruppen und Raster, auch die Felder aus 2.3)',
       async () => {
         await waitFor(async () => (await zustand()).folders[0]?.status === 'bereit', 60_000)
-        const felder = ['aufnahme', 'name', 'geaendert', 'groesse', 'typ']
+        // ab 2.3 auch Felder ohne Index (im Speicher sortiert) und mit Gruppen wie die Oberfläche
+        const felder = [
+          'aufnahme',
+          'name',
+          'geaendert',
+          'groesse',
+          'typ',
+          'ort',
+          'kamera',
+          'bewertung',
+          'aufloesung',
+          'ordner'
+        ]
         const abfrage = []
+        /** Abfragezeiten je Feld (ms) – welches Feld ohne Index wie lange braucht */
+        const jeFeld = {}
         const raster = []
         for (const feld of [...felder, ...felder]) {
           const r = await ctx.page.evaluate(async (feld) => {
@@ -250,12 +264,17 @@ try {
                 .querySelector('button[aria-label="Absteigend"]')
                 ?.getAttribute('aria-pressed') === 'true'
             const t0 = performance.now()
-            const ids = await window.api.library.query({ feld, richtung: ab ? 'ab' : 'auf' })
+            const { ids } = await window.api.library.queryGroups(
+              { feld, richtung: ab ? 'ab' : 'auf' },
+              undefined,
+              'monat'
+            )
             const t1 = performance.now()
             const [erstes] = await window.api.library.details(ids.slice(0, 1))
             return { abfrage: t1 - t0, erstes: erstes.name, anzahl: ids.length }
           }, feld)
           abfrage.push(r.abfrage)
+          jeFeld[feld] = [...(jeFeld[feld] ?? []), Math.round(r.abfrage)]
           // in der Oberfläche wählen und warten, bis das Raster vorn das erste Bild zeigt
           const dauer = await ctx.page.evaluate(
             async ({ feld, erstes }) => {
@@ -300,6 +319,7 @@ try {
         }
         ergebnis.sortieren = {
           abfrageMax: ms(Math.max(...abfrage)),
+          abfrageJeFeld: jeFeld,
           rasterMedian: ms(p(raster, 0.5)),
           rasterMax: ms(Math.max(...raster))
         }

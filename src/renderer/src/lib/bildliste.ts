@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
+import type { Gruppe, Gruppierung } from '@shared/gruppen'
 import type { Sortierung } from '@shared/sortFilter'
 import type { ImageInfo, LibraryDirs, LibraryState } from '@shared/types'
 import type { Knoten } from './ansicht'
@@ -51,28 +52,31 @@ function useGedrosselt(fn: () => void, schluessel: string, sofort: string, aktiv
 
 export interface Kennungen {
   ids: number[]
+  /** Gruppen-Überschriften (leer = keine) */
+  gruppen: Gruppe[]
   /** zählt jede neue Antwort – Details älterer Stände gelten als veraltet */
   stand: number
   fehler: string | null
 }
 
-/** Geordnete Kennungen des Knotens; null, solange sie das erste Mal laden. */
+/** Geordnete Kennungen des Knotens samt Gruppen; null, solange sie das erste Mal laden. */
 export function useKennungen(
   lib: LibraryState | null,
   knoten: Knoten,
-  sortierung: Sortierung
+  sortierung: Sortierung,
+  gruppierung: Gruppierung
 ): Kennungen | null {
   const [k, setK] = useState<Kennungen | null>(null)
   const anfrage = useRef(0)
-  const sofort = JSON.stringify([knoten, sortierung])
+  const sofort = JSON.stringify([knoten, sortierung, gruppierung])
   useGedrosselt(
     () => {
       const nr = ++anfrage.current
       api.library
-        .query(sortierung, knoten ?? undefined)
+        .queryGroups(sortierung, knoten ?? undefined, gruppierung)
         .then(
-          (ids) => ({ ids, fehler: null }),
-          (err) => ({ ids: [] as number[], fehler: errorText(err) })
+          (r) => ({ ...r, fehler: null }),
+          (err) => ({ ids: [] as number[], gruppen: [] as Gruppe[], fehler: errorText(err) })
         )
         .then((r) => {
           // eine neuere Anfrage hat Vorrang

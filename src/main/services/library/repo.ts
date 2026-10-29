@@ -15,6 +15,13 @@ import type { Grundfelder } from '@shared/grundfelder'
 import { pfadSchluessel } from '@shared/ordnerPruefen'
 import { unterUnlesbarem } from '@shared/scanRegeln'
 import { orderBy, unterordnerBereich, type OrdnerFilter, type Sortierung } from '@shared/sortFilter'
+import {
+  gruppenAus,
+  gruppenAusdruck,
+  type Gruppe,
+  type GruppenArt,
+  type ZeitStufe
+} from '@shared/gruppen'
 import { nameSortKey } from '@shared/sortKey'
 import type { FolderMode, ImageInfo } from '@shared/types'
 import type { DB } from '../db'
@@ -508,31 +515,60 @@ export function kennungen(
   filter?: OrdnerFilter,
   windows = process.platform === 'win32'
 ): number[] {
+  return abfragen(db, sortierung, filter, windows, null).map((z) => z.id)
+}
+
+/**
+ * Wie `kennungen`, dazu die Gruppen (2.3) aus demselben Durchlauf – Liste und Gruppen passen so
+ * immer zusammen. Der Schlüssel kommt aus einem festen Ausdruck (gruppen.ts).
+ */
+export function kennungenMitGruppen(
+  db: DB,
+  sortierung: Sortierung,
+  filter: OrdnerFilter | undefined,
+  art: GruppenArt,
+  stufe: ZeitStufe,
+  windows = process.platform === 'win32'
+): { ids: number[]; gruppen: Gruppe[] } {
+  const zeilen = abfragen(db, sortierung, filter, windows, gruppenAusdruck(art, stufe))
+  return {
+    ids: zeilen.map((z) => z.id),
+    gruppen: gruppenAus(
+      art,
+      zeilen.map((z) => z.g)
+    )
+  }
+}
+
+/** Geordnete Zeilen (Kennung, wahlweise Gruppen-Schlüssel) – ganz, je Ordner oder Unterordner. */
+function abfragen(
+  db: DB,
+  sortierung: Sortierung,
+  filter: OrdnerFilter | undefined,
+  windows: boolean,
+  gruppe: string | null
+): { id: number; g: unknown }[] {
+  const spalten = gruppe ? `id, ${gruppe} AS g` : 'id, NULL AS g'
+  const ordnung = `ORDER BY ${orderBy(sortierung)}`
   if (!filter) {
-    return db
-      .prepare(`SELECT id FROM images WHERE status != 'fehlt' ORDER BY ${orderBy(sortierung)}`)
-      .pluck()
-      .all() as number[]
+    return db.prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' ${ordnung}`).all() as {
+      id: number
+      g: unknown
+    }[]
   }
   if (!filter.pfad) {
     return db
-      .prepare(
-        `SELECT id FROM images WHERE status != 'fehlt' AND folder_id = ?
-          ORDER BY ${orderBy(sortierung)}`
-      )
-      .pluck()
-      .all(filter.ordner) as number[]
+      .prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ? ${ordnung}`)
+      .all(filter.ordner) as { id: number; g: unknown }[]
   }
   // Unterordner: Bereich auf dem Vergleichsschlüssel (Index folder_id, rel_key), ohne Groß/Klein
   const [von, bis] = unterordnerBereich(pfadSchluessel(filter.pfad, windows))
   return db
     .prepare(
-      `SELECT id FROM images WHERE status != 'fehlt' AND folder_id = ?
-          AND rel_key >= ? AND rel_key < ?
-        ORDER BY ${orderBy(sortierung)}`
+      `SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ?
+          AND rel_key >= ? AND rel_key < ? ${ordnung}`
     )
-    .pluck()
-    .all(filter.ordner, von, bis) as number[]
+    .all(filter.ordner, von, bis) as { id: number; g: unknown }[]
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer (direkten) Dateien – für den Ordnerbaum. */

@@ -27,6 +27,7 @@ import sharp from 'sharp'
 import { QUADRANTEN } from '../scripts/testbilder.mjs'
 import {
   erwarteteBilder,
+  kachel,
   launchApp,
   runSteps,
   sleep,
@@ -331,32 +332,46 @@ try {
         const tops = await kacheln().evaluateAll((el) =>
           el.map((e) => Math.round(e.getBoundingClientRect().top))
         )
-        const spalten = tops.filter((t) => t === tops[0]).length
-        assert.ok(spalten >= 2, `nur ${spalten} Spalte(n)`)
+        // Kachelzeilen nach Höhe; mit Gruppen-Überschriften (2.3) kann eine Zeile kürzer sein
+        const zeilen = [...new Set(tops)].map((t) => namen.filter((_, i) => tops[i] === t))
+        const zweite = zeilen.findIndex((z, i) => i > 0 && z.length >= 2)
+        assert.ok(zweite > 0, `keine zweite Zeile mit 2 Kacheln: ${JSON.stringify(zeilen)}`)
         const lb = await raster().boundingBox()
-        const ziel = await kacheln()
-          .nth(spalten + 1)
-          .boundingBox()
-        // von der freien Ecke oben links bis in die zweite Kachel der zweiten Zeile
-        await ctx.page.mouse.move(lb.x + 4, lb.y + 4)
-        await ctx.page.mouse.down()
-        await ctx.page.mouse.move(ziel.x + ziel.width / 2, ziel.y + ziel.height / 3, { steps: 6 })
-        await ctx.page.mouse.up()
-        assert.deepEqual(
-          (await gewaehlteNamen()).sort(),
-          [namen[0], namen[1], namen[spalten], namen[spalten + 1]].sort()
-        )
-        await raster().press('Escape')
+        const ziel = await kacheln().nth(namen.indexOf(zeilen[zweite][1])).boundingBox()
+        // nicht so nah am unteren Rand, dass das Raster beim Ziehen weiterscrollt
+        assert.ok(ziel.y + 30 < lb.y + lb.height, 'Zielzeile zu weit unten')
+        const erwartet = (bisZeile) =>
+          zeilen
+            .slice(0, bisZeile)
+            .flatMap((z) => z.slice(0, 2))
+            .sort()
+        // von der freien Ecke oben links bis knapp über bzw. knapp in die zweite Kachel einer
+        // späteren Zeile – über Überschriften hinweg: Die Rahmen-Geometrie muss auf wenige Pixel
+        // zum Gezeichneten passen (eine Überschrift zu viel oder zu wenig wäre 40 px daneben)
+        for (const [y, bisZeile] of [
+          [ziel.y - 3, zweite],
+          [ziel.y + 3, zweite + 1]
+        ]) {
+          await ctx.page.mouse.move(lb.x + 4, lb.y + 4)
+          await ctx.page.mouse.down()
+          await ctx.page.mouse.move(ziel.x + ziel.width / 2, y, { steps: 6 })
+          await ctx.page.mouse.up()
+          assert.deepEqual((await gewaehlteNamen()).sort(), erwartet(bisZeile), `bis y=${y}`)
+          await raster().press('Escape')
+        }
       }
     ],
     [
       'Größenregler und Strg + Mausrad; Liste mit wählbaren Spalten, Sortieren per Überschrift',
       async () => {
-        const breite = async () => (await kacheln().first().boundingBox()).width
-        const vorher = await breite()
+        // Box kann während eines Neuzeichnens kurz fehlen (gesehen im vollen Lauf unter Last; ein
+        // Wächter in der Seite fand beim Größenwechsel keine verschwundene Kachel) – dann NaN
+        const breite = async () => (await kacheln().first().boundingBox())?.width ?? NaN
+        const vorher = await waitFor(breite, 3_000)
+        assert.ok(vorher, 'keine Kachel sichtbar')
         await ctx.page.getByRole('slider', { name: 'Größe' }).fill('80')
         assert.ok(await waitFor(async () => (await breite()) < vorher, 3_000))
-        const klein = await breite()
+        const klein = await waitFor(breite, 3_000)
         const lb = await raster().boundingBox()
         await ctx.page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2)
         await ctx.page.keyboard.down('Control')
@@ -552,7 +567,7 @@ try {
         appendFileSync(link, Buffer.from([0]))
         try {
           assert.equal((await bild(kennung('muenchen.jpg'))).status, 409)
-          await raster().getByRole('option', { name: 'muenchen.jpg', exact: true }).dblclick()
+          await (await kachel(ctx.page, 'muenchen.jpg')).dblclick()
           await betrachter()
             .getByText(/lässt sich gerade nicht anzeigen/)
             .waitFor({ timeout: 5_000 })
@@ -620,7 +635,7 @@ try {
       'Diashow blättert im eingestellten Abstand weiter; Pause hält an',
       async () => {
         await betrachterZu() // falls der vorige Schritt mit offenem Betrachter scheiterte
-        await raster().getByRole('option', { name: 'Bild 2.jpg', exact: true }).dblclick()
+        await (await kachel(ctx.page, 'Bild 2.jpg')).dblclick()
         await betrachter().waitFor({ timeout: 5_000 })
         await betrachter()
           .getByRole('combobox', { name: 'Intervall der Diashow' })
@@ -865,7 +880,7 @@ try {
         }, papierkorbDir)
         const datei = join(bib.dir, 'namen', 'Bild 10.jpg')
         const vorher = (await zustand()).total
-        await raster().getByRole('option', { name: 'Bild 10.jpg', exact: true }).dblclick()
+        await (await kachel(ctx.page, 'Bild 10.jpg')).dblclick()
         await betrachter().waitFor({ timeout: 5_000 })
         // Modus ist „nur lesen“ (früherer Schritt): nichts passiert, Hinweis
         await ctx.page.keyboard.press('Delete')

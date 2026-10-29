@@ -1,7 +1,8 @@
 // Grundfelder und Sortieren in der echten App (Phase 1.2): ExifTool im Bilddienst liest Maße,
 // Ausrichtung, Format und Aufnahmedatum der Testbibliothek; die Abfrage liefert Kennungen in der
 // gewählten Reihenfolge (Name, Aufnahmedatum, Änderungsdatum, Größe, Typ); die Oberfläche wählt
-// die Sortierung und merkt sie sich. Am Ende: Nach dem Beenden bleibt kein ExifTool zurück.
+// die Sortierung und merkt sie sich. Ab 2.3 weitere Felder und Gruppen-Überschriften, die der
+// Sortierung folgen. Am Ende: Nach dem Beenden bleibt kein ExifTool zurück.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -57,7 +58,12 @@ const api = {
   zustand: () => ctx.page.evaluate(() => window.api.library.state()),
   query: (feld, richtung = 'auf') =>
     ctx.page.evaluate((s) => window.api.library.query(s), { feld, richtung }),
-  details: (ids) => ctx.page.evaluate((x) => window.api.library.details(x), ids)
+  details: (ids) => ctx.page.evaluate((x) => window.api.library.details(x), ids),
+  gruppen: (feld, richtung, gruppierung) =>
+    ctx.page.evaluate(
+      ([s, g]) => window.api.library.queryGroups(s, undefined, g),
+      [{ feld, richtung }, gruppierung]
+    )
 }
 /** Details aller Dateien in der Reihenfolge einer Sortierung */
 const liste = async (feld, richtung = 'auf') => api.details(await api.query(feld, richtung))
@@ -66,6 +72,11 @@ const liste = async (feld, richtung = 'auf') => api.details(await api.query(feld
 const tabelle = () =>
   ctx.page.$$eval('[role="listbox"][aria-label="Bilder"] [role="option"]', (el) =>
     el.map((x) => x.getAttribute('aria-label'))
+  )
+/** Gruppen-Überschriften im Raster bzw. in der Liste, in Reihenfolge (virtualisiert: die gezeigten) */
+const ueberschriften = () =>
+  ctx.page.$$eval('[aria-label="Bilder"] [data-gruppe]', (el) =>
+    el.map((x) => x.getAttribute('data-gruppe'))
   )
 /** Zeigt die Oberfläche den Anfang dieser Reihenfolge? */
 const zeigtAnfang = async (namen) => {
@@ -322,6 +333,171 @@ try {
           .getByRole('combobox', { name: 'Sortieren nach' })
           .selectOption('ort')
         assert.deepEqual(imRaster, ['ort'])
+      }
+    ],
+    [
+      'Weitere Felder (2.3): Kamera, Bewertung, Auflösung, Objektiv, Ordner – fehlende Werte am Ende',
+      async () => {
+        const namen = async (feld, richtung) => (await liste(feld, richtung)).map((b) => b.name)
+        const mitKamera = bilder.filter((e) => e.kamera).map(name)
+        for (const richtung of ['auf', 'ab']) {
+          const n = await namen('kamera', richtung)
+          assert.equal(n.length, erwartet)
+          // erst alle mit Kamera, dann die ohne – in beiden Richtungen
+          assert.deepEqual(new Set(n.slice(0, mitKamera.length)), new Set(mitKamera), richtung)
+          const bew = (await liste('bewertung', richtung)).map((b) => b.rating)
+          const mit = bew.filter((r) => r !== null)
+          assert.deepEqual(bew.slice(0, mit.length), mit, `Bewertung ${richtung}: ohne zuerst`)
+          assert.deepEqual(
+            mit,
+            [...mit].sort((a, b) => (richtung === 'auf' ? a - b : b - a))
+          )
+        }
+        const px = (await liste('aufloesung', 'auf'))
+          .filter((b) => b.width && b.height)
+          .map((b) => b.width * b.height)
+        assert.deepEqual(
+          px,
+          [...px].sort((a, b) => a - b)
+        )
+        for (const feld of ['objektiv', 'iso', 'blende', 'belichtung', 'brennweite', 'ordner']) {
+          assert.equal((await api.query(feld, 'ab')).length, erwartet, feld)
+        }
+        // Ordner: je Verzeichnis ein Block, Verzeichnisse A–Z (der Bibliotheksordner selbst zuerst)
+        const verzeichnis = new Map(
+          bib.manifest.eintraege.map((e) => [name(e), e.datei.split('/').slice(0, -1).join('/')])
+        )
+        const dirs = (await namen('ordner', 'auf')).map((n) => verzeichnis.get(n).toLowerCase())
+        assert.deepEqual(dirs, [...dirs].sort(), dirs.join(' | '))
+        assert.ok(new Set(dirs).size >= 4)
+      }
+    ],
+    [
+      'Gruppen (2.3): folgen der Sortierung – Monat, Jahr, Ort; Name ohne; Ungültiges abgelehnt',
+      async () => {
+        const g = await api.gruppen('aufnahme', 'auf', 'monat')
+        assert.equal(g.ids.length, erwartet)
+        assert.deepEqual(g.ids, await api.query('aufnahme', 'auf'))
+        // lückenlos, und jede Gruppe hat genau einen Monat
+        let von = 0
+        const details = await api.details(g.ids)
+        const monat = (k) =>
+          new Date(`${k}-15T12:00:00`).toLocaleDateString('de-DE', {
+            month: 'long',
+            year: 'numeric'
+          })
+        for (const x of g.gruppen) {
+          assert.equal(x.von, von)
+          const teil = details.slice(x.von, x.von + x.anzahl).map((b) => b.takenAt.slice(0, 7))
+          assert.equal(new Set(teil).size, 1, `${x.titel}: ${teil.join(', ')}`)
+          assert.equal(x.titel, monat(teil[0]))
+          von += x.anzahl
+        }
+        assert.equal(von, erwartet)
+        const titel = g.gruppen.map((x) => x.titel)
+        for (const t of ['April 2022', 'Dezember 2023', 'Mai 2024', 'Juli 2024'])
+          assert.ok(titel.includes(t), `fehlt: ${t} in ${titel.join(' | ')}`)
+        const mai = g.gruppen.find((x) => x.titel === 'Mai 2024')
+        assert.equal(
+          mai.anzahl,
+          bilder.filter((e) => e.aufnahme?.lokal.startsWith('2024-05')).length
+        )
+        // Jahr, absteigend: Jahre fallend
+        const jahre = (await api.gruppen('aufnahme', 'ab', 'jahr')).gruppen.map((x) => x.titel)
+        assert.deepEqual(jahre, [...jahre].sort().reverse())
+        assert.ok(jahre.includes('2022') && jahre.includes('2024'))
+        // Tag
+        const tage = (await api.gruppen('aufnahme', 'auf', 'tag')).gruppen.map((x) => x.titel)
+        assert.ok(
+          tage.includes('2. April 2022') && tage.includes('3. April 2022'),
+          tage.join(' | ')
+        )
+        // Ort: je Ort, ohne Standort zuletzt
+        const orte = (await api.gruppen('ort', 'auf', 'monat')).gruppen
+        assert.deepEqual(
+          orte.map((x) => x.titel),
+          [
+            'Dubrovnik · Kroatien',
+            'München · Deutschland',
+            'Paris · Frankreich',
+            'Paris · Vereinigte Staaten',
+            'Ohne Standort'
+          ]
+        )
+        assert.equal(orte.at(-1).anzahl, erwartet - 4)
+        // Name, Größe: keine Gruppen; „aus“: keine
+        assert.deepEqual((await api.gruppen('name', 'auf', 'monat')).gruppen, [])
+        assert.deepEqual((await api.gruppen('aufnahme', 'auf', 'aus')).gruppen, [])
+        for (const x of ['woche', 'MONAT', null, 3]) {
+          await assert.rejects(api.gruppen('aufnahme', 'auf', x), /Gruppierung/, String(x))
+        }
+        await assert.rejects(api.gruppen('id;--', 'auf', 'monat'), /Sortierung/)
+      }
+    ],
+    [
+      'Gruppen in Raster und Liste: Stufe wählbar, aus, an/aus bei Kamera; keine bei Name',
+      async () => {
+        const sortieren = ctx.page.getByRole('combobox', { name: 'Sortieren nach' })
+        const ab =
+          (await ctx.page
+            .getByRole('button', { name: 'Absteigend' })
+            .getAttribute('aria-pressed')) === 'true'
+        const richtung = ab ? 'ab' : 'auf'
+        const zeigtKoepfe = async (feld, gruppierung) => {
+          const soll = (await api.gruppen(feld, richtung, gruppierung)).gruppen.map((x) => x.titel)
+          const ok = await waitFor(async () => {
+            const ist = await ueberschriften()
+            return (
+              ist.length > 0 && JSON.stringify(ist) === JSON.stringify(soll.slice(0, ist.length))
+            )
+          }, 5_000)
+          assert.ok(
+            ok,
+            `${feld}/${gruppierung}: ${(await ueberschriften()).join(' | ')} statt ${soll.join(' | ')}`
+          )
+        }
+        await sortieren.selectOption('aufnahme')
+        const stufe = ctx.page.getByRole('combobox', { name: 'Gruppen' })
+        assert.equal(await stufe.inputValue(), 'monat', 'Vorgabe ist Monat')
+        await zeigtKoepfe('aufnahme', 'monat')
+        // Kachel unter der ersten Überschrift: das erste Bild der ersten Gruppe
+        const erste = (await liste('aufnahme', richtung))[0].name
+        assert.ok(await waitFor(async () => (await tabelle())[0] === erste, 5_000))
+        await stufe.selectOption('jahr')
+        await zeigtKoepfe('aufnahme', 'jahr')
+        await stufe.selectOption('aus')
+        assert.ok(await waitFor(async () => (await ueberschriften()).length === 0, 5_000))
+        // Name: keine Gruppen, kein Schalter
+        await sortieren.selectOption('name')
+        assert.ok(
+          await waitFor(
+            async () => (await ctx.page.getByRole('combobox', { name: 'Gruppen' }).count()) === 0,
+            3_000
+          )
+        )
+        assert.equal(
+          await ctx.page.getByRole('button', { name: 'Gruppen', exact: true }).count(),
+          0
+        )
+        // Kamera: an/aus (steht noch auf „aus“)
+        await sortieren.selectOption('kamera')
+        const schalter = ctx.page.getByRole('button', { name: 'Gruppen', exact: true })
+        await schalter.waitFor({ timeout: 3_000 })
+        assert.equal(await schalter.getAttribute('aria-pressed'), 'false')
+        assert.equal((await ueberschriften()).length, 0)
+        await schalter.click()
+        assert.equal(await schalter.getAttribute('aria-pressed'), 'true')
+        await zeigtKoepfe('kamera', 'monat')
+        // Liste: dieselben Überschriften als Zeilen
+        await ctx.page.getByRole('button', { name: 'Liste', exact: true }).click()
+        await ctx.page.getByRole('grid', { name: 'Bilder' }).waitFor({ timeout: 3_000 })
+        await zeigtKoepfe('kamera', 'monat')
+        // bleibt nach dem Neuladen
+        await ctx.page.reload()
+        await ctx.page.getByRole('grid', { name: 'Bilder' }).waitFor({ timeout: 10_000 })
+        await zeigtKoepfe('kamera', 'monat')
+        await ctx.page.getByRole('button', { name: 'Kacheln', exact: true }).click()
+        await zeigtKoepfe('kamera', 'monat')
       }
     ],
     [

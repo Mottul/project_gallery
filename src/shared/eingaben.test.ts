@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pruefeGruppierungStreng,
   pruefeKennung,
   pruefeKennungen,
   pruefeOrdnerFilterStreng,
@@ -68,6 +69,15 @@ describe('pruefeSortierungStreng', () => {
       richtung: 'ab'
     })
     expect(() => pruefeSortierungStreng({ feld: 'name; --', richtung: 'ab' })).toThrow(/Sortierung/)
+  })
+})
+
+describe('pruefeGruppierungStreng', () => {
+  it('nimmt die vier Stufen, wirft bei allem anderen', () => {
+    for (const g of ['aus', 'tag', 'monat', 'jahr']) expect(pruefeGruppierungStreng(g)).toBe(g)
+    for (const v of ['Monat', 'woche', '', 2, null, undefined, 'constructor']) {
+      expect(() => pruefeGruppierungStreng(v), String(v)).toThrow(/Gruppierung/)
+    }
   })
 })
 
