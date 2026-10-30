@@ -10,7 +10,10 @@ import {
   alteWerte,
   schreibbar,
   tagsFuer,
+  werteAus,
+  WERTE_TAGS,
   type MetaAenderung,
+  type MetaWerte,
   type SchreibBericht,
   type TagWert
 } from '@shared/metaFields'
@@ -172,6 +175,25 @@ function bericht(
       .map((e) => ({ id: e.z.id, name: e.z.name, grund: e.r.grund as string })),
     journal: ok.map((e) => e.r.journal as number)
   }
+}
+
+/** Die bearbeitbaren Felder einer Datei, frisch gelesen; nimmt die Warteschlange mit. */
+export function metaLesen(id: number): Promise<{ werte: MetaWerte } | { grund: string }> {
+  return nacheinander(async () => {
+    const [z] = repo.vorschauZeilen(env().db(), [id])
+    if (!z) return { grund: 'Die Datei gibt es nicht mehr.' }
+    const pfad = join(z.ordner, ...z.rel_path.split('/'))
+    const datei = { pfad, ordner: z.ordner, size: z.size, mtime: z.mtime }
+    try {
+      const r = await bilddienst.tagsLesen(datei, [...WERTE_TAGS])
+      if (!r) return { grund: grundZu('SCHREIBFEHLER') }
+      return { werte: werteAus(r) }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? 'UNBEKANNT'
+      if (code === 'GEAENDERT') env().abgleichen(z.folder_id)
+      return { grund: grundZu(code) }
+    }
+  })
 }
 
 /** Metadaten dieser Bilder ändern; jede Datei für sich, ein Fehler hält den Rest nicht auf. */

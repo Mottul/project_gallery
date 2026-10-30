@@ -3,8 +3,9 @@
 // Standort (Koordinaten – der Ortsname kommt mit 2.2), Datei. „Alle Felder“ liest erst beim
 // Aufklappen frisch aus der Datei (über den Bilddienst, nicht aus dem Index). Texte aus den
 // Metadaten nur als Text (React escaped), nie als HTML.
-import { ChevronDown, ChevronRight, Star } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Star } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Button } from '@renderer/components/ui/button'
 import { api } from '@renderer/lib/api'
 import {
   belichtungText,
@@ -143,7 +144,16 @@ function AlleFelder({ bild }: { bild: ImageInfo }): JSX.Element {
   )
 }
 
-export function InfoPanel({ bild }: { bild: ImageInfo }): JSX.Element {
+export function InfoPanel({
+  bild,
+  gesperrt,
+  onBearbeiten
+}: {
+  bild: ImageInfo
+  /** Warum sich das Bild nicht bearbeiten lässt; null = es geht */
+  gesperrt: string | null
+  onBearbeiten: () => void
+}): JSX.Element {
   const belichtung = [
     bild.aperture !== null ? blendeText(bild.aperture) : null,
     bild.exposure !== null ? belichtungText(bild.exposure) : null,
@@ -155,7 +165,22 @@ export function InfoPanel({ bild }: { bild: ImageInfo }): JSX.Element {
       aria-label="Informationen zum Bild"
       className="w-80 shrink-0 overflow-auto border-l bg-leiste p-4"
     >
-      <h3 className="mb-1 break-words text-sm font-semibold">{bild.title ?? bild.name}</h3>
+      <div className="mb-1 flex items-start gap-2">
+        <h3 className="min-w-0 flex-1 break-words text-sm font-semibold">
+          {bild.title ?? bild.name}
+        </h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 gap-1 px-2"
+          disabled={gesperrt !== null}
+          title={gesperrt ?? 'Bearbeiten (E)'}
+          onClick={onBearbeiten}
+        >
+          <Pencil className="size-3" aria-hidden />
+          Bearbeiten
+        </Button>
+      </div>
       {bild.title && <p className="mb-2 break-words text-xs text-muted-foreground">{bild.name}</p>}
       {bild.description && <p className="mb-3 whitespace-pre-line text-sm">{bild.description}</p>}
       {!bild.metaRead && (

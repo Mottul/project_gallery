@@ -17,12 +17,17 @@ const ZEICHEN = new Map([
 /** Tag-Namen der Zuordnung; alles andere ist ein Fehler im Programm, kein Eingabefehler */
 const TAG = /^[A-Za-z0-9-]+:[A-Za-z0-9-]+$/
 
-/** Ein Tag setzen; ohne Wert wird er entfernt. */
-export function tagArgument({ tag, wert }: TagWert): string {
-  if (!TAG.test(tag)) throw new Error('Ungültiger Tag-Name')
+function wertArgument(tag: string, wert: string | number | null): string {
   const w = wert === null ? '' : String(wert)
   if (/\p{Cc}/u.test(w.replace(/[\n\r\t]/g, ''))) throw new Error('Steuerzeichen in einem Wert')
   return `#[CSTR]-${tag}=${w.replace(/[\\\n\r\t]/g, (z) => ZEICHEN.get(z) as string)}`
+}
+
+/** Ein Tag setzen; ohne Wert wird er entfernt, eine Liste ergibt je Wert ein Argument. */
+export function tagArgumente({ tag, wert }: TagWert): string[] {
+  if (!TAG.test(tag)) throw new Error('Ungültiger Tag-Name')
+  if (!Array.isArray(wert)) return [wertArgument(tag, wert)]
+  return wert.length ? wert.map((w) => wertArgument(tag, w)) : [wertArgument(tag, null)]
 }
 
 function pfadPruefen(pfad: string): string {
@@ -41,7 +46,7 @@ export function schreibArgumente(tags: readonly TagWert[], quelle: string, ziel:
     '-o',
     pfadPruefen(ziel),
     ...(iptc ? ['-IPTC:CodedCharacterSet=UTF8'] : []),
-    ...tags.map(tagArgument),
+    ...tags.flatMap(tagArgumente),
     pfadPruefen(quelle)
   ]
 }
