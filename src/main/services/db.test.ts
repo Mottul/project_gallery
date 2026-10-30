@@ -127,6 +127,25 @@ describe('Index-Datenbank', () => {
     db.close()
   })
 
+  it('Version 6 → 7: gespeicherte Ansichten gehen mit ihrem Ordner', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    migrieren(db, 6)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    migrieren(db)
+    const neu = db.prepare(
+      "INSERT INTO ansichten (name, name_key, folder_id, stand) VALUES (?, ?, ?, '{}')"
+    )
+    neu.run('Ordner', 'ordner', 1)
+    neu.run('Alle', 'alle', null)
+    expect(() => neu.run('ORDNER', 'ordner', null)).toThrow(/UNIQUE/)
+    db.prepare('DELETE FROM folders WHERE id = 1').run()
+    expect(db.prepare('SELECT name FROM ansichten').pluck().all()).toEqual(['Alle'])
+    db.close()
+  })
+
   it('Version 5 → 6: Suchindex aus den vorhandenen Zeilen, danach von Triggern aktuell', () => {
     const db = new Database(':memory:')
     migrieren(db, 5)

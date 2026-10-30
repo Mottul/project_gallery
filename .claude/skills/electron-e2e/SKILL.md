@@ -25,6 +25,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
 | `filter.mjs` | Filter und Suche exakt gegen die Testbilder, Ungültiges abgelehnt, Suchfeld, Filterleiste (Liste ganz sichtbar), Chips, „N von M“, Filter über Ordner/Ansichten/Betrachter, nach Neuladen weg, Suchindex folgt den Dateien, Log ohne Suchbegriffe |
+| `ansichten.mjs` | Speichern über die Filterleiste, Öffnen stellt Ordner, Darstellung, Sortierung, Gruppen, Größe, Filter und Suche wieder her, Ersetzen nur ausdrücklich, Ungültiges abgelehnt, nach dem Neustart nicht aktiv, Löschen mit Rückfrage, entfernter Ordner nimmt seine Ansichten mit, Log ohne Namen |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |
@@ -131,6 +132,10 @@ try {
   Fehler ansehen). Die Testbilder enthalten kein Hochformat – „hoch“ prüft `repo.test.ts`.
   Oberfläche immer auch mit `E2E_FENSTER=1024x700` laufen lassen: So fiel in 2.4 auf, dass eine
   Auswahlliste am rechten Fensterrand abgeschnitten wurde – im Standardfenster war alles grün.
+- **Gespeicherte Ansichten** (2.4b): Die Suche greift erst nach 250 ms – vor dem Speichern auf den
+  Zähler warten (`1 von 4 Bildern`), sonst landet der alte Begriff in der Ansicht. Die Liste
+  meldet der main vor der Antwort auf `saveView`: Der Eintrag steht schon da, während das
+  Namensfeld noch offen ist – auf sein Verschwinden warten, nicht zählen.
 - **Blocksatz** (2.3b): Kacheln ohne Text darunter; die Lage einer Kachel ist die Box ihres
   ersten Kindes (das Bild). Erwartungen aus dem Gezeichneten ableiten (Rahmen: was die Box
   schneidet) und mit den Maßen aus `library.details` vergleichen (Seitenverhältnis begrenzt auf

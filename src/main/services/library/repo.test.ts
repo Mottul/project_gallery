@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lokalAusMs } from '@shared/dates'
+import { ANSICHTEN_MAX, type AnsichtStand } from '@shared/gespeicherteAnsicht'
 import { grundfelderAus } from '@shared/grundfelder'
 import { INDEX_FELDER, orderBy, SORT_FELDER } from '@shared/sortFilter'
 import type { GefundeneDatei, OrtWert } from './repo'
@@ -1062,5 +1063,73 @@ describe('Ordner-Filter, Ordnerbaum, Summen (1.4)', () => {
     expect(repo.vorschauOffenUnter(db, ausschnitt).map((z) => z.id)).toEqual(
       ausschnitt.filter((i) => i !== erste.id)
     )
+  })
+})
+
+describe('Gespeicherte Ansichten (2.4b)', () => {
+  const stand: AnsichtStand = {
+    knoten: null,
+    art: 'liste',
+    groesse: 200,
+    sortierung: { feld: 'ort', richtung: 'ab' },
+    gruppierung: 'jahr',
+    filter: { bewertung: 4, suche: 'hafen' }
+  }
+
+  it('speichert alles und liefert es unverändert zurück', () => {
+    const k = { ordner: id, pfad: 'Urlaub/Split' }
+    const r = repo.ansichtSpeichern(db, 'Beste', { ...stand, knoten: k }, false)
+    expect(r.status).toBe('gespeichert')
+    expect(repo.ansichten(db)).toEqual([
+      { ...stand, knoten: k, name: 'Beste', id: expect.any(Number) }
+    ])
+  })
+
+  it('ordnet nach Name wie im Deutschen', () => {
+    for (const n of ['Zebra', 'Äpfel', 'Bild 10', 'Bild 2']) {
+      repo.ansichtSpeichern(db, n, stand, false)
+    }
+    expect(repo.ansichten(db).map((a) => a.name)).toEqual(['Äpfel', 'Bild 2', 'Bild 10', 'Zebra'])
+  })
+
+  it('ersetzt einen vergebenen Namen nur auf ausdrücklichen Wunsch', () => {
+    const r = repo.ansichtSpeichern(db, 'Beste', stand, false)
+    const anders = { ...stand, art: 'kacheln' as const }
+    expect(repo.ansichtSpeichern(db, 'BESTE', anders, false)).toEqual({ status: 'vorhanden' })
+    expect(repo.ansichten(db)[0].art).toBe('liste')
+    expect(repo.ansichtSpeichern(db, 'BESTE', anders, true)).toEqual(r)
+    expect(repo.ansichten(db).map((a) => [a.name, a.art])).toEqual([['BESTE', 'kacheln']])
+  })
+
+  it('nimmt höchstens ANSICHTEN_MAX an, Ersetzen geht dann noch', () => {
+    for (let i = 0; i < ANSICHTEN_MAX; i++) repo.ansichtSpeichern(db, `A${i}`, stand, false)
+    expect(repo.ansichtSpeichern(db, 'Neu', stand, false)).toEqual({ status: 'voll' })
+    expect(repo.ansichtSpeichern(db, 'A1', stand, true).status).toBe('gespeichert')
+    expect(repo.ansichten(db)).toHaveLength(ANSICHTEN_MAX)
+  })
+
+  it('verschwindet mit dem Ordner, Ansichten über alle Bilder bleiben', () => {
+    repo.ansichtSpeichern(db, 'Ordner', { ...stand, knoten: { ordner: id, pfad: '' } }, false)
+    repo.ansichtSpeichern(db, 'Alle', stand, false)
+    repo.ordnerEntfernen(db, id)
+    expect(repo.ansichten(db).map((a) => a.name)).toEqual(['Alle'])
+  })
+
+  it('überspringt Zeilen, die die Prüfung nicht bestehen, statt zu scheitern', () => {
+    repo.ansichtSpeichern(db, 'Gut', stand, false)
+    const neu = db.prepare('INSERT INTO ansichten (name, name_key, stand) VALUES (?, ?, ?)')
+    neu.run('Kaputt', 'kaputt', '{nicht json')
+    neu.run('Null', 'null', 'null')
+    neu.run('Fremd', 'fremd', JSON.stringify({ ...stand, art: 'mosaik' }))
+    expect(repo.ansichten(db).map((a) => a.name)).toEqual(['Gut'])
+  })
+
+  it('löscht und kennt den Namen nur, solange es die Ansicht gibt', () => {
+    const r = repo.ansichtSpeichern(db, 'Weg', stand, false)
+    if (r.status !== 'gespeichert') throw new Error(r.status)
+    expect(repo.ansichtName(db, r.id)).toBe('Weg')
+    expect(repo.ansichtLoeschen(db, r.id)).toBe(true)
+    expect(repo.ansichtName(db, r.id)).toBeNull()
+    expect(repo.ansichtLoeschen(db, r.id)).toBe(false)
   })
 })

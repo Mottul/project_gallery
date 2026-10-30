@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pruefeAnsichtNameStreng,
+  pruefeAnsichtStandStreng,
   pruefeBildFilterStreng,
   pruefeGruppierungStreng,
   pruefeKennung,
@@ -111,5 +113,27 @@ describe('pruefeOrdnerModus', () => {
     for (const v of ['Normal', 'lesen', '', 1, null, 'constructor']) {
       expect(() => pruefeOrdnerModus(v), String(v)).toThrow(/Modus/)
     }
+  })
+})
+
+describe('gespeicherte Ansichten', () => {
+  const stand = {
+    knoten: null,
+    art: 'kacheln',
+    groesse: 160,
+    sortierung: { feld: 'aufnahme', richtung: 'ab' },
+    gruppierung: 'monat',
+    filter: {}
+  }
+
+  it('lässt Gültiges durch', () => {
+    expect(pruefeAnsichtNameStreng(' Beste ')).toBe('Beste')
+    expect(pruefeAnsichtStandStreng(stand)).toEqual(stand)
+  })
+
+  it('wirft bei Ungültigem', () => {
+    expect(() => pruefeAnsichtNameStreng('')).toThrow('Ungültiger Name')
+    expect(() => pruefeAnsichtNameStreng('a\u0000b')).toThrow('Ungültiger Name')
+    expect(() => pruefeAnsichtStandStreng({ ...stand, art: 'x' })).toThrow('Ungültige Ansicht')
   })
 })

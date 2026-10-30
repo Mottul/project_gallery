@@ -4,6 +4,12 @@
 // fehlt localStorage, gilt der Stand nur für diese Sitzung.
 
 import { create } from 'zustand'
+import {
+  ANSICHT_ARTEN,
+  GROESSE_MAX,
+  GROESSE_MIN,
+  type AnsichtArt
+} from '@shared/gespeicherteAnsicht'
 import { pruefeGruppierung, type Gruppierung } from '@shared/gruppen'
 import {
   pruefeOrdnerFilter,
@@ -13,8 +19,7 @@ import {
   type Sortierung
 } from '@shared/sortFilter'
 
-export type AnsichtArt = 'kacheln' | 'blocksatz' | 'liste'
-const ARTEN: readonly AnsichtArt[] = ['kacheln', 'blocksatz', 'liste']
+export { GROESSE_MAX, GROESSE_MIN, type AnsichtArt }
 
 export interface Ansicht {
   art: AnsichtArt
@@ -25,8 +30,6 @@ export interface Ansicht {
   gruppierung: Gruppierung
 }
 
-export const GROESSE_MIN = 80
-export const GROESSE_MAX = 320
 const STANDARD: Ansicht = {
   art: 'kacheln',
   groesse: 160,
@@ -65,7 +68,7 @@ function pruefeAnsicht(v: unknown): Ansicht | null {
   if (!v || typeof v !== 'object') return null
   const { art, groesse, sortierung, gruppierung } = v as Record<string, unknown>
   const s = pruefeSortierung(sortierung)
-  if (!ARTEN.includes(art as AnsichtArt) || typeof groesse !== 'number' || !s) return null
+  if (!ANSICHT_ARTEN.includes(art as AnsichtArt) || typeof groesse !== 'number' || !s) return null
   return {
     art: art as AnsichtArt,
     groesse: begrenzeGroesse(groesse),
@@ -121,4 +124,10 @@ export function ansichtAendern(patch: Partial<Ansicht>): void {
   })
   useStore.setState({ ansichten: neu })
   schreiben(ANSICHTEN_KEY, Object.fromEntries(neu))
+}
+
+/** Der gewählte Knoten mit seiner Ansicht, außerhalb von React (gespeicherte Ansichten). */
+export function ansichtLesen(): Ansicht & { knoten: Knoten } {
+  const { knoten, ansichten } = useStore.getState()
+  return { ...(ansichten.get(ansichtSchluessel(knoten)) ?? STANDARD), knoten }
 }

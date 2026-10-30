@@ -2,6 +2,7 @@
 // gilt als fremde Eingabe (Skill ipc-kanal): Ungültiges ist ein Fehler, nie still „korrigiert“.
 
 import { pruefeBildFilter, type BildFilter } from './bildFilter'
+import { pruefeAnsichtName, pruefeAnsichtStand, type AnsichtStand } from './gespeicherteAnsicht'
 import { pruefeGruppierung, type Gruppierung } from './gruppen'
 import {
   pruefeOrdnerFilter,
@@ -41,6 +42,18 @@ export function pruefeBildFilterStreng(v: unknown): BildFilter {
   const f = pruefeBildFilter(v)
   if (!f) throw new Error('Ungültiger Filter')
   return f
+}
+
+export function pruefeAnsichtNameStreng(v: unknown): string {
+  const n = pruefeAnsichtName(v)
+  if (n === null) throw new Error('Ungültiger Name der Ansicht')
+  return n
+}
+
+export function pruefeAnsichtStandStreng(v: unknown): AnsichtStand {
+  const s = pruefeAnsichtStand(v)
+  if (!s) throw new Error('Ungültige Ansicht')
+  return s
 }
 
 /** Ein Schalter aus dem Renderer: fehlt = aus, sonst nur true/false. */

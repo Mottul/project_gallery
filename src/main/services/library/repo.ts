@@ -19,6 +19,14 @@ import {
   type FilterWert
 } from '@shared/bildFilter'
 import { dateiDatum } from '@shared/dates'
+import {
+  ANSICHTEN_MAX,
+  nameSchluessel,
+  pruefeAnsichtStand,
+  type AnsichtSpeichernErgebnis,
+  type AnsichtStand,
+  type GespeicherteAnsicht
+} from '@shared/gespeicherteAnsicht'
 import type { Grundfelder } from '@shared/grundfelder'
 import { pfadSchluessel } from '@shared/ordnerPruefen'
 import { unterUnlesbarem } from '@shared/scanRegeln'
@@ -1041,4 +1049,71 @@ export function vorschauZuruecksetzen(db: DB, folderId: number): void {
   db.prepare("UPDATE images SET thumb_state = NULL WHERE folder_id = ? AND thumb_state = 'ok'").run(
     folderId
   )
+}
+
+// ── Gespeicherte Ansichten (2.4b) ─────────────────────────────────────────────────────────────
+
+const NAMEN = new Intl.Collator('de', { sensitivity: 'base', numeric: true })
+
+/** Alle Ansichten nach Name; eine Zeile, die die Prüfung nicht besteht, fällt weg (fremde Version). */
+export function ansichten(db: DB): GespeicherteAnsicht[] {
+  const zeilen = db.prepare('SELECT id, name, folder_id, pfad, stand FROM ansichten').all() as {
+    id: number
+    name: string
+    folder_id: number | null
+    pfad: string
+    stand: string
+  }[]
+  const out: GespeicherteAnsicht[] = []
+  for (const z of zeilen) {
+    let roh: unknown
+    try {
+      roh = JSON.parse(z.stand)
+    } catch {
+      continue
+    }
+    const knoten = z.folder_id === null ? null : { ordner: z.folder_id, pfad: z.pfad }
+    const stand = pruefeAnsichtStand({ ...(roh as object), knoten })
+    if (stand) out.push({ ...stand, id: z.id, name: z.name })
+  }
+  return out.sort((a, b) => NAMEN.compare(a.name, b.name))
+}
+
+/** Neu anlegen oder – nur mit `ersetzen` – eine Ansicht gleichen Namens ersetzen. */
+export function ansichtSpeichern(
+  db: DB,
+  name: string,
+  { knoten, ...rest }: AnsichtStand,
+  ersetzen: boolean
+): AnsichtSpeichernErgebnis {
+  const key = nameSchluessel(name)
+  const felder = [name, knoten?.ordner ?? null, knoten?.pfad ?? '', JSON.stringify(rest)]
+  return db.transaction((): AnsichtSpeichernErgebnis => {
+    const alt = db.prepare('SELECT id FROM ansichten WHERE name_key = ?').get(key) as
+      { id: number } | undefined
+    if (alt) {
+      if (!ersetzen) return { status: 'vorhanden' }
+      db.prepare(
+        'UPDATE ansichten SET name = ?, folder_id = ?, pfad = ?, stand = ? WHERE id = ?'
+      ).run(...felder, alt.id)
+      return { status: 'gespeichert', id: alt.id }
+    }
+    const n = db.prepare('SELECT count(*) FROM ansichten').pluck().get() as number
+    if (n >= ANSICHTEN_MAX) return { status: 'voll' }
+    const r = db
+      .prepare(
+        'INSERT INTO ansichten (name, folder_id, pfad, stand, name_key) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(...felder, key)
+    return { status: 'gespeichert', id: Number(r.lastInsertRowid) }
+  })()
+}
+
+export function ansichtName(db: DB, id: number): string | null {
+  const name = db.prepare('SELECT name FROM ansichten WHERE id = ?').pluck().get(id)
+  return (name as string | undefined) ?? null
+}
+
+export function ansichtLoeschen(db: DB, id: number): boolean {
+  return db.prepare('DELETE FROM ansichten WHERE id = ?').run(id).changes > 0
 }

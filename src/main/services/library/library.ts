@@ -10,6 +10,11 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
 import type { BildFilter, Facetten } from '@shared/bildFilter'
 import { landName } from '@shared/geo'
+import type {
+  AnsichtSpeichernErgebnis,
+  AnsichtStand,
+  GespeicherteAnsicht
+} from '@shared/gespeicherteAnsicht'
 import { gruppenArt, type Gruppe, type Gruppierung } from '@shared/gruppen'
 import { grundfelderAus, type Grundfelder } from '@shared/grundfelder'
 import { Channels } from '@shared/ipc-contracts'
@@ -572,6 +577,49 @@ async function fehlendeAufraeumen(): Promise<void> {
   logLine(`[bibliothek] ${ids.length} seit ${FEHLEND_TAGE} Tagen fehlende Dateien entfernt`)
 }
 
+const ansichtenMelden = (): void => broadcast(Channels.libraryViewsChanged, repo.ansichten(db()))
+
+export function gespeicherteAnsichten(): GespeicherteAnsicht[] {
+  return repo.ansichten(db())
+}
+
+/** Ansicht unter einem Namen speichern; ein vergebener Name nur mit `ersetzen`. */
+export function ansichtSpeichern(
+  name: string,
+  stand: AnsichtStand,
+  ersetzen: boolean
+): AnsichtSpeichernErgebnis {
+  if (stand.knoten && !repo.ordnerHolen(db(), stand.knoten.ordner)) {
+    throw new Error('Diesen Ordner gibt es nicht mehr in der Galerie.')
+  }
+  const r = repo.ansichtSpeichern(db(), name, stand, ersetzen)
+  if (r.status === 'gespeichert') ansichtenMelden()
+  return r
+}
+
+/** Rückfrage im main; der Name kommt aus dem Index, nicht aus dem Renderer. true = gelöscht. */
+export async function ansichtLoeschen(win: BrowserWindow | null, id: number): Promise<boolean> {
+  const name = repo.ansichtName(db(), id)
+  if (name === null) return false
+  const opts = {
+    type: 'question' as const,
+    title: 'Ansicht löschen',
+    message: `Ansicht „${name}“ löschen?`,
+    detail: 'Gelöscht wird nur die gespeicherte Ansicht, die Bilder bleiben.',
+    buttons: ['Löschen', 'Abbrechen'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  }
+  const { response } = win
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts)
+  if (response !== 0) return false
+  const ok = repo.ansichtLoeschen(db(), id)
+  ansichtenMelden()
+  return ok
+}
+
 /**
  * Menü „Fehlende entfernen“: nach Rückfrage die fehlenden Dateien eines Ordners aus der Galerie
  * nehmen (die Dateien selbst gibt es nicht mehr). Liefert die Zahl; 0 bei „Abbrechen“.
@@ -798,7 +846,7 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
     message: `„${anzeigeName(ordner.path)}“ aus der Galerie entfernen?`,
     detail:
       'Die Dateien im Ordner bleiben unberührt. Entfernt wird nur, was die Galerie zu diesem ' +
-      'Ordner gespeichert hat (Index, später auch Vorschaubilder).',
+      'Ordner gespeichert hat (Index, Vorschaubilder und seine gespeicherten Ansichten).',
     buttons: ['Entfernen', 'Abbrechen'],
     defaultId: 1,
     cancelId: 1,
@@ -822,6 +870,7 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
   anzeigeVerwerfen(ids)
   await vorschauVerwerfen(ids)
   melden()
+  ansichtenMelden()
   return ok
 }
 

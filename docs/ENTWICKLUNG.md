@@ -208,6 +208,11 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   Trigger aktuell (Migration 6): Wer `images` oder `keywords` schreibt, muss nichts tun. Die
   Auswahllisten kommen aus `library.facets` und nur, solange die Leiste offen ist (`useFacetten`).
   Der Filter selbst lebt nur in der Sitzung (`lib/filter.ts`).
+- **Gespeicherte Ansichten (2.4b):** liegen im Index, nicht in `settings.json` – ihr Ordner ist
+  ein Fremdschlüssel. `shared/gespeicherteAnsicht.ts` prüft beim Speichern und beim Lesen; eine
+  Zeile, die nicht passt (andere Version), fällt beim Lesen weg. Eine neue Einstellung, die zur
+  Ansicht gehört, kommt in `AnsichtStand`, `pruefeAnsichtStand`, `standGleich` und
+  `ansichtOeffnen` (`lib/gespeichert.ts`). Wer Ansichten ändert, ruft im main `ansichtenMelden()`.
 - **Blocksatz (2.3b):** dieselbe Raster-Komponente; mit `seiten` (je Kennung Breite durch Höhe
   aus `library.queryGroups(…, true)`) baut sie die Zeilen mit `lib/blocksatz.ts` statt
   `zeilenBilden`: Zeilen samt Höhe und Breite je Bild. Höhen für den Virtualisierer, Lage der
