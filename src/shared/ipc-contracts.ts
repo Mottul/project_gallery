@@ -3,6 +3,11 @@
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
 import type { BildFilter, Facetten } from './bildFilter'
+import type {
+  AnsichtSpeichernErgebnis,
+  AnsichtStand,
+  GespeicherteAnsicht
+} from './gespeicherteAnsicht'
 import type { Gruppe, Gruppierung } from './gruppen'
 import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
@@ -39,7 +44,11 @@ export const Channels = {
   libraryTrash: 'library:trash',
   libraryAllFields: 'library:allFields',
   libraryRemoveMissing: 'library:removeMissing',
-  libraryChanged: 'library:changed' // Event: LibraryState (Ordner, Anzahl, Einlesen)
+  libraryViews: 'library:views',
+  librarySaveView: 'library:saveView',
+  libraryDeleteView: 'library:deleteView',
+  libraryChanged: 'library:changed', // Event: LibraryState (Ordner, Anzahl, Einlesen)
+  libraryViewsChanged: 'library:viewsChanged' // Event: GespeicherteAnsicht[]
 } as const
 
 export interface GalerieApi {
@@ -98,7 +107,19 @@ export interface GalerieApi {
     allFields(id: number): Promise<MetaFeld[] | null>
     /** Fehlende Dateien eines Ordners aus der Galerie nehmen – Rückfrage im main; Anzahl */
     removeMissing(folderId: number): Promise<number>
+    /** Gespeicherte Ansichten nach Name */
+    views(): Promise<GespeicherteAnsicht[]>
+    /** Unter einem Namen merken; ein vergebener Name nur mit `ersetzen` */
+    saveView(
+      name: string,
+      stand: AnsichtStand,
+      ersetzen: boolean
+    ): Promise<AnsichtSpeichernErgebnis>
+    /** Rückfrage im main; true = gelöscht */
+    deleteView(id: number): Promise<boolean>
     /** Änderungen (auch Fortschritt beim Einlesen); Rückgabe = Abmelden */
     onChanged(cb: (state: LibraryState) => void): () => void
+    /** Ansichten geändert – auch, wenn ein entfernter Ordner seine mitnahm */
+    onViewsChanged(cb: (views: GespeicherteAnsicht[]) => void): () => void
   }
 }

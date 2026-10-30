@@ -198,6 +198,7 @@ keywords (image_id, keyword)          -- normalisiert, für Filter und Gruppen
 journal  (id, at, action, image_id, before_json, after_json, undone_at)   -- Rückgängig
 recipes  (image_id, recipe_json, version, updated_at)                    -- Bearbeitungen
 images_fts (name, title, description, keywords, place)                   -- FTS5
+ansichten (id, name, name_key UNIQUE, folder_id, pfad, stand)            -- gespeicherte Ansichten
 ```
 
 Indizes auf jede Sortierspalte (mit `folder_id`), `taken_at` mit Rückfall-Reihenfolge,
@@ -269,10 +270,15 @@ kommen mit Phase 1 dazu).
   Ort, Format, Ausrichtung (hoch/quer/quadratisch), mit/ohne GPS; innerhalb eines Kriteriums
   „oder“, zwischen den Kriterien „und“. Ein Filter gilt über alle Ordner, bis er zurückgesetzt
   oder die App neu gestartet wird – nach dem Start fehlen nie unbemerkt Bilder. Dauerhaft merken
-  nur über gespeicherte Ansichten (2.4b). Typ (Bild/Video) kommt mit den Videos (Phase 6).
+  nur über gespeicherte Ansichten. Typ (Bild/Video) kommt mit den Videos (Phase 6).
 - **Suche** (seit 2.4): Volltext (FTS5) über Name, Titel, Beschreibung, Stichwörter, Ort; jedes
   Wort als Präfix, alle Wörter müssen vorkommen, ohne Umlaute/Akzente („munchen“ findet „München“).
   Eingaben sind nie FTS-Syntax.
+- **Gespeicherte Ansichten** (seit 2.4b; entschieden 30.10.2026: mit Ordner, Abschnitt in der
+  Seitenleiste): Ordner, Darstellung, Größe, Sortierung, Gruppen, Filter und Suche unter einem
+  Namen. Gespeichert wird über die Filterleiste, ein vergebener Name nur mit „Ersetzen“; Öffnen
+  stellt alles wieder her, nach einem Neustart ist keine von selbst aktiv. Wird der Ordner aus der
+  Galerie entfernt, verschwinden seine Ansichten mit ihm.
 
 ### Betrachter
 
@@ -662,7 +668,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
   (A–Z)** mit Gruppen.
 - Sortieren nach allen weiteren Feldern; Gruppen-Überschriften, die der Sortierung folgen
   (2.3 ✅); Blocksatz-Ansicht (2.3b ✅).
-- Filterleiste, Volltextsuche (2.4 ✅), gespeicherte Ansichten (2.4b).
+- Filterleiste, Volltextsuche (2.4 ✅), gespeicherte Ansichten (2.4b ✅).
 - **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet, „Ohne
   Standort“ am Ende in beiden Richtungen).
 
@@ -675,7 +681,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | 2.3 ✅ | **Weitere Sortierfelder und Gruppen-Überschriften:** Sortieren auch nach Kamera, Objektiv, Bewertung, ISO, Blende, Belichtungszeit, Brennweite, Auflösung und Ordner (ohne eigenen Index, im Speicher sortiert; fehlende Werte immer am Ende); Gruppen folgen der Sortierung (`shared/gruppen.ts`: fester SQL-Ausdruck je Art, Titel deutsch, Grenzen aus einem Durchlauf in `repo.kennungenMitGruppen`); `library.queryGroups` mit geprüfter Gruppierung; Werkzeugleiste „Gruppen“ (Datum: Keine/Tag/Monat/Jahr, sonst an/aus, ohne Gruppen gar nicht da), Vorgabe Monat, je Ordner gemerkt; Überschriften als eigene Zeilen in Raster und Liste (`lib/zeilen.ts`: jede Gruppe beginnt in neuer Zeile; Rahmen-Auswahl und Sprung zum Bild über dieselben Zeilen-Kanten wie das Zeichnen); Liste: Spalte „Ort“ wählbar, Kamera und Maße sortierbar | `sortieren` (weitere Felder, Gruppen exakt aus den Testbildern – Monat, Jahr, Tag, Ort mit „Ohne Standort“ –, Ungültiges abgelehnt, Schalter in Raster und Liste, gemerkt nach dem Neuladen), `galerie` (Rahmen über Überschriften auf wenige Pixel genau; Gegenprobe mit einer Rahmen-Geometrie ohne Überschriften rot), `abnahme50k` (Sortierwechsel mit Gruppen auch für die neuen Felder: Abfrage höchstens 195 ms, Raster höchstens 94 ms – gemessen, während daneben ein anderer E2E-Lauf lief; „Ordner“ war mit `rtrim` das langsamste Feld, 211 ms, direkt in SQLite samt Gruppen jetzt 95 statt 151 ms); Unit `gruppen.test.ts`, `zeilen.test.ts`, `repo.test.ts`, `eingaben.test.ts` |
 | 2.3b ✅ | **Blocksatz-Ansicht** (eigener PR, entschieden 29.10.2026): dritte Ansicht „Blocksatz“ neben Kacheln und Liste; Bilder im Seitenverhältnis (aufgerichtete Maße, begrenzt auf 1:3 … 3:1, unbekannt = quadratisch), Zeilen gleicher Höhe bündig auf die Breite, 4 px Abstand, kein Text darunter (Name als Hinweis); der Größenregler gibt die Zielhöhe vor; gierig mit „mit oder ohne das letzte Bild – was liegt näher an der Zielhöhe“, die letzte Zeile einer Gruppe bleibt linksbündig in Zielhöhe, ab 90 % Füllung gestreckt (`lib/blocksatz.ts`); dieselben Gruppen-Überschriften und dieselbe Rahmen-Auswahl wie im Raster; `library.queryGroups` liefert auf Wunsch je Kennung das Seitenverhältnis (eine Zahl je Bild, geprüfter Schalter) | `galerie` (Seitenverhältnis jeder gezeichneten Kachel wie im Index, Zeilen gleich hoch, volle Zeilen bündig, Abstände, Rahmen 2 px vor bzw. 3 px in einer Kachel, Größenregler, gemerkt nach dem Neuladen; zwei Gegenproben rot: alles quadratisch, Rahmen mit Kachel-Breiten), `abnahme50k` (Seitenverhältnisse aller 50.000 Bilder 84 ms, Umschalten 147 ms, Scrollen p95 17 ms – neben einem fremden E2E-Lauf gemessen); Unit `blocksatz.test.ts` (100.000 Bilder deutlich unter 200 ms), `repo.test.ts`, `eingaben.test.ts` |
 | 2.4 ✅ | **Filterleiste und Volltextsuche** (Aufteilung entschieden 30.10.2026: gespeicherte Ansichten eigener PR): Migration 6 (`images_fts` mit FTS5, Trigger auf `images` und `keywords` halten sie aktuell – auch bei der Ordner-Kaskade; Bestand wird einmal übernommen); `shared/bildFilter.ts` (Beschreibung, Prüfung, SQL nur mit Platzhaltern, Suchausdruck ohne FTS-Syntax aus der Eingabe); `library.queryGroups` mit Filter und `gesamt`, `library.facets` für die Auswahllisten (Werte im Knoten mit Anzahl, höchstens 2.000 je Liste); Suchfeld und Knopf „Filter“ in der Werkzeugleiste, aufklappbare Leiste, Chips, „N von M Bildern“, „Keine Bilder passen zum Filter“ mit Zurücksetzen, Auswahllisten klappen am rechten Fensterrand nach links auf (`galerie/Filterleiste.tsx`, Zustand nur für die Sitzung in `lib/filter.ts`); Werkzeugleiste kompakter (zwei Zeilen im Standardfenster) | `filter` (jedes Kriterium und die Suche exakt gegen die Testbilder, Knoten, Gruppen, `gesamt`, Ungültiges abgelehnt, Oberfläche, Filter über Ordner/Blocksatz/Liste/Betrachter, nach Neuladen weg, neue und gelöschte Dateien im Suchindex, Log ohne Suchbegriffe; zwei Gegenproben rot: ohne Stichwort-Trigger, Filter nicht weitergereicht), `abnahme50k` (Filter und Suche im Median 12–67 ms, Auswahllisten 84 ms; Erstindex 172 s, Vorschaubilder 621 s, IPC Median 52 ms, 99 % unter 216 ms, höchstens 398 ms, main nie blockiert; Migration des Bestands 217 ms, in SQLite gemessen. **Gefunden in der Abnahme:** Jeder Fortschritt der Vorschaubilder löste je Sekunde die ganze Abfrage samt Gruppen und Ordnerbaum aus – seit 2.3 teuer genug für 37 Blockaden bis 1,2 s; jetzt ändert er nur noch die Details des Sichtbaren. Nicht der Suchindex: Seine Trigger kosten 200 Zeilen 1,4 ms. **Neustart** bis Galerie: Median je Lauf 1,57–2,03 s, im Vergleich mit dem alten Verhalten 1,85–2,25 s – das Ziel < 2 s hält knapp, 1.6 lag bei 1,16 s; ein Lauf war mit 2,03 s rot); Unit `bildFilter.test.ts`, `filter.test.ts`, `repo.test.ts`, `db.test.ts` (Migration 5 → 6), `eingaben.test.ts` |
-| 2.4b | **Gespeicherte Ansichten** (eigener PR): Filter, Suche, Sortierung und Ansicht unter einem Namen merken |
+| 2.4b ✅ | **Gespeicherte Ansichten** (eigener PR; entschieden 30.10.2026: mit Ordner, Abschnitt in der Seitenleiste): Migration 7 (Tabelle `ansichten`, Ordner als Fremdschlüssel mit `ON DELETE CASCADE`, Name ohne Groß/Klein eindeutig); `shared/gespeicherteAnsicht.ts` (Stand, Prüfung beim Speichern und beim Lesen, `standGleich` für die Markierung); `library.views`, `saveView`, `deleteView` (Rückfrage im main), Ereignis `onViewsChanged`; höchstens 200 Ansichten; Abschnitt „Ansichten“ unter den Ordnern, Speichern in der Filterleiste mit Namensfeld an Ort und Stelle, „Ersetzen“ bei vergebenem Namen, Vorschlag: die zuletzt geöffnete (`galerie/Ansichten.tsx`, `lib/gespeichert.ts`). Umbenennen gibt es nicht – eine Ansicht lässt sich unter neuem Namen speichern und die alte löschen | `ansichten` (Speichern, Öffnen stellt alles wieder her, Ordner/Suche/Gruppen, Ersetzen und Abbrechen, Ungültiges im main abgelehnt, fremder Text bleibt Text, nach dem Neustart da und nicht aktiv, Löschen mit Rückfrage, entfernter Ordner nimmt seine Ansichten mit, Log ohne Namen; auch bei 1024 × 700; drei Gegenproben rot: Öffnen ohne Filter, Entfernen ohne Meldung, Ersetzen ohne Freigabe); Unit `gespeicherteAnsicht.test.ts`, `repo.test.ts` (auch: Zeilen fremder Versionen werden übersprungen), `db.test.ts` (Migration 6 → 7), `eingaben.test.ts` |
 | 2.5 | **Diashow mit Überblenden und Ken Burns** (Wunsch 29.10.2026) |
 
 ### Phase 3 – Metadaten bearbeiten
@@ -814,6 +820,13 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **Ortsdaten:** GeoNames `cities1000` – Orte ab 1.000 Einwohnern, auch kleine Urlaubsorte (2.2).
 - **Drehen** gehört zu Phase 3 (Metadaten bearbeiten): verlustfrei über die EXIF-Ausrichtung.
 - **Phase 2 beginnt mit 2.1** (Metadaten), die Diashow-Effekte kommen als 2.5.
+
+**Entschieden (30. Oktober 2026):**
+
+- **Erst 2.4, Phase 3 nicht vorgezogen;** 2.4 in zwei PRs (Filter und Suche, dann gespeicherte Ansichten).
+- **Filter** gilt über alle Ordner bis zum Zurücksetzen oder Neustart, Leiste unter der Werkzeugleiste.
+- **Gespeicherte Ansichten** enthalten den Ordner und stehen in der Seitenleiste; ein entfernter
+  Ordner nimmt seine Ansichten mit.
 
 **Noch offen:** nichts. Neue Fragen hier eintragen.
 

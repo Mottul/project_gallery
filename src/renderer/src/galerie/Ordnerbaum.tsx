@@ -30,6 +30,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { baueBaum, type Zweig } from '@shared/ordnerBaum'
 import type { LibraryFolder } from '@shared/types'
+import { GespeicherteAnsichten } from './Ansichten'
 import { MODUS_TEXT, OrdnerMenue } from './OrdnerMenue'
 
 function Symbol({ ordner }: { ordner: LibraryFolder }): JSX.Element {
@@ -335,6 +336,7 @@ export function Ordnerbaum(): JSX.Element {
           )
         })}
       </ul>
+      <GespeicherteAnsichten />
       <div className="m-2 rounded-md border bg-card p-2.5 text-xs text-muted-foreground">
         <p className="mb-1 inline-flex items-center gap-1.5 font-medium text-foreground">
           <ShieldCheck className="size-3.5 text-success" aria-hidden />

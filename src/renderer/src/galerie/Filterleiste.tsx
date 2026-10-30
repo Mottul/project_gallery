@@ -23,6 +23,7 @@ import {
   type FilterWert,
   type ListenFeld
 } from '@shared/bildFilter'
+import { AnsichtSpeichern } from './Ansichten'
 import { AUSWAHL } from './Sortierwahl'
 
 /** Tippen abwarten, bevor gesucht wird (ms) */
@@ -328,30 +329,33 @@ export function Filterleiste({
           />
         </div>
       )}
-      {aktiv && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {chips.map((c) => (
-            <button
-              key={c.schluessel}
-              type="button"
-              aria-label={`Filter entfernen: ${c.text}`}
-              onClick={() => filterAendern(c.weg)}
-              className="inline-flex max-w-64 items-center gap-1 rounded-full bg-primary-line/15 px-2.5 py-0.5 text-xs text-foreground outline-none hover:bg-primary-line/25 focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="truncate">{c.text}</span>
-              <X className="size-3 shrink-0" aria-hidden />
-            </button>
-          ))}
-          <Button variant="ghost" size="sm" className="h-6 px-2" onClick={filterZuruecksetzen}>
-            Zurücksetzen
-          </Button>
-          {anzahl !== null && gesamt !== undefined && (
-            <span className="ml-auto text-xs text-muted-foreground">
-              {zahl.format(anzahl)} von {zahl.format(gesamt)} Bildern
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {aktiv && (
+          <>
+            {chips.map((c) => (
+              <button
+                key={c.schluessel}
+                type="button"
+                aria-label={`Filter entfernen: ${c.text}`}
+                onClick={() => filterAendern(c.weg)}
+                className="inline-flex max-w-64 items-center gap-1 rounded-full bg-primary-line/15 px-2.5 py-0.5 text-xs text-foreground outline-none hover:bg-primary-line/25 focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="truncate">{c.text}</span>
+                <X className="size-3 shrink-0" aria-hidden />
+              </button>
+            ))}
+            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={filterZuruecksetzen}>
+              Zurücksetzen
+            </Button>
+          </>
+        )}
+        <AnsichtSpeichern />
+        {aktiv && anzahl !== null && gesamt !== undefined && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {zahl.format(anzahl)} von {zahl.format(gesamt)} Bildern
+          </span>
+        )}
+      </div>
     </div>
   )
 }

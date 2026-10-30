@@ -6,7 +6,8 @@ description: Bibliothek von Galeria Beata bauen oder ändern – Ordner und Ordn
 # Bibliothek und Index
 
 Der Index ist eine **Kopie** dessen, was in den Dateien steht – nie die Wahrheit. Alles muss
-sich aus den Dateien neu aufbauen lassen (außer Journal und Bearbeitungsrezepten).
+sich aus den Dateien neu aufbauen lassen (außer Journal, Bearbeitungsrezepten und gespeicherten
+Ansichten).
 
 ## Wo was liegt
 
@@ -53,6 +54,9 @@ Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF al
 (`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
 Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
 Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
+Umgesetzt in 2.4b: Schema 7 (`ansichten`: Ordner als Fremdschlüssel mit Kaskade, `name_key` ohne
+Groß/Klein eindeutig, `stand` als JSON ohne Knoten – beim Lesen geprüft, fremde Zeilen fallen weg),
+`repo.ansichten`/`ansichtSpeichern`/`ansichtLoeschen`, Meldung `libraryViewsChanged`.
 Umgesetzt in 2.4: Schema 6 (`images_fts`, FTS5 mit `unicode61 remove_diacritics 2`, rowid =
 `images.id`; Trigger auf `images` – auch beim Löschen über die Ordner-Kaskade – und `keywords`;
 Bestand einmal in der Migration übernommen), `shared/bildFilter.ts`, `repo.abfrageAnsicht`

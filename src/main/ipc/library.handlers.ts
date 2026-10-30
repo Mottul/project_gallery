@@ -1,5 +1,7 @@
 import { Channels } from '@shared/ipc-contracts'
 import {
+  pruefeAnsichtNameStreng,
+  pruefeAnsichtStandStreng,
   pruefeBildFilterStreng,
   pruefeGruppierungStreng,
   pruefeKennung,
@@ -19,7 +21,10 @@ import {
   bildDetails,
   fensterVon,
   alleFelder,
+  ansichtLoeschen,
+  ansichtSpeichern,
   fehlendeEntfernen,
+  gespeicherteAnsichten,
   inPapierkorb,
   modusSetzen,
   neuEinlesen,
@@ -77,6 +82,17 @@ export function registerLibraryHandlers(): void {
   handle(Channels.libraryAllFields, (_e, id) => alleFelder(pruefeKennung(id)))
   handle(Channels.libraryRemoveMissing, (e, id) =>
     fehlendeEntfernen(fensterVon(e.sender), pruefeKennung(id))
+  )
+  handle(Channels.libraryViews, () => gespeicherteAnsichten())
+  handle(Channels.librarySaveView, (_e, name, stand, ersetzen) =>
+    ansichtSpeichern(
+      pruefeAnsichtNameStreng(name),
+      pruefeAnsichtStandStreng(stand),
+      pruefeSchalterStreng(ersetzen)
+    )
+  )
+  handle(Channels.libraryDeleteView, (e, id) =>
+    ansichtLoeschen(fensterVon(e.sender), pruefeKennung(id))
   )
   on(Channels.libraryVisible, (_e, ids) => sichtbar(pruefeKennungen(ids, AUSSCHNITT_MAX)))
   // Pfade aus dem Preload (aus echten Datei-Objekten eines Drops), geprüft wie beim Dialog

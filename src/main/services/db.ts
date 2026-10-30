@@ -162,6 +162,19 @@ const MIGRATIONEN: readonly string[] = [
        SET keywords = (SELECT group_concat(keyword, ' ') FROM keywords WHERE image_id = old.image_id)
      WHERE rowid = old.image_id;
   END;
+  `,
+  // 2.4b: gespeicherte Ansichten – Ordner als Fremdschlüssel: Wird er entfernt, gehen seine
+  // Ansichten mit. `stand` ist JSON ohne den Knoten, geprüft beim Speichern und beim Lesen.
+  `
+  CREATE TABLE ansichten (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+    pfad TEXT NOT NULL DEFAULT '',
+    stand TEXT NOT NULL
+  );
+  CREATE INDEX ansichten_ordner ON ansichten(folder_id);
   `
 ]
 

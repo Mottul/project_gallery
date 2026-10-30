@@ -74,7 +74,7 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
       Datei, Schlüssel per `safeStorage` (DPAPI) geschützt; beim Lesen Tag prüfen – manipuliert =
       neu erzeugen, nie anzeigen.
 - [ ] Ordner „privat“: keine Vorschaubilder auf der Platte (nur Arbeitsspeicher).
-- [ ] Ordner entfernen / Cache leeren löscht wirklich alles Abgeleitete (Zeilen, FTS, Dateien,
+- [ ] Ordner entfernen / Cache leeren löscht wirklich alles Abgeleitete (Zeilen, FTS, Ansichten, Dateien,
       Journal-Einträge mit Werten nach Einstellung).
 - [ ] **Log ohne Inhalte:** Kennungen und Fehlercodes, Pfade nur wo nötig; nie GPS, Titel,
       Beschreibungen, Stichwörter, Personen. Fehlermeldungen an den Nutzer dürfen Pfade nennen.

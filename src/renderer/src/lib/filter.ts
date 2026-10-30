@@ -1,6 +1,6 @@
 // Filter und Suche der Galerie (Phase 2.4): Zustand nur für diese Sitzung und über alle Ordner –
 // ein Filter gilt, bis er zurückgesetzt oder die App neu gestartet wird (entschieden 30.10.2026);
-// so fehlen nach dem Start nie unbemerkt Bilder. Dauerhaft merken wird „Ansicht speichern“ (2.4b).
+// so fehlen nach dem Start nie unbemerkt Bilder. Dauerhaft merkt nur „Ansicht speichern“ (2.4b).
 // `filterNeu` und `filterChips` sind rein, getestet in filter.test.ts.
 
 import { create } from 'zustand'
@@ -97,3 +97,6 @@ export const filterLeisteUmschalten = (): void => useStore.setState((s) => ({ of
 export const filterAendern = (patch: Partial<BildFilter>): void =>
   useStore.setState((s) => ({ filter: filterNeu(s.filter, patch) }))
 export const filterZuruecksetzen = (): void => useStore.setState({ filter: {} })
+/** Eine gespeicherte Ansicht bringt ihren ganzen Filter mit. */
+export const filterSetzen = (filter: BildFilter): void => useStore.setState({ filter })
+export const filterLesen = (): BildFilter => useStore.getState().filter

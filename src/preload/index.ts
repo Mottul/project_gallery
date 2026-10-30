@@ -38,6 +38,10 @@ const api: GalerieApi = {
     trash: (ids) => ipcRenderer.invoke(Channels.libraryTrash, ids),
     allFields: (id) => ipcRenderer.invoke(Channels.libraryAllFields, id),
     removeMissing: (folderId) => ipcRenderer.invoke(Channels.libraryRemoveMissing, folderId),
+    views: () => ipcRenderer.invoke(Channels.libraryViews),
+    saveView: (name, stand, ersetzen) =>
+      ipcRenderer.invoke(Channels.librarySaveView, name, stand, ersetzen),
+    deleteView: (id) => ipcRenderer.invoke(Channels.libraryDeleteView, id),
     size: (ids) => ipcRenderer.invoke(Channels.librarySize, ids),
     visible: (ids) => ipcRenderer.send(Channels.libraryVisible, ids),
     // Den Pfad kennt nur ein echtes Datei-Objekt aus einem Drop (oder Datei-Dialog); ein in der
@@ -47,7 +51,8 @@ const api: GalerieApi = {
         Channels.libraryAddDropped,
         Array.from(files, (f) => webUtils.getPathForFile(f)).filter((p) => p !== '')
       ),
-    onChanged: (cb) => subscribe(Channels.libraryChanged, (s) => cb(s as never))
+    onChanged: (cb) => subscribe(Channels.libraryChanged, (s) => cb(s as never)),
+    onViewsChanged: (cb) => subscribe(Channels.libraryViewsChanged, (v) => cb(v as never))
   }
 }
 
