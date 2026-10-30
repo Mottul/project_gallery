@@ -8,14 +8,15 @@ description: Metadaten in Bild- und Videodateien mit Galeria Beata sicher schrei
 Metadaten zu schreiben heißt, **Originale des Nutzers zu verändern**. Jede Regel hier dient
 Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 
-## Wo was liegt (geplant)
+## Wo was liegt
 
 | Was | Ort |
 |---|---|
-| Bearbeitbare Felder: Name, Typ, Grenzen, Prüfung, Tags je Feld | `src/shared/metaFields.ts` + Test |
-| ExifTool-Prozess (`-stay_open`), Pool, Warteschlange je Prozess, Zeitlimit, Neustart (Lesen läuft im Bilddienst, ab 1.2) | `src/main/services/exiftool/exiftool.ts` |
-| Argumentdatei bauen (rein, getestet) | `src/main/services/exiftool/args.ts` |
-| Lesen → Index, Schreiben, Journal, Sidecars | `src/main/services/metadata/` |
+| Bearbeitbare Felder: Name, Typ, Grenzen, Prüfung, Tags je Feld und Format, Nachprüfung | `src/shared/metaFields.ts` + Test |
+| ExifTool-Prozess (`-stay_open`), Pool, Warteschlange je Prozess, Zeitlimit, Neustart (im Bilddienst) | `src/main/services/exiftool/exiftool.ts` |
+| Argumente bauen (rein, getestet) | `src/main/services/exiftool/args.ts` |
+| Der eigentliche Schreibvorgang: Nachbardatei, Nachprüfung, Sicherung, Ersetzen | `src/main/services/bilddienst/schreiben.ts` + `schreiben.lab.test.ts` |
+| Freigabe, Journal, Sicherungen, Rückgängig, Aufräumen | `src/main/services/metadata/schreiben.ts` + Test |
 | IPC | `src/main/ipc/meta.handlers.ts` (Skill `ipc-kanal`) |
 
 ## Felder
@@ -23,11 +24,12 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 - **Nur Felder aus `metaFields.ts`** – der Renderer schickt `{ feld, wert }`, nie einen Tag-Namen.
   main prüft Feld (Allowlist), Typ und Grenzen (Länge, Bewertung 0–5, Breite −90…90, Länge
   −180…180, Datum gültig) und bildet erst dann die Tags.
-- Zuordnung als Startpunkt (Tabelle in `docs/PLAN.md`, „Metadaten bearbeiten“): Titel,
-  Beschreibung, Stichwörter, Bewertung, Farblabel, Aufnahmedatum, Standort, Ort, Urheber,
-  Copyright. Für die MWG-Felder `-use MWG` setzen, dann schreibt ExifTool EXIF, IPTC und XMP
-  stimmig. **Jede Zuordnung im Labor gegen Windows-Explorer und digiKam prüfen** (Skill
-  `bild-labor`) und das Ergebnis in die Tabelle eintragen – erst dann gilt sie.
+- Zuordnung: Tabelle in `docs/PLAN.md`, „Metadaten bearbeiten“. Einzelne Tags statt der MWG-Gruppe:
+  So kennt das Journal je Tag den alten Wert, und die Nachprüfung vergleicht genau das Geschriebene.
+  Was je Format geht, ist gemessen (`scripts/labor/exiftool-schreiben.mjs`). **Neues Feld zuerst
+  dort messen**, auch im Explorer (`System.Title` usw. über die Shell) – erst dann gilt es.
+- **Grenzen der Formate beachten** (beide gemessen): IPTC `ObjectName` höchstens 64 Bytes – was nicht
+  passt, schnitte ExifTool ab, darum dort entfernen; XP-Felder speichern keine Emoji.
 - **Mehrfachauswahl:** nur geänderte Felder schreiben; Stichwörter als Hinzufügen/Entfernen
   (`-Keywords+=`/`-Keywords-=`), nie die Liste der ersten Datei auf alle kopieren.
 - **Lesen für den Index** mit `-json -n -G0` (Zahlen statt Text; Tags fest in
@@ -42,14 +44,10 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
   aus `exiftool/binPath.ts` (gebündelt unter `resources/exiftool/win/`).
 - **Argumente über die Argumentdatei** (`-@ -` bzw. stdin im `-stay_open`-Modus), **ein Argument
   je Zeile**, nie über eine Shell.
-- **Keine Argument-Injektion:**
-  - Dateien nur als **absolute Pfade** (beginnen nie mit `-`), vorher aus dem Index aufgelöst und
-    geprüft (liegt in einem Bibliotheksordner, Ordner nicht „nur lesen“).
-  - Werte dürfen keine Zeilenumbrüche oder Steuerzeichen in die Argumentdatei tragen – sonst wird
-    der Rest der Zeile ein neues Argument. Steuerzeichen entfernen; mehrzeilige Beschreibungen
-    über eine Escape-Option (`-ec` o. Ä.) schreiben, **im Labor bestätigen**, dass ein Wert
-    `x\n-delete_original` als Text ankommt. Test in `args.test.ts`.
-  - Tag-Namen nur aus `metaFields.ts`, nie aus der Eingabe.
+- **Keine Argument-Injektion:** `args.ts` setzt jeden Wert als `#[CSTR]-Tag=Wert` – Zeilenumbruch und
+  Backslash werden C-Zeichen, die Zeile bleibt eine. Roh wäre der Rest ein neues Argument (gemessen:
+  er schrieb wirklich in einen anderen Tag). Tag-Namen nur aus `metaFields.ts`, Pfade nur absolut und
+  aus dem Index. `ausfuehren` lehnt Argumente mit Zeilenumbruch zusätzlich ab.
 - **Windows:** `-charset filename=utf8` (Unicode-Namen); lange Pfade und Netzlaufwerke laut
   Labor-Ergebnis behandeln.
 - **Ausgabe prüfen:** Erfolg nur bei „1 image files updated“ (o. Ä.) **und** ohne `Error:`;
@@ -57,20 +55,33 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 
 ## Ablauf beim Schreiben
 
-1. **Freigabe:** Datei ist im Index, Ordner-Modus erlaubt Schreiben, Format kann ExifTool
-   schreiben; sonst Sidecar (RAW, schreibgeschützt) oder verständliche Absage.
-2. **Konflikt:** Größe + Änderungszeit gleich wie beim Lesen? Sonst neu lesen und den Nutzer
-   fragen – nie über eine inzwischen geänderte Datei schreiben (anderes Programm, Kollege).
-3. **Journal:** alte Werte der betroffenen Felder in `journal` (vor dem Schreiben, in einer
-   Transaktion mit dem Auftrag).
-4. **Sicherung** (Einstellung, ab Werk an): Kopie unter `Sicherungen/` mit Hash im Namen, nie
-   überschreiben (`COPYFILE_EXCL`), Aufbewahrung nach Tagen/Größe.
-5. **Schreiben** mit `-overwrite_original` (ExifTool schreibt eine Nachbardatei und ersetzt dann)
-   und – wenn eingestellt – `-P` (Dateidatum behalten). Kein `_original`-Rest im Ordner des Nutzers.
-6. **Nachprüfen:** neu lesen, Sollwerte vergleichen, Pixeldaten-Hash unverändert (Labor/E2E);
-   Index aktualisieren. Abweichung = Fehler im Bericht, Sicherung bleibt.
-7. **Rückgängig:** alte Werte aus dem Journal zurückschreiben (gleicher Ablauf, eigene
-   Journal-Zeile), nur wenn die Datei seither nicht anderweitig geändert wurde.
+Festgelegt nach dem Labor (30.10.2026): **Das Nachprüfen liegt vor dem Ersetzen.** So bleibt das
+Original heil, bis alles stimmt – auch ohne Sicherung (Ordner „privat“).
+
+Im main (`metadata/schreiben.ts`), Aufträge nacheinander:
+
+1. **Freigabe:** Zeile frisch aus dem Index, Ordner nicht „nur lesen“, Format beschreibbar, Datei ok.
+2. **Journal:** alte Werte je Tag lesen und eintragen, mit dem Namen der Nachbardatei (`zwischen`).
+3. **Sicherung planen:** eine je Datei, keine im Ordner „privat“.
+
+Im Bilddienst (`bilddienst/schreiben.ts`):
+
+4. **Konflikt:** `pruefeDatei` (Größe, Zeit, echter Pfad), schreibgeschützt? Sonst nichts tun.
+5. **Schreiben** mit `-o` in die versteckte Nachbardatei (`zwischenName`). Ohne `-P`: Das
+   Änderungsdatum soll sich ändern (entschieden). Ohne `-m`: Kleine Fehler in fremden Metadaten
+   führen zur Ablehnung, nicht zu stillem Übergehen.
+6. **Nachprüfen an der Nachbardatei:** Sollwerte (`abweichend`), Bilddaten gleich (`bildKennung`:
+   ExifTool `ImageDataHash`, für GIF und TIFF die dekodierten Pixel).
+7. **Sicherung** kopieren (`COPYFILE_EXCL`), scheitert sie, wird nicht ersetzt.
+8. **Noch einmal `pruefeDatei`, dann atomar ersetzen** (`rename` mit Wiederholung; gesperrt = Code).
+9. Die Nachbardatei geht in `finally` weg. Grundfelder frisch lesen und zurückmelden.
+
+Zurück im main: Journal fertig, Index, Vorschaubild neu (der Cache hängt an Größe und Zeit).
+Ausgang offen (Dienst weg, App beendet): Die Journal-Zeile bleibt, `schreibenAufraeumen` entfernt beim
+nächsten Start die Nachbardatei.
+
+**Rückgängig:** alte Werte je Tag über denselben Weg, nur wenn Größe und Zeit noch die nach dem
+Schreiben sind; eigene Journal-Zeile.
 
 ## Sidecars (XMP)
 
@@ -82,7 +93,7 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 ## Tests
 
 - Rein: `metaFields` (jede Grenze, Ungültiges), `args` (Injektion per Zeilenumbruch, führendes
-  `-`, Unicode, Mehrfachauswahl mit `+=`/`-=`).
+  `-`, Unicode, ab 3.3 Mehrfachauswahl mit `+=`/`-=`).
 - Labor (`*.lab.test.ts`, echtes ExifTool): jedes Feld schreiben → lesen → gleich; Pixel-Hash
   gleich; Rückgängig stellt den alten Stand her; schreibgeschützte Datei → Sidecar.
 - E2E `metadaten`: Bearbeiten-Panel einzeln und mehrfach, Rückfrage bei Konflikt (Datei während

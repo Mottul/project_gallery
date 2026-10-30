@@ -12,7 +12,9 @@
 // Diashow-Effekte (Phase 2.5): Überblenden und Ken Burns als Web-Animationen auf den Ebenen, nur
 // solange die Diashow läuft. Das alte Bild bleibt dafür als eigene Ebene (`vorher`) stehen und fährt
 // seine Bahn zu Ende. Der gleiche Schlüssel hält dabei dasselbe <img> – samt laufender Animation.
-// Bewertung und Drehen kommen mit Phase 3.
+//
+// Schnellbewertung (Phase 3.1; entschieden 30.10.2026): Tasten 0–5 und 6–9 schreiben sofort in die
+// Datei, „Rückgängig“ (auch Strg+Z) nimmt es zurück. Drehen kommt mit 3.4.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowLeft,
@@ -46,7 +48,9 @@ import { zahl } from '@renderer/lib/format'
 import { cn, errorText } from '@renderer/lib/utils'
 import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
 import { bildUrl } from '@shared/bild'
+import { farblabelText } from '@shared/bildFilter'
 import { kenBurnsBahn, kenBurnsFrames, type KenBurnsBahn } from '@shared/kenBurns'
+import type { Farblabel, MetaAenderung } from '@shared/metaFields'
 import type { ImageInfo } from '@shared/types'
 import { DiashowMenue } from './DiashowMenue'
 import { InfoPanel } from './InfoPanel'
@@ -65,6 +69,18 @@ const LADEN_HINWEIS_MS = 300
 type Zoom =
   | { art: 'anpassen'; sanft?: boolean }
   | { art: 'frei'; s: number; x: number; y: number; sanft?: boolean }
+
+/** So lange bleibt der Hinweis mit „Rückgängig“ stehen */
+const RUECKMELDUNG_MS = 8000
+const LABEL_TASTEN = new Map<string, Farblabel>([
+  ['6', 'Red'],
+  ['7', 'Yellow'],
+  ['8', 'Green'],
+  ['9', 'Blue']
+])
+
+const sterneText = (n: number): string =>
+  n === 0 ? 'Bewertung entfernt' : `${n} ${n === 1 ? 'Stern' : 'Sterne'} gespeichert`
 
 /** Das gezeigte Original: geladen und dekodiert */
 interface Gezeigt {
@@ -213,6 +229,7 @@ export function Betrachter({
   details: {
     get: (id: number) => ImageInfo | undefined
     anfordern: (ids: readonly number[]) => void
+    setzen: (infos: readonly ImageInfo[]) => void
   }
   /** mit der zuletzt gezeigten Kennung (die Galerie wählt sie und scrollt dorthin) */
   onSchliessen: (id: number | null) => void
@@ -233,6 +250,8 @@ export function Betrachter({
   const [vorher, setVorher] = useState<Gezeigt | null>(null)
   const [vollbild, setVollbild] = useState(false)
   const [hinweis, setHinweis] = useState<string | null>(null)
+  /** Gerade gespeichert: Text und was „Rückgängig“ zurücknimmt */
+  const [rueck, setRueck] = useState<{ text: string; journal: number[] } | null>(null)
   const wurzel = useRef<HTMLDivElement>(null)
   const buehneRef = useRef<HTMLDivElement>(null)
   const puffer = useRef(new Bildpuffer())
@@ -282,6 +301,8 @@ export function Betrachter({
     await img.decode().catch(() => {})
     if (zielRef.current !== schluessel(b)) return // inzwischen weitergeblättert
     setVorher(ueberblendenRef.current ? gezeigtRef.current : null)
+    // dasselbe Bild in neuer Fassung (gerade bewertet): Der Ausschnitt bleibt
+    if (gezeigtRef.current?.id !== b.id) setZoom({ art: 'anpassen' })
     setGezeigt({
       id: b.id,
       mtime: b.mtime,
@@ -289,7 +310,6 @@ export function Betrachter({
       w: img.naturalWidth,
       h: img.naturalHeight
     })
-    setZoom({ art: 'anpassen' })
   }, [])
 
   // Details für das Bild und seine Nachbarn; die Nachbarn (die Diashow auch über das Ende hinaus)
@@ -483,11 +503,66 @@ export function Betrachter({
     }
   }, [id])
 
+  const aendern = useCallback(async (a: MetaAenderung, text: string): Promise<void> => {
+    const kennung = idRef.current
+    if (kennung === null) return
+    try {
+      const r = await api.meta.write([kennung], a)
+      listeRef.current.details.setzen(r.geschrieben)
+      const f = r.fehler[0]
+      setHinweis(f ? f.grund : null)
+      setRueck(f ? null : { text, journal: r.journal })
+    } catch (err) {
+      setHinweis(errorText(err))
+      setRueck(null)
+    }
+  }, [])
+
+  const rueckgaengig = useCallback(async (journal: number[]): Promise<void> => {
+    setRueck(null)
+    try {
+      const r = await api.meta.undo(journal)
+      listeRef.current.details.setzen(r.geschrieben)
+      setHinweis(r.fehler[0]?.grund ?? null)
+    } catch (err) {
+      setHinweis(errorText(err))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!rueck) return
+    const t = setTimeout(() => setRueck(null), RUECKMELDUNG_MS)
+    return () => clearTimeout(t)
+  }, [rueck])
+
   // Tasten (nur solange der Betrachter offen ist; nicht in Auswahl und Regler)
   useEffect(() => {
     const taste = (e: KeyboardEvent): void => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'SELECT' || tag === 'INPUT') return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (rueck) void rueckgaengig(rueck.journal)
+        return
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^[0-5]$/.test(e.key)) {
+        e.preventDefault()
+        const n = Number(e.key)
+        void aendern({ bewertung: n }, sterneText(n))
+        return
+      }
+      const label = LABEL_TASTEN.get(e.key)
+      if (label) {
+        e.preventDefault()
+        // dieselbe Taste noch einmal nimmt das Label wieder weg
+        const weg = bild?.colorLabel === label
+        void aendern(
+          { farblabel: weg ? null : label },
+          weg ? 'Farblabel entfernt' : `Farblabel ${farblabelText(label)} gespeichert`
+        )
+        return
+      }
       const weiter: Record<string, () => void> = {
         ArrowRight: () => gehe(index + 1),
         ArrowLeft: () => gehe(index - 1),
@@ -510,7 +585,19 @@ export function Betrachter({
     }
     window.addEventListener('keydown', taste)
     return () => window.removeEventListener('keydown', taste)
-  }, [gehe, index, ids.length, zoomen, vollbildUmschalten, papierkorb, onSchliessen])
+  }, [
+    gehe,
+    index,
+    ids.length,
+    zoomen,
+    vollbildUmschalten,
+    papierkorb,
+    onSchliessen,
+    aendern,
+    rueckgaengig,
+    rueck,
+    bild?.colorLabel
+  ])
 
   const knopf =
     'inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40'
@@ -540,8 +627,16 @@ export function Betrachter({
         </button>
         <div className="min-w-0 flex-1 px-2">
           <h2 className="truncate text-sm font-semibold">{bild?.name ?? ''}</h2>
-          <p className="text-xs text-muted-foreground" aria-label="Position">
-            {zahl.format(index + 1)} / {zahl.format(ids.length)}
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span aria-label="Position">
+              {zahl.format(index + 1)} / {zahl.format(ids.length)}
+            </span>
+            {!!bild?.rating && (
+              <span className="text-warning" aria-label={`${bild.rating} von 5 Sternen`}>
+                {'★'.repeat(bild.rating)}
+              </span>
+            )}
+            {bild?.colorLabel && <span>{farblabelText(bild.colorLabel)}</span>}
           </p>
         </div>
         <Zoomleiste
@@ -697,6 +792,21 @@ export function Betrachter({
             <p className="absolute inset-x-0 bottom-6 mx-auto w-fit rounded-md bg-background/90 px-3 py-2 text-sm">
               Dieses Bild lässt sich gerade nicht anzeigen – geändert, verschoben oder defekt.
             </p>
+          )}
+          {rueck && (
+            <div
+              role="status"
+              className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-md bg-background/90 px-3 py-1.5 text-sm shadow-lg"
+            >
+              <span>{rueck.text}</span>
+              <button
+                type="button"
+                className="rounded-sm font-medium text-primary-line underline outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => void rueckgaengig(rueck.journal)}
+              >
+                Rückgängig
+              </button>
+            </div>
           )}
           {laedtLange && (
             <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-xs">

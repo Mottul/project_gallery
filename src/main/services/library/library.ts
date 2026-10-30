@@ -37,6 +37,11 @@ import { getDb, schliesseDb, type DB } from '../db'
 import { showOpenDialog } from '../fileDialogs'
 import { orteStand } from '../geo/geoPfad'
 import { lokalerOrdner, lokalerUnterordner } from '../lokaleDaten'
+import {
+  schreibenAufraeumen,
+  schreibenEinrichten,
+  sicherungenDesOrdnersWeg
+} from '../metadata/schreiben'
 import { logLine } from '../log'
 import { isDirReachable } from '../reachableDir'
 import { vorschauSchluesselLaden } from '../cache/vorschauCache'
@@ -96,6 +101,32 @@ vorschauenEinrichten({
   melden: (sofort) => melden(sofort),
   nichtErreichbar: () => nichtErreichbar(),
   beendet: () => beendet
+})
+
+/**
+ * Die App hat eine Datei geschrieben: neue Größe und Zeit eintragen, die Grundfelder aus dem frisch
+ * Gelesenen, Vorschaubild und Umrechnung gelten nicht mehr. Gibt es nichts Gelesenes, liest die
+ * Warteschlange nach.
+ */
+schreibenEinrichten({
+  db: () => db(),
+  details: (ids) => repo.details(db(), ids),
+  abgleichen: (folderId) => einreihen(folderId),
+  geschrieben: async (id, { size, mtime, roh }) => {
+    repo.nachSchreiben(db(), id, size, mtime)
+    const z = repo.metaZeile(db(), id)
+    if (z && roh) {
+      const jetzt = Date.now()
+      const felder = grundfelderAus(roh, z, jetzt)
+      const orte = await orteFuer([{ id, felder }])
+      repo.metaSchreiben(db(), [{ ...z, felder, ort: orte.get(id) ?? null }], jetzt)
+    } else metadatenAnstossen()
+    anzeigeVerwerfen([id])
+    await vorschauVerwerfen([id])
+    vorschauenAnstossen()
+    revision++
+    melden()
+  }
 })
 
 /** Anzeigename: letzter Pfadteil, bei einer Wurzel („D:\“) der Pfad selbst. */
@@ -765,6 +796,12 @@ export function bibliothekStarten(): void {
   metadatenAnstossen()
   vorschauenAnstossen()
   void fehlendeAufraeumen()
+  void schreibenAufraeumen().catch((err) =>
+    logLine(
+      '[metadaten] Aufräumen gescheitert:',
+      (err as NodeJS.ErrnoException).code ?? 'UNBEKANNT'
+    )
+  )
   fehlendTakt = setInterval(() => void fehlendeAufraeumen(), FEHLEND_PRUEFEN_MS)
   fehlendTakt.unref()
 }
@@ -846,7 +883,7 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
     message: `„${anzeigeName(ordner.path)}“ aus der Galerie entfernen?`,
     detail:
       'Die Dateien im Ordner bleiben unberührt. Entfernt wird nur, was die Galerie zu diesem ' +
-      'Ordner gespeichert hat (Index, Vorschaubilder und seine gespeicherten Ansichten).',
+      'Ordner gespeichert hat (Index, Vorschaubilder, gespeicherte Ansichten und Sicherungskopien).',
     buttons: ['Entfernen', 'Abbrechen'],
     defaultId: 1,
     cancelId: 1,
@@ -864,6 +901,7 @@ export async function ordnerEntfernen(win: BrowserWindow | null, id: number): Pr
   if (i >= 0) warteschlange.splice(i, 1)
   // Kennungen vorher merken – nach dem Löschen der Zeilen fände sie niemand mehr
   const ids = repo.ordnerKennungen(db(), id)
+  await sicherungenDesOrdnersWeg(id)
   const ok = repo.ordnerEntfernen(db(), id)
   logLine('[bibliothek] Ordner entfernt:', id)
   // Vorschaubilder gleich mit (Schicht D: keine Reste)
@@ -878,8 +916,10 @@ export async function modusSetzen(id: number, mode: FolderMode): Promise<void> {
   const vorher = repo.ordnerHolen(db(), id)?.mode
   if (!repo.modusSetzen(db(), id, mode)) throw new Error('Ordner gibt es nicht')
   // „privat“: keine Vorschaubilder auf der Platte – vorhandene sofort löschen (Schicht D)
-  if (mode === 'privat' && vorher !== 'privat') await ordnerWirdPrivat(db(), id)
-  else if (mode !== 'privat' && vorher === 'privat') ordnerNichtMehrPrivat(db(), id)
+  if (mode === 'privat' && vorher !== 'privat') {
+    await ordnerWirdPrivat(db(), id)
+    await sicherungenDesOrdnersWeg(id)
+  } else if (mode !== 'privat' && vorher === 'privat') ordnerNichtMehrPrivat(db(), id)
   melden()
 }
 

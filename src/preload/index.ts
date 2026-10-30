@@ -53,6 +53,10 @@ const api: GalerieApi = {
       ),
     onChanged: (cb) => subscribe(Channels.libraryChanged, (s) => cb(s as never)),
     onViewsChanged: (cb) => subscribe(Channels.libraryViewsChanged, (v) => cb(v as never))
+  },
+  meta: {
+    write: (ids, aenderung) => ipcRenderer.invoke(Channels.metaWrite, ids, aenderung),
+    undo: (journal) => ipcRenderer.invoke(Channels.metaUndo, journal)
   }
 }
 

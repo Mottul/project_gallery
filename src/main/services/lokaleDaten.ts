@@ -28,3 +28,12 @@ export function lokalerUnterordner(name: string): string {
   mkdirSync(dir, { recursive: true })
   return dir
 }
+
+/**
+ * Sicherungen vor dem Schreiben (Phase 3): neben dem Datenordner statt darin – die Deinstallation
+ * löscht ihn, Sicherungen sollen sie überstehen (Skill windows-paket, docs/INSTALL.md). Der Ordner
+ * entsteht erst mit der ersten Sicherung.
+ */
+export function sicherungsOrdner(): string {
+  return `${lokalerOrdner()} Sicherungen`
+}

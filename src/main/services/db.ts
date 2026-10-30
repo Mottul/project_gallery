@@ -175,6 +175,36 @@ const MIGRATIONEN: readonly string[] = [
     stand TEXT NOT NULL
   );
   CREATE INDEX ansichten_ordner ON ansichten(folder_id);
+  `,
+  // 3.1: Journal für Rückgängig (alte und neue Werte je Tag) und Sicherungen. `zwischen` ist die
+  // Nachbardatei, solange geschrieben wird – steht er beim Start noch da, gab es einen Absturz.
+  // Sicherungen ohne Fremdschlüssel: Die Kopie überlebt die Bild-Zeile, bis ihre Frist abläuft.
+  `
+  CREATE TABLE journal (
+    id INTEGER PRIMARY KEY,
+    at INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+    before_json TEXT NOT NULL,
+    after_json TEXT NOT NULL,
+    zwischen TEXT,
+    size_nach INTEGER,
+    mtime_nach INTEGER,
+    undone_at INTEGER
+  );
+  CREATE INDEX journal_bild ON journal(image_id);
+  CREATE INDEX journal_offen ON journal(id) WHERE zwischen IS NOT NULL;
+  CREATE INDEX journal_zeit ON journal(at);
+  CREATE TABLE sicherungen (
+    id INTEGER PRIMARY KEY,
+    image_id INTEGER NOT NULL,
+    folder_id INTEGER NOT NULL,
+    pfad TEXT NOT NULL UNIQUE,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX sicherungen_bild ON sicherungen(image_id);
+  CREATE INDEX sicherungen_ordner ON sicherungen(folder_id);
+  CREATE INDEX sicherungen_zeit ON sicherungen(at);
   `
 ]
 

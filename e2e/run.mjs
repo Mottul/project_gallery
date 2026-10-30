@@ -13,6 +13,7 @@ const all = [
   'sortieren',
   'filter',
   'ansichten',
+  'metadaten',
   'originale'
 ]
 const nurAufWunsch = ['paket', 'abnahme50k']

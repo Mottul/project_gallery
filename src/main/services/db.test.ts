@@ -127,6 +127,31 @@ describe('Index-Datenbank', () => {
     db.close()
   })
 
+  it('Version 7 → 8: Journal geht mit dem Bild, Sicherungen bleiben, bis ihre Frist abläuft', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    migrieren(db, 7)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    db.prepare(
+      `INSERT INTO images (id, folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime)
+       VALUES (7, 1, 'a.jpg', 'a.jpg', 'a.jpg', 'a.jpg', 'jpg', 1, 1)`
+    ).run()
+    migrieren(db)
+    db.prepare(
+      `INSERT INTO journal (at, action, image_id, before_json, after_json)
+       VALUES (1, 'metadaten', 7, '[]', '[]')`
+    ).run()
+    db.prepare(
+      "INSERT INTO sicherungen (image_id, folder_id, pfad, at) VALUES (7, 1, 'p', 1)"
+    ).run()
+    db.prepare('DELETE FROM images WHERE id = 7').run()
+    expect(db.prepare('SELECT count(*) FROM journal').pluck().get()).toBe(0)
+    expect(db.prepare('SELECT count(*) FROM sicherungen').pluck().get()).toBe(1)
+    db.close()
+  })
+
   it('Version 6 → 7: gespeicherte Ansichten gehen mit ihrem Ordner', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')

@@ -39,6 +39,7 @@ try {
           'getSettings',
           'library',
           'log',
+          'meta',
           'onSettingsChanged',
           'setSettings'
         ])

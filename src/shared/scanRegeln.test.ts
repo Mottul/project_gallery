@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { dateiAufnehmen, ordnerAusgeschlossen, unterUnlesbarem } from './scanRegeln'
+import {
+  dateiAufnehmen,
+  istZwischenName,
+  ordnerAusgeschlossen,
+  unterUnlesbarem,
+  zwischenName
+} from './scanRegeln'
 
 describe('ordnerAusgeschlossen', () => {
   it('lässt System-, Papierkorb-, versteckte und NAS-Ordner aus', () => {
@@ -55,5 +61,22 @@ describe('unterUnlesbarem', () => {
     expect(unterUnlesbarem('privat2/x.jpg', u)).toBe(false)
     expect(unterUnlesbarem('a/bc/x.jpg', u)).toBe(false)
     expect(unterUnlesbarem('x.jpg', [])).toBe(false)
+  })
+})
+
+describe('zwischenName', () => {
+  it('versteckt, mit der Endung des Bildes, von der Galerie ausgeschlossen', () => {
+    const z = zwischenName('D:\\Bilder\\Bild 1.JPG', 7)
+    expect(z).toBe('D:\\Bilder\\.Bild 1.JPG.galerie-tmp-7.JPG')
+    expect(dateiAufnehmen('.Bild 1.JPG.galerie-tmp-7.JPG')).toBe(false)
+    expect(zwischenName('/b/ohne', 1)).toBe('/b/.ohne.galerie-tmp-1')
+  })
+
+  it('erkennt nur eigene Nachbardateien', () => {
+    expect(istZwischenName(zwischenName('D:\\b\\a.jpg', 3))).toBe(true)
+    expect(istZwischenName('/b/.a.jpg.galerie-tmp-3')).toBe(true)
+    for (const p of ['D:\\b\\a.jpg', 'D:\\b\\.versteckt.jpg', '/b/a.galerie-tmp-3.jpg']) {
+      expect(istZwischenName(p)).toBe(false)
+    }
   })
 })

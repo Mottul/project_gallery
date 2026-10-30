@@ -196,7 +196,9 @@ images   (id, folder_id, rel_path, name, name_sort, ext, kind /* bild | video | 
           iso, aperture, exposure, focal, rating, color_label, title, description,
           thumb_state, meta_json, meta_read_at, status /* ok | fehlt | defekt */)
 keywords (image_id, keyword)          -- normalisiert, für Filter und Gruppen
-journal  (id, at, action, image_id, before_json, after_json, undone_at)   -- Rückgängig
+journal  (id, at, action, image_id, before_json, after_json, zwischen,
+          size_nach, mtime_nach, undone_at)                              -- Rückgängig
+sicherungen (id, image_id, folder_id, pfad, at)                          -- Frist 30 Tage
 recipes  (image_id, recipe_json, version, updated_at)                    -- Bearbeitungen
 images_fts (name, title, description, keywords, place)                   -- FTS5
 ansichten (id, name, name_key UNIQUE, folder_id, pfad, stand)            -- gespeicherte Ansichten
@@ -368,21 +370,33 @@ Einzeln und für eine Auswahl: gemischte Werte zeigen „‹verschieden›“; g
 geänderte Felder; Stichwörter **hinzufügen/entfernen** statt ersetzen. Geschrieben wird **in die
 Datei**, bei RAW und schreibgeschützten Dateien in ein XMP-Sidecar (entschieden).
 
-| Feld | Schreibt in (Startpunkt – im Labor gegen Windows-Explorer, digiKam und Lightroom prüfen) |
+Gemessen mit `scripts/labor/exiftool-schreiben.mjs` (30.10.2026, ExifTool 13.59): JPEG und TIFF nehmen
+EXIF, IPTC und XMP; PNG, WebP und AVIF EXIF und XMP (IPTC in PNG nur „non-standard“, darum nicht);
+GIF nur XMP, also weder EXIF-Datum noch GPS; BMP nichts. Die Pixel blieben in allen sechs gleich.
+Der Windows-Explorer zeigte Titel, Stichwörter, Bewertung (75 = 4 Sterne), Aufnahmedatum (außer PNG),
+Urheber und Copyright; GIF zeigt er gar nicht. Ein roher Zeilenumbruch in einem Wert wäre ein neues
+Argument (Gegenprobe: er schrieb wirklich in einen anderen Tag), darum jeder Wert als `#[CSTR]`.
+Die XP-Felder speichern keine Emoji, ExifTool lässt sie stillschweigend weg (fiel bei der Nachprüfung auf).
+
+| Feld | Schreibt in (Mess-Stand; digiKam und Lightroom prüft die Abnahme) |
 |---|---|
-| Titel | `XMP-dc:Title`, `IPTC:ObjectName`, `XPTitle` |
-| Beschreibung | MWG `Description` (EXIF `ImageDescription`, IPTC `Caption-Abstract`, `XMP-dc:Description`) |
+| Titel | `XMP-dc:Title`, `IPTC:ObjectName` (nur bis 64 Bytes), `XPTitle` |
+| Beschreibung | `XMP-dc:Description`, IPTC `Caption-Abstract`, EXIF `ImageDescription`, `XPComment` (nur dieses zeigt der Explorer als Kommentar, außer bei PNG) |
 | Stichwörter | MWG `Keywords` (IPTC `Keywords`, `XMP-dc:Subject`) und `XPKeywords` |
-| Bewertung (0–5) | `XMP-xmp:Rating` und EXIF `Rating`/`RatingPercent` (Explorer) |
+| Bewertung (0–5, 0 entfernt die Tags) | `XMP-xmp:Rating` und EXIF `Rating`/`RatingPercent` (Explorer: 1, 25, 50, 75, 99) |
 | Farblabel | `XMP-xmp:Label` |
 | Aufnahmedatum | `DateTimeOriginal`, `CreateDate`, `OffsetTime*`, `XMP-photoshop:DateCreated` |
 | Standort | `GPSLatitude/Ref`, `GPSLongitude/Ref`, `GPSAltitude/Ref`; entfernen = alle GPS-Tags |
 | Ort (Text) | MWG `City`, `State`, `Country`, `Location` |
 | Urheber, Copyright | MWG `Creator`, MWG `Copyright` |
 
-- **Schreiben:** über die Warteschlange; vorher prüfen, ob die Datei seit dem Lesen geändert wurde
-  (Größe + Änderungszeit); alte Werte ins Journal (Rückgängig); optional vollständige Sicherung;
-  danach neu lesen und vergleichen; Dateidatum auf Wunsch behalten.
+- **Schreiben** (seit 3.1, Reihenfolge entschieden nach dem Labor): Datei noch wie im Index? Alte
+  Werte ins Journal. ExifTool schreibt mit `-o` in eine versteckte Nachbardatei, das Original bleibt
+  unberührt. Die Nachbardatei wird geprüft (Werte da, Bilddaten gleich) – erst dann Sicherung und
+  atomares Ersetzen. Das Nachprüfen liegt also vor dem Ersetzen, gescheitert ändert sich nichts.
+- **Sicherung** (entschieden 30.10.2026): eine Kopie je Datei vor der ersten Änderung, 30 Tage, im
+  Ordner `%LOCALAPPDATA%\Galeria Beata Sicherungen`; im Ordner „privat“ keine. Das Änderungsdatum der
+  Datei wird neu gesetzt, damit Sicherungs- und Sync-Programme die Änderung bemerken.
 - Regeln im Skill [`metadaten-schreiben`](../.claude/skills/metadaten-schreiben/SKILL.md).
 
 ### Stapelverarbeitung
@@ -704,6 +718,16 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
   Rückgängig stellt den alten Stand her); Checkliste von Hand: Explorer und digiKam zeigen Titel,
   Stichwörter, Bewertung.
 
+**Teilschritte** (festgelegt 30.10.2026, je ein Pull Request gegen `main`):
+
+| Schritt | Inhalt | Nachweis |
+|---|---|---|
+| 3.1 ✅ | **Schreibweg und Schnellbewertung:** Labor; `shared/metaFields.ts` (Felder Bewertung, Farblabel, Titel, Beschreibung, Zuordnung je Format, Prüfung, Nachprüfung), `exiftool/args.ts` (jeder Wert als `#[CSTR]`, nur Tags aus der Zuordnung, nur absolute Pfade), `bilddienst/schreiben.ts` (Ablauf oben), `metadata/schreiben.ts` (Freigabe, Journal, Sicherung, Rückgängig, Aufräumen nach einem Absturz), Migration 8 (`journal`, `sicherungen`), `meta.write`/`meta.undo`; im Betrachter Tasten 0–5 und 6–9, Hinweis mit „Rückgängig“ (auch Strg+Z), Sterne neben der Position. Nach dem Schreiben entsteht das Vorschaubild neu, weil der Cache an Größe und Zeit hängt | `metadaten` (13 Schritte: Werte von ExifTool unabhängig nachgelesen, Pixel gleich, Rückgängig, Sicherung bytegleich und nur einmal, von außen geändert, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen per Zeilenumbruch, Log ohne Werte, keine Nachbardatei; Gegenproben rot: Sicherung bei jedem Schreiben, „nur lesen“ übergangen, ohne Prüfung vor dem Ersetzen); Labor `schreiben.lab.test.ts` (sechs Formate, Emoji, IPTC, Rückgängig mit abweichenden Tags, Kennung der Bilddaten); Unit `metaFields.test.ts`, `args.test.ts`, `metadata/schreiben.test.ts`, `db.test.ts` (Migration 7 → 8) |
+| 3.2 | **Bearbeiten-Panel** für ein Bild: alle Felder, auch Stichwörter, Datum, Standort, Ort, Urheber, Copyright | |
+| 3.3 | **Mehrfachauswahl:** gemischte Werte, Stichwörter hinzufügen/entfernen, Fortschritt, Abbrechen, Bericht | |
+| 3.4 | **Verlustfreies Drehen** über die EXIF-Ausrichtung, im Betrachter und für eine Auswahl | |
+| 3.5 | **Sidecars und Abnahme:** XMP-Sidecar für schreibgeschützte Dateien und BMP, Einstellungen (Sicherung, Dateidatum), Sandbox, Prüfung von Hand in Explorer und digiKam | |
+
 ### Phase 4 – Stapelverarbeitung
 
 - Assistent, alle Aktionen der Tabelle außer „Bearbeitung übertragen“, Rezepte speichern.
@@ -835,6 +859,9 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **Filter** gilt über alle Ordner bis zum Zurücksetzen oder Neustart, Leiste unter der Werkzeugleiste.
 - **Gespeicherte Ansichten** enthalten den Ordner und stehen in der Seitenleiste; ein entfernter
   Ordner nimmt seine Ansichten mit.
+
+- **Schreiben in Originale (Phase 3):** Schnellbewertung schreibt sofort, mit „Rückgängig“; eine
+  Sicherung je Datei, 30 Tage; im Ordner „privat“ keine Kopie; Änderungsdatum wird neu gesetzt.
 
 **Noch offen:** nichts. Neue Fragen hier eintragen.
 
