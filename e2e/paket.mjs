@@ -170,6 +170,18 @@ try {
             country: 'Kroatien',
             source: 'gps'
           })
+          // Metadaten schreiben: ExifTool und sharp aus dem Paket, Wert steht danach im Index
+          const ziel = bilder.find((x) => x.name === 'dubrovnik.jpg')
+          const r = await page.evaluate(
+            (id) => window.api.meta.write([id], { bewertung: 2, titel: 'Fähre 🌞' }),
+            ziel.id
+          )
+          assert.deepEqual(r.fehler, [])
+          assert.equal(r.geschrieben[0].rating, 2)
+          assert.equal(r.geschrieben[0].title, 'Fähre 🌞')
+          const u = await page.evaluate((j) => window.api.meta.undo(j), r.journal)
+          assert.deepEqual(u.fehler, [])
+          assert.equal(u.geschrieben[0].rating, ziel.rating)
           // Ordner wieder weg, damit das Beenden nichts mehr zu tun hat
           await stubConfirm(app, true)
           const [o] = s.folders

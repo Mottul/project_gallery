@@ -33,7 +33,8 @@ erzeugt `scripts/icon.mjs` aus `build/icon.svg`. Installer 179 MB (Phase 0), 187
 - **Deinstallation:** Index und Cache (`%LOCALAPPDATA%\<App>`) enthalten Vorschaubilder privater
   Fotos und müssen weg. `deleteAppDataOnUninstall` greift nur bei One-Click und nur für den
   Benutzerdaten-Ordner – für den Cache-Ordner ein `include`-Skript (`build/installer.nsh`,
-  Makro `customUnInstall`) prüfen. Sicherungen (`Sicherungen/`) **nicht** still löschen – Doku
+  Makro `customUnInstall`) prüfen. Sicherungen (`%LOCALAPPDATA%\Galeria Beata Sicherungen`, bewusst
+  neben dem Datenordner) **nicht** still löschen – Doku
   bzw. Rückfrage in der App („Alle Daten entfernen“ vor dem Deinstallieren).
 - **Dateizuordnung** (Phase 7): `fileAssociations` für `jpg`, `jpeg`, `png`, `webp`, `gif`,
   `avif`, `tif`, `tiff` mit Rolle `Viewer`; prüfen, dass ein Installer je Benutzer sie unter

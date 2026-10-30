@@ -2,6 +2,7 @@
 // hinein, Kennwerte heraus – nie ganze Bilder (Skill bibliothek-index, „Bilddienst“).
 
 import { cpus } from 'node:os'
+import type { TagWert } from '@shared/metaFields'
 import type { MetaFeld } from '@shared/types'
 import type { GefundeneDatei } from '../library/repo'
 import type { Meldung } from './beobachter'
@@ -54,6 +55,21 @@ export interface AnzeigeErgebnis {
   code: string | null
 }
 
+/** Metadaten in eine Datei schreiben (Phase 3); Ablauf in schreiben.ts */
+export interface SchreibAuftrag {
+  datei: AnzeigeDatei
+  tags: TagWert[]
+  /** Wohin das Original vor dem Ersetzen kopiert wird; null = keine Sicherung */
+  sicherung: string | null
+  /** Nachbardatei für das Schreiben (im selben Ordner) */
+  zwischen: string
+}
+
+/** ok: neue Größe und Zeit samt frisch gelesenen Grundfeldern; sonst der Grund als Code */
+export type SchreibErgebnis =
+  | { ok: true; size: number; mtime: number; roh: Record<string, unknown> | null }
+  | { ok: false; code: string }
+
 /** main → Bilddienst */
 export type AnDienst =
   | {
@@ -78,6 +94,11 @@ export type AnDienst =
   | { typ: 'orte'; auftrag: number; punkte: { id: number; lat: number; lon: number }[] }
   /** „alle Felder“ einer Datei für das Info-Panel (2.1), frisch gelesen */
   | { typ: 'alle-felder'; auftrag: number; datei: AnzeigeDatei }
+  /** Werte bestimmter Tags, vor dem Schreiben fürs Journal */
+  | { typ: 'tags-lesen'; auftrag: number; datei: AnzeigeDatei; tags: TagWert[] }
+  | { typ: 'schreiben'; auftrag: number; schreiben: SchreibAuftrag }
+  /** Nachbardateien, die ein Absturz liegen ließ (nur Namen der Form `.*.galerie-tmp-*`) */
+  | { typ: 'zwischen-weg'; pfade: string[] }
   | { typ: 'abbrechen'; auftrag: number }
   | { typ: 'beenden' }
 
@@ -91,6 +112,13 @@ export type VomDienst =
   | { typ: 'orte-ergebnis'; auftrag: number; orte: OrtsAntwort[] }
   /** null = nicht lesbar (geändert, fehlt, ExifTool fehlt) */
   | { typ: 'alle-felder-ergebnis'; auftrag: number; felder: MetaFeld[] | null }
+  | {
+      typ: 'tags-ergebnis'
+      auftrag: number
+      werte: Record<string, unknown> | null
+      code: string | null
+    }
+  | { typ: 'schreib-ergebnis'; auftrag: number; ergebnis: SchreibErgebnis }
   /** netz = Netzlaufwerk: nicht überwacht, der main gleicht periodisch ab */
   | { typ: 'beobachtet'; auftrag: number; netz: boolean }
   /** ohne Auftrag: Änderungen in einem überwachten Ordner */

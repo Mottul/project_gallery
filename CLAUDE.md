@@ -17,8 +17,9 @@ Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5
 (Metadaten lesen, Filtern, Suchen; Teilschritte 2.1–2.5 im Plan); 2.1 (alle Metadaten, Info-Panel,
 Fehlende entfernen), 2.2 (Orte offline, Sortieren nach Ort A–Z) und 2.3 (weitere Sortierfelder,
 Gruppen-Überschriften in Raster und Liste), 2.3b (Blocksatz), 2.4 (Filterleiste, Volltextsuche),
-2.4b (gespeicherte Ansichten) und 2.5 (Diashow mit Überblenden und Ken Burns). Als Nächstes
-Phase 3 (Metadaten bearbeiten). Grundlage ist
+2.4b (gespeicherte Ansichten) und 2.5 (Diashow mit Überblenden und Ken Burns). **Phase 3 läuft**
+(Metadaten bearbeiten; Teilschritte 3.1–3.5 im Plan); 3.1 (Schreibweg, Schnellbewertung) ist
+umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -103,6 +104,9 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   Web-Animationen (Bahn rein in `shared/kenBurns.ts`, Einstellungen in `lib/diashow.ts`). Eigene Protokolle nur in
   `protocols/schemata.ts` anmelden. Vor jedem Lesen einer Nutzerdatei `dateien/pruefeDatei.ts`.
   Papierkorb nur über `inPapierkorb` (`library.ts`: Rückfrage, nie „nur lesen“, `shell.trashItem`).
+- **Metadaten schreiben:** Felder und Tags nur aus `shared/metaFields.ts`; Ablauf in
+  `bilddienst/schreiben.ts` (Nachbardatei, nachprüfen, Sicherung, atomar ersetzen), Freigabe,
+  Journal, Sicherungen und Rückgängig in `metadata/schreiben.ts`. Skill `metadaten-schreiben`.
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
   Hell = `.light` am `<html>`, Standard „wie Windows“.
 

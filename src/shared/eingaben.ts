@@ -4,6 +4,7 @@
 import { pruefeBildFilter, type BildFilter } from './bildFilter'
 import { pruefeAnsichtName, pruefeAnsichtStand, type AnsichtStand } from './gespeicherteAnsicht'
 import { pruefeGruppierung, type Gruppierung } from './gruppen'
+import { pruefeMetaAenderung, type MetaAenderung } from './metaFields'
 import {
   pruefeOrdnerFilter,
   pruefeSortierung,
@@ -42,6 +43,12 @@ export function pruefeBildFilterStreng(v: unknown): BildFilter {
   const f = pruefeBildFilter(v)
   if (!f) throw new Error('Ungültiger Filter')
   return f
+}
+
+export function pruefeMetaAenderungStreng(v: unknown): MetaAenderung {
+  const a = pruefeMetaAenderung(v)
+  if (!a) throw new Error('Ungültige Änderung')
+  return a
 }
 
 export function pruefeAnsichtNameStreng(v: unknown): string {

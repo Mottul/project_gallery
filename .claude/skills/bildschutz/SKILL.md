@@ -37,8 +37,9 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
 
 - [ ] Liest die Änderung nur? Dann öffnet sie Dateien **nur lesend**.
 - [ ] Schreibt sie in Nutzerdateien? Dann ausdrücklich ausgelöst, Dateien in der Rückfrage bzw.
-      Vorschau genannt, Ordner-Modus „nur lesen“ beachtet, Sicherung, atomar, nachgeprüft,
-      Journal für Rückgängig (Skills `metadaten-schreiben`, `stapelverarbeitung`).
+      Vorschau genannt, Ordner-Modus „nur lesen“ beachtet, Sicherung (im Ordner „privat“ keine),
+      nachgeprüft VOR dem atomaren Ersetzen, Journal für Rückgängig (Skills `metadaten-schreiben`,
+      `stapelverarbeitung`).
 - [ ] Löschen nur über `shell.trashItem` (`inPapierkorb` in `library.ts`): Rückfrage im main mit
       Namen, Vorgabe „Abbrechen“; nie in Ordnern „nur lesen“ – nach der Rückfrage frisch aus dem
       Index lesen (der Modus kann inzwischen gewechselt haben); je Datei vorher `pruefeDatei` mit
@@ -74,7 +75,8 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
       Datei, Schlüssel per `safeStorage` (DPAPI) geschützt; beim Lesen Tag prüfen – manipuliert =
       neu erzeugen, nie anzeigen.
 - [ ] Ordner „privat“: keine Vorschaubilder auf der Platte (nur Arbeitsspeicher).
-- [ ] Ordner entfernen / Cache leeren löscht wirklich alles Abgeleitete (Zeilen, FTS, Ansichten, Dateien,
+- [ ] Ordner entfernen / Cache leeren löscht wirklich alles Abgeleitete (Zeilen, FTS, Ansichten,
+      Sicherungen, Dateien,
       Journal-Einträge mit Werten nach Einstellung).
 - [ ] **Log ohne Inhalte:** Kennungen und Fehlercodes, Pfade nur wo nötig; nie GPS, Titel,
       Beschreibungen, Stichwörter, Personen. Fehlermeldungen an den Nutzer dürfen Pfade nennen.

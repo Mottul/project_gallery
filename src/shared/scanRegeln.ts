@@ -45,3 +45,20 @@ export function dateiAufnehmen(name: string): boolean {
 export function unterUnlesbarem(relKey: string, unlesbar: readonly string[]): boolean {
   return unlesbar.some((u) => relKey === u || relKey.startsWith(u + '/'))
 }
+
+/**
+ * Nachbardatei beim Schreiben (Phase 3): versteckt, also nie in der Galerie; die Endung des Bildes
+ * bleibt, damit ExifTool und sharp das Format erkennen. `nr` ist die Journal-Zeile.
+ */
+export function zwischenName(pfad: string, nr: number): string {
+  const i = Math.max(pfad.lastIndexOf('/'), pfad.lastIndexOf('\\'))
+  const name = pfad.slice(i + 1)
+  const punkt = name.lastIndexOf('.')
+  return `${pfad.slice(0, i + 1)}.${name}.galerie-tmp-${nr}${punkt > 0 ? name.slice(punkt) : ''}`
+}
+
+/** Nur solche Namen räumt der Dienst nach einem Absturz weg – nie etwas anderes im Ordner. */
+export function istZwischenName(pfad: string): boolean {
+  const name = pfad.slice(Math.max(pfad.lastIndexOf('/'), pfad.lastIndexOf('\\')) + 1)
+  return /^\..*\.galerie-tmp-\d+(\.[^.]*)?$/.test(name)
+}

@@ -121,6 +121,7 @@ export function useKennungen(
 export function useDetails(stand: number): {
   get: (id: number) => ImageInfo | undefined
   anfordern: (ids: readonly number[]) => void
+  setzen: (infos: readonly ImageInfo[]) => void
 } {
   const cache = useRef(new Map<number, { info: ImageInfo; stand: number }>())
   const unterwegs = useRef(new Set<number>())
@@ -150,7 +151,12 @@ export function useDetails(stand: number): {
   }, [])
 
   const get = useCallback((id: number) => cache.current.get(id)?.info, [])
-  return { get, anfordern }
+  /** Frische Details aus einem Schreibauftrag: gleich zeigen, nicht auf den Takt warten */
+  const setzen = useCallback((infos: readonly ImageInfo[]) => {
+    for (const info of infos) cache.current.set(info.id, { info, stand: standRef.current })
+    setTick((t) => t + 1)
+  }, [])
+  return { get, anfordern, setzen }
 }
 
 /** Auswahllisten der Filterleiste – nur solange sie offen ist (gedrosselt neu bei Änderungen). */

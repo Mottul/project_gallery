@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { vorschauEinrichtung } from '../cache/vorschauCache'
 import { exiftoolPfad } from '../exiftool/binPath'
 import type { GefundeneDatei } from '../library/repo'
+import type { TagWert } from '@shared/metaFields'
 import type { MetaFeld } from '@shared/types'
 import { logLine } from '../log'
 import { geoOrdner } from '../geo/geoPfad'
@@ -24,6 +25,8 @@ import {
   type MetaErgebnis,
   type AnzeigeDatei,
   type AnzeigeErgebnis,
+  type SchreibAuftrag,
+  type SchreibErgebnis,
   type VomDienst,
   type VorschauDatei,
   type VorschauErgebnis
@@ -150,6 +153,10 @@ class Bilddienst {
     else if (n.typ === 'meta-ergebnis' || n.typ === 'vorschau-ergebnis') l.resolve(n.ergebnisse)
     else if (n.typ === 'anzeige-ergebnis') l.resolve(n.ergebnis)
     else if (n.typ === 'alle-felder-ergebnis') l.resolve(n.felder)
+    else if (n.typ === 'tags-ergebnis') {
+      if (n.code) l.reject(fehler(n.code, n.code))
+      else l.resolve(n.werte)
+    } else if (n.typ === 'schreib-ergebnis') l.resolve(n.ergebnis)
     else if (n.typ === 'orte-ergebnis') l.resolve(n.orte)
     else if (n.typ === 'beobachtet') l.resolve({ netz: n.netz })
     else l.reject(fehler(n.code, n.meldung))
@@ -219,6 +226,26 @@ class Bilddienst {
   alleFelder(datei: AnzeigeDatei): Promise<MetaFeld[] | null> {
     return this.auftrag<MetaFeld[] | null>((a) => ({ typ: 'alle-felder', auftrag: a, datei }))
       .antwort
+  }
+
+  /** Werte dieser Tags (Journal); scheitert mit dem Code der Prüfung (GEAENDERT, ENOENT …). */
+  tagsLesen(datei: AnzeigeDatei, tags: TagWert[]): Promise<Record<string, unknown> | null> {
+    return this.auftrag<Record<string, unknown> | null>((a) => ({
+      typ: 'tags-lesen',
+      auftrag: a,
+      datei,
+      tags
+    })).antwort
+  }
+
+  /** Metadaten in eine Datei schreiben; das Ergebnis sagt, ob es ging. */
+  schreiben(schreiben: SchreibAuftrag): Promise<SchreibErgebnis> {
+    return this.auftrag<SchreibErgebnis>((a) => ({ typ: 'schreiben', auftrag: a, schreiben }))
+      .antwort
+  }
+
+  zwischenWeg(pfade: string[]): void {
+    if (pfade.length) this.prozess().postMessage({ typ: 'zwischen-weg', pfade } satisfies AnDienst)
   }
 
   /** Ordner überwachen (Änderungen kommen über onAenderung); netz = nicht überwacht. */

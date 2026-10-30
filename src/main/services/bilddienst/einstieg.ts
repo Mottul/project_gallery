@@ -5,12 +5,14 @@
 // Betrieb) und die Vorschaubilder (sharp, BMP über ffmpeg). Für den Dienst gelten dieselben
 // Lint-Regeln wie für den main (kein Netz).
 
-import { realpath } from 'node:fs/promises'
+import { realpath, rm } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import sharp from 'sharp'
 import { alleFelderAus } from '@shared/alleFelder'
 import type { MetaFeld } from '@shared/types'
 import { GRUNDFELD_TAGS } from '@shared/grundfelder'
+import type { TagWert } from '@shared/metaFields'
+import { istZwischenName } from '@shared/scanRegeln'
 import { mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
 import { ExifToolPool, leseTags } from '../exiftool/exiftool'
 import type { GefundeneDatei } from '../library/repo'
@@ -21,12 +23,14 @@ import {
   type AnDienst,
   type MetaDatei,
   type AnzeigeDatei,
+  type SchreibAuftrag,
   type VomDienst,
   type VorschauDatei
 } from './protokoll'
 import { Beobachter, istNetzpfad } from './beobachter'
 import { orteSuchen } from './orte'
 import { scanne, scanneTeile } from './scan'
+import { schreibe, tagsLesen } from './schreiben'
 import { anzeigeFuer, vorschauFuer, type Einrichtung } from './vorschau'
 
 // sharp wie im Labor: Datei-Cache aus (Windows sperrte sonst gelesene Bilder), je Bild ein
@@ -196,6 +200,40 @@ async function alleFelder(auftrag: number, datei: AnzeigeDatei): Promise<void> {
   senden({ typ: 'alle-felder-ergebnis', auftrag, felder })
 }
 
+function exifPool(): ExifToolPool {
+  if (!exiftoolBin) throw Object.assign(new Error('ExifTool fehlt'), { code: 'KEIN_EXIFTOOL' })
+  pool ??= new ExifToolPool(exiftoolBin, poolGroesse())
+  return pool
+}
+
+async function tagsHolen(auftrag: number, datei: AnzeigeDatei, tags: TagWert[]): Promise<void> {
+  try {
+    const p = exifPool()
+    gelesenMerken([datei])
+    senden({ typ: 'tags-ergebnis', auftrag, werte: await tagsLesen(p, datei, tags), code: null })
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code ?? 'UNBEKANNT'
+    senden({ typ: 'tags-ergebnis', auftrag, werte: null, code })
+  }
+}
+
+async function schreiben(auftrag: number, a: SchreibAuftrag): Promise<void> {
+  try {
+    const p = exifPool()
+    gelesenMerken([a.datei])
+    const ergebnis = await schreibe(a, p)
+    // die eigene Änderung ist keine von außen (Skill bibliothek-index, „Überwachen“)
+    if (ergebnis.ok) gelesenMerken([{ pfad: a.datei.pfad, ...ergebnis }])
+    senden({ typ: 'schreib-ergebnis', auftrag, ergebnis })
+  } catch (err) {
+    fehler(auftrag, err)
+  }
+}
+
+async function zwischenWeg(pfade: string[]): Promise<void> {
+  for (const p of pfade.filter(istZwischenName)) await rm(p, { force: true }).catch(() => {})
+}
+
 async function meta(auftrag: number, dateien: MetaDatei[]): Promise<void> {
   try {
     if (!exiftoolBin) throw Object.assign(new Error('ExifTool fehlt'), { code: 'KEIN_EXIFTOOL' })
@@ -235,6 +273,9 @@ port.on('message', (e: { data: AnDienst }) => {
   else if (n.typ === 'vorschau') void vorschau(n.auftrag, n.dateien)
   else if (n.typ === 'anzeige') void anzeige(n.auftrag, n.datei)
   else if (n.typ === 'alle-felder') void alleFelder(n.auftrag, n.datei)
+  else if (n.typ === 'tags-lesen') void tagsHolen(n.auftrag, n.datei, n.tags)
+  else if (n.typ === 'schreiben') void schreiben(n.auftrag, n.schreiben)
+  else if (n.typ === 'zwischen-weg') void zwischenWeg(n.pfade)
   else if (n.typ === 'orte') void orte(n.auftrag, n.punkte)
   else if (n.typ === 'abbrechen') abgebrochen.add(n.auftrag)
   else if (n.typ === 'beenden') {

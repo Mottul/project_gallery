@@ -28,6 +28,7 @@ import {
   type GespeicherteAnsicht
 } from '@shared/gespeicherteAnsicht'
 import type { Grundfelder } from '@shared/grundfelder'
+import type { TagWert } from '@shared/metaFields'
 import { pfadSchluessel } from '@shared/ordnerPruefen'
 import { unterUnlesbarem } from '@shared/scanRegeln'
 import { orderBy, unterordnerBereich, type OrdnerFilter, type Sortierung } from '@shared/sortFilter'
@@ -1116,4 +1117,148 @@ export function ansichtName(db: DB, id: number): string | null {
 
 export function ansichtLoeschen(db: DB, id: number): boolean {
   return db.prepare('DELETE FROM ansichten WHERE id = ?').run(id).changes > 0
+}
+
+// ── Metadaten schreiben (3.1): Journal und Sicherungen ─────────────────────────────────────────
+
+export interface JournalZeile {
+  id: number
+  action: string
+  image_id: number
+  vorher: TagWert[]
+  nachher: TagWert[]
+  size_nach: number | null
+  mtime_nach: number | null
+  undone_at: number | null
+}
+
+/** Vor dem Schreiben: alte Werte festhalten. `zwischen` markiert den Auftrag als laufend. */
+export function journalAnlegen(
+  db: DB,
+  j: {
+    at: number
+    action: string
+    imageId: number
+    vorher: readonly TagWert[]
+    nachher: readonly TagWert[]
+    zwischen: string
+  }
+): number {
+  const r = db
+    .prepare(
+      `INSERT INTO journal (at, action, image_id, before_json, after_json, zwischen)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(j.at, j.action, j.imageId, JSON.stringify(j.vorher), JSON.stringify(j.nachher), j.zwischen)
+  return Number(r.lastInsertRowid)
+}
+
+/** Die Nachbardatei steht fest (ihr Name enthält die Kennung der Journal-Zeile). */
+export function journalZwischen(db: DB, id: number, zwischen: string): void {
+  db.prepare('UPDATE journal SET zwischen = ? WHERE id = ?').run(zwischen, id)
+}
+
+/** Geschrieben: Zustand der Datei merken – Rückgängig nur, solange sie noch so ist. */
+export function journalFertig(db: DB, id: number, size: number, mtime: number): void {
+  db.prepare('UPDATE journal SET zwischen = NULL, size_nach = ?, mtime_nach = ? WHERE id = ?').run(
+    size,
+    mtime,
+    id
+  )
+}
+
+/** Nicht geschrieben: Die Zeile hat nie gegolten. */
+export function journalVerwerfen(db: DB, id: number): void {
+  db.prepare('DELETE FROM journal WHERE id = ?').run(id)
+}
+
+export function journalHolen(db: DB, id: number): JournalZeile | null {
+  const z = db
+    .prepare(
+      `SELECT id, action, image_id, before_json, after_json, size_nach, mtime_nach, undone_at
+         FROM journal WHERE id = ?`
+    )
+    .get(id) as
+    | (Omit<JournalZeile, 'vorher' | 'nachher'> & { before_json: string; after_json: string })
+    | undefined
+  if (!z) return null
+  const { before_json, after_json, ...rest } = z
+  return {
+    ...rest,
+    vorher: JSON.parse(before_json) as TagWert[],
+    nachher: JSON.parse(after_json) as TagWert[]
+  }
+}
+
+export function journalZurueckgenommen(db: DB, id: number, at: number): void {
+  db.prepare('UPDATE journal SET undone_at = ? WHERE id = ?').run(at, id)
+}
+
+/** Aufträge, die ein Absturz unterbrochen hat: ihre Nachbardateien */
+export function journalOffene(db: DB): { id: number; zwischen: string }[] {
+  return db.prepare('SELECT id, zwischen FROM journal WHERE zwischen IS NOT NULL').all() as {
+    id: number
+    zwischen: string
+  }[]
+}
+
+export function journalAelterAls(db: DB, vor: number): number {
+  return db.prepare('DELETE FROM journal WHERE at < ?').run(vor).changes
+}
+
+/** Liegt für dieses Bild schon eine Sicherung? Je Bild reicht eine (entschieden 30.10.2026). */
+export function sicherungVorhanden(db: DB, imageId: number): boolean {
+  return (
+    db.prepare('SELECT 1 FROM sicherungen WHERE image_id = ? LIMIT 1').pluck().get(imageId) !==
+    undefined
+  )
+}
+
+export function sicherungEintragen(
+  db: DB,
+  s: { imageId: number; folderId: number; pfad: string; at: number }
+): void {
+  db.prepare(
+    'INSERT OR IGNORE INTO sicherungen (image_id, folder_id, pfad, at) VALUES (?, ?, ?, ?)'
+  ).run(s.imageId, s.folderId, s.pfad, s.at)
+}
+
+export function sicherungenAelterAls(db: DB, vor: number): { id: number; pfad: string }[] {
+  return db.prepare('SELECT id, pfad FROM sicherungen WHERE at < ?').all(vor) as {
+    id: number
+    pfad: string
+  }[]
+}
+
+export function sicherungenVonOrdner(db: DB, folderId: number): { id: number; pfad: string }[] {
+  return db.prepare('SELECT id, pfad FROM sicherungen WHERE folder_id = ?').all(folderId) as {
+    id: number
+    pfad: string
+  }[]
+}
+
+export function sicherungenLoeschen(db: DB, ids: readonly number[]): void {
+  db.prepare('DELETE FROM sicherungen WHERE id IN (SELECT value FROM json_each(?))').run(
+    JSON.stringify(ids)
+  )
+}
+
+/** Die Zeile eines Bildes für das Einlesen seiner Grundfelder */
+export function metaZeile(db: DB, id: number): MetaOffen | undefined {
+  return db
+    .prepare(
+      `SELECT i.id, i.folder_id, f.path AS ordner, i.rel_path, i.size, i.mtime, i.btime
+         FROM images i JOIN folders f ON f.id = i.folder_id WHERE i.id = ?`
+    )
+    .get(id) as MetaOffen | undefined
+}
+
+/**
+ * Die App hat die Datei geschrieben: neue Größe und Zeit, Metadaten und Vorschaubild gelten als
+ * offen, bis sie frisch eingetragen sind – der Inhalt ist derselbe, aber der Cache hängt an beiden.
+ */
+export function nachSchreiben(db: DB, id: number, size: number, mtime: number): void {
+  db.prepare(
+    'UPDATE images SET size = ?, mtime = ?, meta_read_at = NULL, thumb_state = NULL WHERE id = ?'
+  ).run(size, mtime, id)
 }
