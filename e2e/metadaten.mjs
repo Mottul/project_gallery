@@ -88,10 +88,13 @@ const schreibenRoh = (ids, a) =>
       ),
     [ids, a]
   )
+// wie lokaleDaten.ts: unter Windows im (umgeleiteten) LOCALAPPDATA, sonst neben userData/lokal
+const SICHERUNGEN = `${
+  process.platform === 'win32' ? join(userData, 'lokal', 'Galeria Beata') : join(userData, 'lokal')
+} Sicherungen`
 const sicherungen = () => {
-  const o = `${join(userData, 'lokal', 'Galeria Beata')} Sicherungen`
-  if (!existsSync(o)) return []
-  return readdirSync(o, { recursive: true })
+  if (!existsSync(SICHERUNGEN)) return []
+  return readdirSync(SICHERUNGEN, { recursive: true })
     .map(String)
     .filter((n) => /\.\w+$/.test(n))
 }
@@ -208,8 +211,11 @@ try {
         await rueckmeldung().getByText('4 Sterne gespeichert').waitFor({ timeout: 5_000 })
         const neu = sicherungen().filter((n) => n.endsWith(NAME2))
         assert.equal(neu.length, 1, 'mehr als eine Sicherung je Datei')
-        const o = `${join(userData, 'lokal', 'Galeria Beata')} Sicherungen`
-        assert.equal(inhalt(join(o, neu[0])), vorher, 'Sicherung ist nicht der alte Stand')
+        assert.equal(
+          inhalt(join(SICHERUNGEN, neu[0])),
+          vorher,
+          'Sicherung ist nicht der alte Stand'
+        )
         assert.notEqual(inhalt(p), vorher)
       }
     ],

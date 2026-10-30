@@ -101,7 +101,8 @@ try {
 - **Schreiben prüfen** (3.1): Werte nicht über die App lesen, sondern mit `werkzeug('exiftool')` aus
   `scripts/testbilder.mjs` – sonst bestätigt die App sich selbst. Pixel per sharp `.raw()`, Reste per
   `reste()` (nichts mit `galerie-tmp` im Ordner). Der `LOCALAPPDATA`-Umweg gilt auch für die
-  Sicherungen (`<userData>/lokal/Galeria Beata Sicherungen`). Ein E2E, das beim ersten Mal grün ist,
+  Sicherungen (Windows: `<userData>/lokal/Galeria Beata Sicherungen`, Linux-CI: `<userData>/lokal
+  Sicherungen`). Ein E2E, das beim ersten Mal grün ist,
   beweist nichts: Gegenproben im main und im Dienst.
 - **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
   Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
