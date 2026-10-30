@@ -526,40 +526,70 @@ export function kennungenMitGruppen(
   db: DB,
   sortierung: Sortierung,
   filter: OrdnerFilter | undefined,
-  art: GruppenArt,
+  art: GruppenArt | null,
   stufe: ZeitStufe,
-  windows = process.platform === 'win32'
-): { ids: number[]; gruppen: Gruppe[] } {
-  const zeilen = abfragen(db, sortierung, filter, windows, gruppenAusdruck(art, stufe))
+  windows = process.platform === 'win32',
+  mitSeiten = false
+): { ids: number[]; gruppen: Gruppe[]; seiten?: number[] } {
+  const zeilen = abfragen(
+    db,
+    sortierung,
+    filter,
+    windows,
+    art ? gruppenAusdruck(art, stufe) : null,
+    mitSeiten
+  )
   return {
     ids: zeilen.map((z) => z.id),
-    gruppen: gruppenAus(
-      art,
-      zeilen.map((z) => z.g)
-    )
+    gruppen: art
+      ? gruppenAus(
+          art,
+          zeilen.map((z) => z.g)
+        )
+      : [],
+    ...(mitSeiten ? { seiten: zeilen.map((z) => seitenVerhaeltnis(z.w, z.h)) } : {})
   }
 }
 
-/** Geordnete Zeilen (Kennung, wahlweise Gruppen-Schlüssel) – ganz, je Ordner oder Unterordner. */
+/** Breite durch Höhe (aufgerichtet), auf 1/1000 gerundet; 0 = unbekannt (noch nicht gelesen, defekt). */
+export function seitenVerhaeltnis(w: number | null, h: number | null): number {
+  return w && h && w > 0 && h > 0 ? Math.round((w / h) * 1000) / 1000 : 0
+}
+
+interface AbfrageZeile {
+  id: number
+  g: unknown
+  w: number | null
+  h: number | null
+}
+
+/**
+ * Geordnete Zeilen (Kennung, wahlweise Gruppen-Schlüssel und Maße für den Blocksatz) – ganz, je
+ * Ordner oder Unterordner.
+ */
 function abfragen(
   db: DB,
   sortierung: Sortierung,
   filter: OrdnerFilter | undefined,
   windows: boolean,
-  gruppe: string | null
-): { id: number; g: unknown }[] {
-  const spalten = gruppe ? `id, ${gruppe} AS g` : 'id, NULL AS g'
+  gruppe: string | null,
+  mitSeiten = false
+): AbfrageZeile[] {
+  const spalten = [
+    'id',
+    gruppe ? `${gruppe} AS g` : 'NULL AS g',
+    mitSeiten ? 'width AS w, height AS h' : 'NULL AS w, NULL AS h'
+  ].join(', ')
   const ordnung = `ORDER BY ${orderBy(sortierung)}`
   if (!filter) {
-    return db.prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' ${ordnung}`).all() as {
-      id: number
-      g: unknown
-    }[]
+    return db
+      .prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' ${ordnung}`)
+      .all() as AbfrageZeile[]
   }
   if (!filter.pfad) {
     return db
       .prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ? ${ordnung}`)
-      .all(filter.ordner) as { id: number; g: unknown }[]
+      .all(filter.ordner) as AbfrageZeile[]
   }
   // Unterordner: Bereich auf dem Vergleichsschlüssel (Index folder_id, rel_key), ohne Groß/Klein
   const [von, bis] = unterordnerBereich(pfadSchluessel(filter.pfad, windows))
@@ -568,7 +598,7 @@ function abfragen(
       `SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ?
           AND rel_key >= ? AND rel_key < ? ${ordnung}`
     )
-    .all(filter.ordner, von, bis) as { id: number; g: unknown }[]
+    .all(filter.ordner, von, bis) as AbfrageZeile[]
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer (direkten) Dateien – für den Ordnerbaum. */

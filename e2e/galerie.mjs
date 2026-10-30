@@ -114,6 +114,22 @@ async function reihenfolge() {
   )
   return bilder.map((b) => b.name)
 }
+/**
+ * Wartet, bis alle Metadaten gelesen sind und das Raster vorn die Reihenfolge des Index zeigt
+ * (Knoten „Alle Bilder“). Sonst wandern Kacheln während eines Geometrie-Schritts – Datum aus der
+ * Datei → aus EXIF, seit 2.3 auch in eine andere Gruppe (gesehen im vollen Lauf unter Last).
+ */
+async function rasterStabil() {
+  assert.ok(
+    await waitFor(async () => (await zustand()).metaPending === 0, 30_000),
+    'Metadaten nicht fertig gelesen'
+  )
+  const stabil = await waitFor(async () => {
+    const [soll, ist] = [await reihenfolge(), await kachelNamen()]
+    return ist.length > 0 && ist.every((n, i) => n === soll[i])
+  }, 5_000)
+  assert.ok(stabil, `Raster zeigt nicht den Stand des Index: ${(await kachelNamen()).join(' | ')}`)
+}
 /** bild:// im main holen (net.fetch geht durch denselben Handler wie die Seite) */
 async function bild(id, kopf = {}) {
   const r = await ctx.app.evaluate(
@@ -328,6 +344,7 @@ try {
     [
       'Rahmen ziehen wählt die überfahrenen Kacheln',
       async () => {
+        await rasterStabil()
         const namen = await kachelNamen()
         const tops = await kacheln().evaluateAll((el) =>
           el.map((e) => Math.round(e.getBoundingClientRect().top))
@@ -425,6 +442,130 @@ try {
         // für die weiteren Schritte zurück auf Kacheln
         await ctx.page.getByRole('button', { name: 'Kacheln', exact: true }).click()
         await raster().waitFor({ timeout: 5_000 })
+      }
+    ],
+    [
+      'Blocksatz (2.3b): Bilder im Seitenverhältnis, volle Zeilen bündig, Rahmen genau, gemerkt',
+      async () => {
+        const regler = ctx.page.getByRole('slider', { name: 'Größe' })
+        const groesseVorher = await regler.inputValue()
+        await ctx.page.getByRole('button', { name: 'Blocksatz', exact: true }).click()
+        /** Lage jeder gezeichneten Kachel (Bild, nicht Text) in Seitenkoordinaten */
+        const lage = () =>
+          kacheln().evaluateAll((el) =>
+            el.map((e) => {
+              const b = e.firstElementChild.getBoundingClientRect()
+              const text = e.querySelectorAll('p').length
+              return {
+                id: Number(e.dataset.id),
+                x: b.left,
+                y: b.top,
+                w: b.width,
+                h: b.height,
+                text
+              }
+            })
+          )
+        assert.ok(
+          await waitFor(async () => {
+            const l = await lage()
+            return l.length > 3 && l.every((x) => x.text === 0)
+          }, 5_000),
+          'Blocksatz erscheint nicht (Kacheln mit Text unter dem Bild)'
+        )
+        const l = await lage()
+        const infos = new Map(
+          (
+            await ctx.page.evaluate(
+              (ids) => window.api.library.details(ids),
+              l.map((x) => x.id)
+            )
+          ).map((b) => [b.id, b])
+        )
+        // Seitenverhältnis wie im Index (aufgerichtet), begrenzt auf 1:3 … 3:1, unbekannt = 1
+        const soll = (b) =>
+          b?.width && b?.height ? Math.min(3, Math.max(1 / 3, b.width / b.height)) : 1
+        const falsch = l
+          .filter((x) => Math.abs(x.w / x.h - soll(infos.get(x.id))) > 0.03)
+          .map((x) => `${infos.get(x.id)?.name}: ${(x.w / x.h).toFixed(2)}`)
+        assert.deepEqual(falsch, [])
+        assert.ok(
+          l.some((x) => Math.abs(x.w / x.h - 1) > 0.2),
+          'nur quadratische Bilder – das prüfte nichts'
+        )
+        // Zeilen: gleich hoch, links am Rand, 4 px Abstand; volle Zeilen enden genau am rechten Rand
+        const lb = await raster().evaluate((el) => {
+          const r = el.getBoundingClientRect()
+          return { links: r.left + 16, rechts: r.left + el.clientWidth - 16 }
+        })
+        const zeilen = new Map()
+        for (const x of l) {
+          const k = Math.round(x.y)
+          zeilen.set(k, [...(zeilen.get(k) ?? []), x])
+        }
+        let volle = 0
+        for (const z of zeilen.values()) {
+          z.sort((a, b) => a.x - b.x)
+          const hoehen = z.map((x) => x.h)
+          assert.ok(Math.max(...hoehen) - Math.min(...hoehen) < 1, `ungleich hoch: ${hoehen}`)
+          assert.ok(
+            Math.abs(z[0].x - lb.links) < 1,
+            `Zeile beginnt bei ${z[0].x}, nicht ${lb.links}`
+          )
+          for (let i = 1; i < z.length; i++) {
+            const luecke = z[i].x - (z[i - 1].x + z[i - 1].w)
+            assert.ok(Math.abs(luecke - 4) < 1, `Abstand ${luecke}`)
+          }
+          const rechts = z.at(-1).x + z.at(-1).w
+          if (Math.abs(rechts - lb.rechts) < 1.5) volle++
+          else assert.ok(rechts < lb.rechts, `Zeile ragt über den Rand: ${rechts} > ${lb.rechts}`)
+        }
+        assert.ok(volle >= 1, 'keine volle Zeile')
+        // Rahmen: knapp vor bzw. knapp in die zweite Kachel der zweiten Zeile – erwartet ist, was
+        // das Gezeichnete schneidet (die Breiten des Blocksatzes, nicht die der Kacheln)
+        const reihen = [...zeilen.values()].sort((a, b) => a[0].y - b[0].y)
+        const zweite = reihen.findIndex((z, i) => i > 0 && z.length >= 2)
+        assert.ok(zweite > 0, 'keine zweite Zeile mit zwei Bildern')
+        const ziel = reihen[zweite][1]
+        const box = await raster().boundingBox()
+        assert.ok(ziel.y + 30 < box.y + box.height, 'Zielzeile zu weit unten')
+        for (const [x, y] of [
+          [ziel.x - 2, ziel.y + 3],
+          [ziel.x + 3, ziel.y + 3]
+        ]) {
+          const [x0, y0] = [box.x + 4, box.y + 4]
+          const erwartet = l
+            .filter((k) => k.x <= x && k.x + k.w >= x0 && k.y <= y && k.y + k.h >= y0)
+            .map((k) => infos.get(k.id)?.name)
+            .sort()
+          await ctx.page.mouse.move(x0, y0)
+          await ctx.page.mouse.down()
+          await ctx.page.mouse.move(x, y, { steps: 6 })
+          await ctx.page.mouse.up()
+          assert.deepEqual((await gewaehlteNamen()).sort(), erwartet, `bis ${x}/${y}`)
+          await raster().press('Escape')
+        }
+        // Größenregler = Zeilenhöhe
+        const hoeheVorher = l[0].h
+        await regler.fill('200')
+        assert.ok(
+          await waitFor(async () => ((await lage())[0]?.h ?? 0) > hoeheVorher * 1.3, 3_000),
+          `Zeilenhöhe folgt dem Regler nicht (${hoeheVorher} → ${(await lage())[0]?.h})`
+        )
+        // gemerkt nach dem Neuladen
+        await ctx.page.reload()
+        await raster().waitFor({ timeout: 10_000 })
+        assert.equal(
+          await ctx.page
+            .getByRole('button', { name: 'Blocksatz', exact: true })
+            .getAttribute('aria-pressed'),
+          'true'
+        )
+        assert.ok(await waitFor(async () => (await lage()).every((x) => x.text === 0), 5_000))
+        // für die weiteren Schritte: Kacheln in der vorigen Größe
+        await ctx.page.getByRole('button', { name: 'Kacheln', exact: true }).click()
+        await regler.fill(groesseVorher)
+        assert.ok(await waitFor(async () => (await lage()).some((x) => x.text > 0), 5_000))
       }
     ],
     [

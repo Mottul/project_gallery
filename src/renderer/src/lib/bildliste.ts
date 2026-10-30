@@ -54,6 +54,8 @@ export interface Kennungen {
   ids: number[]
   /** Gruppen-Überschriften (leer = keine) */
   gruppen: Gruppe[]
+  /** Blocksatz: Seitenverhältnis je Kennung (nur angefragt) */
+  seiten?: number[]
   /** zählt jede neue Antwort – Details älterer Stände gelten als veraltet */
   stand: number
   fehler: string | null
@@ -64,16 +66,17 @@ export function useKennungen(
   lib: LibraryState | null,
   knoten: Knoten,
   sortierung: Sortierung,
-  gruppierung: Gruppierung
+  gruppierung: Gruppierung,
+  mitSeiten = false
 ): Kennungen | null {
   const [k, setK] = useState<Kennungen | null>(null)
   const anfrage = useRef(0)
-  const sofort = JSON.stringify([knoten, sortierung, gruppierung])
+  const sofort = JSON.stringify([knoten, sortierung, gruppierung, mitSeiten])
   useGedrosselt(
     () => {
       const nr = ++anfrage.current
       api.library
-        .queryGroups(sortierung, knoten ?? undefined, gruppierung)
+        .queryGroups(sortierung, knoten ?? undefined, gruppierung, mitSeiten)
         .then(
           (r) => ({ ...r, fehler: null }),
           (err) => ({ ids: [] as number[], gruppen: [] as Gruppe[], fehler: errorText(err) })

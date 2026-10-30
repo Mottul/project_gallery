@@ -3,6 +3,8 @@
 // im Explorer (Klick, Strg, Umschalt, Strg+A, Esc, Rahmen ziehen). Gruppen-Überschriften (2.3) als
 // eigene Zeilen, jede Gruppe beginnt in einer neuen Zeile (`lib/zeilen.ts`). Details und
 // Vorschau-Vorrang nur für den sichtbaren Bereich plus die nächste Seite (Skill bibliothek-index).
+// Blocksatz (2.3b): dieselbe Komponente mit Zeilen aus `lib/blocksatz.ts` – Bilder im
+// Seitenverhältnis, ohne Text darunter, Name als Hinweis.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
@@ -15,13 +17,15 @@ import {
 } from '@renderer/lib/auswahl'
 import { tagText, zahl } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
-import { ersteZeileAb, zeileFuer, zeilenBilden, zeilenOben } from '@renderer/lib/zeilen'
+import { blocksatzZeilen } from '@renderer/lib/blocksatz'
+import { ersteZeileAb, zeileFuer, zeilenBilden, zeilenOben, type Zeile } from '@renderer/lib/zeilen'
 import type { Gruppe } from '@shared/gruppen'
 import type { ImageInfo } from '@shared/types'
 import { stufeFuer, Vorschaubild } from './Vorschaubild'
 
-/** Abstand zwischen Kacheln und Rand des Rasters (px) */
+/** Abstand zwischen Kacheln und Rand des Rasters (px); im Blocksatz enger */
 const ABSTAND = 8
+const ABSTAND_BLOCK = 4
 const RAND = 16
 /** Höhe der beiden Textzeilen unter dem Bild (Name, Datum) */
 const TEXT = 38
@@ -29,6 +33,8 @@ const TEXT = 38
 const KOPF = 40
 /** Strg + Mausrad: so viele px je Raste */
 const RAD_SCHRITT = 16
+
+type Bildzeile = Extract<Zeile, { art: 'bilder' }>
 
 interface Rahmen {
   x0: number
@@ -40,6 +46,7 @@ interface Rahmen {
 export function Raster({
   ids,
   gruppen,
+  seiten,
   details,
   groesse,
   onGroesse,
@@ -50,6 +57,8 @@ export function Raster({
   ids: number[]
   /** Gruppen-Überschriften (leer = keine) */
   gruppen: readonly Gruppe[]
+  /** Blocksatz: Seitenverhältnis je Kennung (0 = unbekannt); ohne = quadratische Kacheln */
+  seiten?: readonly number[]
   details: {
     get: (id: number) => ImageInfo | undefined
     anfordern: (ids: readonly number[]) => void
@@ -82,12 +91,26 @@ export function Raster({
     breite > 0
       ? Math.max(groesse, Math.floor((breite - 2 * RAND - (spalten - 1) * ABSTAND) / spalten))
       : groesse
-  const zeilenHoehe = kante + TEXT + ABSTAND
-  const zeilen = useMemo(() => zeilenBilden(ids.length, gruppen, spalten), [ids, gruppen, spalten])
+  // Blocksatz nur mit einem Seitenverhältnis je Kennung (sonst Kacheln, nie Bilder verlieren)
+  const block = seiten !== undefined && seiten.length === ids.length
+  const abstand = block ? ABSTAND_BLOCK : ABSTAND
+  const text = block ? 0 : TEXT
+  const zeilen = useMemo(
+    () =>
+      block
+        ? blocksatzZeilen(seiten, gruppen, breite - 2 * RAND, groesse, ABSTAND_BLOCK)
+        : zeilenBilden(ids.length, gruppen, spalten),
+    [block, seiten, gruppen, breite, groesse, ids.length, spalten]
+  )
   // obere Kanten (Rand + Summe der Höhen): Höhen für den Virtualisierer, Geometrie für den Rahmen
   const oben = useMemo(
-    () => zeilenOben(zeilen, (z) => (z.art === 'kopf' ? KOPF : zeilenHoehe), RAND),
-    [zeilen, zeilenHoehe]
+    () =>
+      zeilenOben(
+        zeilen,
+        (z) => (z.art === 'kopf' ? KOPF : (z.hoehe ?? kante) + text + abstand),
+        RAND
+      ),
+    [zeilen, kante, text, abstand]
   )
   const virt = useVirtualizer({
     count: zeilen.length,
@@ -99,7 +122,7 @@ export function Raster({
   })
   useEffect(() => {
     virt.measure()
-  }, [virt, zeilen, zeilenHoehe])
+  }, [virt, oben])
 
   useEffect(() => {
     const i = fokusId === null ? -1 : ids.indexOf(fokusId)
@@ -135,6 +158,18 @@ export function Raster({
     return () => el.removeEventListener('wheel', rad)
   }, [onGroesse])
 
+  /** Linke Kante und Breite je Bild einer Zeile (Kacheln: Spalten; Blocksatz: aus den Zeilen). */
+  function plaetze(z: Bildzeile): { links: number; breite: number }[] {
+    const out: { links: number; breite: number }[] = []
+    let x = RAND
+    for (let s = 0; s < z.bis - z.von; s++) {
+      const b = z.breiten?.[s] ?? kante
+      out.push({ links: x, breite: b })
+      x += b + abstand
+    }
+    return out
+  }
+
   /** Kennungen, deren Kachel den Rahmen schneidet (aus der Rastergeometrie, ohne DOM). */
   function imRahmen(r: Rahmen): number[] {
     const [xa, xb] = r.x0 < r.x1 ? [r.x0, r.x1] : [r.x1, r.x0]
@@ -142,10 +177,9 @@ export function Raster({
     const out: number[] = []
     for (let z = ersteZeileAb(oben, ya); z < zeilen.length && oben[z] <= yb; z++) {
       const zeile = zeilen[z]
-      if (zeile.art !== 'bilder' || oben[z] + kante + TEXT < ya) continue
-      for (let s = 0; s < zeile.bis - zeile.von; s++) {
-        const links = RAND + s * (kante + ABSTAND)
-        if (links > xb || links + kante < xa) continue
+      if (zeile.art !== 'bilder' || oben[z] + (zeile.hoehe ?? kante) + text < ya) continue
+      for (const [s, p] of plaetze(zeile).entries()) {
+        if (p.links > xb || p.links + p.breite < xa) continue
         out.push(ids[zeile.von + s])
       }
     }
@@ -224,14 +258,15 @@ export function Raster({
               </div>
             )
           }
+          const hoehe = zeile.hoehe ?? kante
           return (
             <div
               key={v.key}
               role="presentation"
               className="absolute inset-x-0"
-              style={{ top: v.start, height: zeilenHoehe }}
+              style={{ top: v.start, height: oben[v.index + 1] - oben[v.index] }}
             >
-              {Array.from({ length: zeile.bis - zeile.von }, (_, s) => {
+              {plaetze(zeile).map((p, s) => {
                 const index = zeile.von + s
                 const id = ids[index]
                 if (id === undefined) return null
@@ -243,9 +278,10 @@ export function Raster({
                     role="option"
                     aria-selected={gewaehlt}
                     aria-label={bild?.name ?? 'Bild'}
+                    title={block ? bild?.name : undefined}
                     data-id={id}
                     className="absolute cursor-default"
-                    style={{ left: RAND + s * (kante + ABSTAND), width: kante }}
+                    style={{ left: p.links, width: p.breite }}
                     onClick={(e) =>
                       auswahlKlick(ids, index, {
                         strg: e.ctrlKey || e.metaKey,
@@ -257,21 +293,28 @@ export function Raster({
                     <Vorschaubild
                       key={bild?.mtime}
                       bild={bild}
-                      stufe={stufeFuer(kante)}
+                      stufe={stufeFuer(Math.max(p.breite, hoehe))}
                       passend="cover"
                       className={cn(
-                        'rounded-md',
+                        block ? 'rounded' : 'rounded-md',
                         gewaehlt &&
-                          'ring-[3px] ring-primary-line ring-offset-2 ring-offset-background'
+                          (block
+                            ? 'ring-[3px] ring-primary-line'
+                            : 'ring-[3px] ring-primary-line ring-offset-2 ring-offset-background')
                       )}
-                      groesse={kante}
+                      groesse={p.breite}
+                      hoehe={hoehe}
                     />
-                    <p className="mt-1 truncate text-xs" title={bild?.name}>
-                      {bild?.name ?? ' '}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {bild ? tagText(bild.takenAt) : ' '}
-                    </p>
+                    {!block && (
+                      <>
+                        <p className="mt-1 truncate text-xs" title={bild?.name}>
+                          {bild?.name ?? ' '}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {bild ? tagText(bild.takenAt) : ' '}
+                        </p>
+                      </>
+                    )}
                   </div>
                 )
               })}

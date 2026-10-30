@@ -5,6 +5,7 @@ import {
   pruefeKennungen,
   pruefeOrdnerFilterStreng,
   pruefeOrdnerModus,
+  pruefeSchalterStreng,
   pruefePfade,
   pruefeSortierungStreng
 } from './eingaben'
@@ -69,6 +70,17 @@ describe('pruefeSortierungStreng', () => {
       richtung: 'ab'
     })
     expect(() => pruefeSortierungStreng({ feld: 'name; --', richtung: 'ab' })).toThrow(/Sortierung/)
+  })
+})
+
+describe('pruefeSchalterStreng', () => {
+  it('fehlt = aus, sonst nur true/false', () => {
+    expect(pruefeSchalterStreng(undefined)).toBe(false)
+    expect(pruefeSchalterStreng(true)).toBe(true)
+    expect(pruefeSchalterStreng(false)).toBe(false)
+    for (const v of [1, 0, 'true', null, {}, []]) {
+      expect(() => pruefeSchalterStreng(v), String(v)).toThrow(/Schalter/)
+    }
   })
 })
 

@@ -165,6 +165,9 @@ sichtbar + nächste Seite, vor dem übrigen Hintergrund; `vorschauOffenUnter`).
   (`repo.kennungenMitGruppen`). Fehlende Werte bilden die letzte Gruppe („Ohne …“) – das passt nur,
   solange die Sortierung sie ans Ende stellt (`fehlend` in `sortFilter.ts`). Neue Gruppen-Art:
   Ausdruck, Titel, Test in `gruppen.test.ts` und `repo.test.ts`.
+- **Blocksatz (seit 2.3b):** braucht je Kennung das Seitenverhältnis – `queryGroups(…, true)`
+  liefert es in derselben Abfrage aus den aufgerichteten Maßen (eine Zahl je Bild, 0 =
+  unbekannt), nie Details für alle. 50.000 Bilder: 84 ms.
 - **Sortieren ohne Index** (seit 2.3: Kamera, Objektiv, Bewertung, ISO, Blende, Belichtung,
   Brennweite, Auflösung, Ordner): SQLite sortiert im Speicher; `INDEX_FELDER` in `sortFilter.ts`
   nennt die mit Index (Test mit `EXPLAIN QUERY PLAN`). Messen mit `abnahme50k` (Sortierwechsel).

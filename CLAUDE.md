@@ -16,7 +16,7 @@ Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5
 1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). **Phase 2 läuft**
 (Metadaten lesen, Filtern, Suchen; Teilschritte 2.1–2.5 im Plan); 2.1 (alle Metadaten, Info-Panel,
 Fehlende entfernen), 2.2 (Orte offline, Sortieren nach Ort A–Z) und 2.3 (weitere Sortierfelder,
-Gruppen-Überschriften in Raster und Liste) sind umgesetzt; als Nächstes 2.3b (Blocksatz). Grundlage ist
+Gruppen-Überschriften in Raster und Liste) und 2.3b (Blocksatz) sind umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -84,7 +84,8 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
 - **Galerie-Oberfläche:** `renderer/src/galerie/` (Ordnerbaum, Raster virtualisiert, Liste),
   Zustand in `renderer/src/lib/` (`ansicht.ts` je Ordner gemerkt, `auswahl.ts`, `bildliste.ts`:
   Kennungen samt Gruppen je Knoten, Details nur für das Sichtbare). Gruppen folgen der Sortierung
-  (`shared/gruppen.ts`, Grenzen im main); Zeilen mit Überschriften rein in `lib/zeilen.ts`.
+  (`shared/gruppen.ts`, Grenzen im main); Zeilen mit Überschriften rein in `lib/zeilen.ts`,
+  Blocksatz (Seitenverhältnisse aus `queryGroups`) in `lib/blocksatz.ts`.
 - **Vorschaubilder:** erzeugt im Bilddienst (`bilddienst/vorschau.ts`), Warteschlange im main
   (`library/vorschauen.ts`), nur AES-256-GCM-verschlüsselt im Cache (`services/cache/`, Schlüssel
   per `safeStorage`), ausgeliefert über `thumb://id/<kennung>/<stufe>`
