@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pruefeBildFilterStreng,
   pruefeGruppierungStreng,
   pruefeKennung,
   pruefeKennungen,
@@ -70,6 +71,15 @@ describe('pruefeSortierungStreng', () => {
       richtung: 'ab'
     })
     expect(() => pruefeSortierungStreng({ feld: 'name; --', richtung: 'ab' })).toThrow(/Sortierung/)
+  })
+})
+
+describe('pruefeBildFilterStreng', () => {
+  it('liefert die saubere Kopie, wirft bei Ungültigem', () => {
+    expect(pruefeBildFilterStreng({ bewertung: 3, extra: 1 })).toEqual({ bewertung: 3 })
+    for (const v of [null, 'x', { bewertung: 9 }, { kameras: 'A' }, { von: 'gestern' }]) {
+      expect(() => pruefeBildFilterStreng(v), JSON.stringify(v)).toThrow(/Filter/)
+    }
   })
 })
 

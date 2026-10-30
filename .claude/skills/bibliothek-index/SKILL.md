@@ -53,6 +53,15 @@ Umgesetzt in 1.5: `bild://id/<kennung>` (Original gestreamt mit `Range`, TIFF al
 (`inPapierkorb` in `library.ts`: Rückfrage, nach der Rückfrage frische Zeilen aus dem Index, je
 Datei `pruefeDatei` mit Zeitlimit und `shell.trashItem`, dann `bilderEntfernen` samt Vorschau- und
 Anzeige-Cache). Wer Bilder aus dem Index nimmt, wirft auch `anzeigeVerwerfen(ids)`.
+Umgesetzt in 2.4: Schema 6 (`images_fts`, FTS5 mit `unicode61 remove_diacritics 2`, rowid =
+`images.id`; Trigger auf `images` – auch beim Löschen über die Ordner-Kaskade – und `keywords`;
+Bestand einmal in der Migration übernommen), `shared/bildFilter.ts`, `repo.abfrageAnsicht`
+(Knoten + Filter als eine Bedingung, `gesamt`), `repo.facetten`. **Wer `images`/`keywords`
+schreibt, pflegt den Suchindex nicht selbst** – neue durchsuchbare Spalte = Trigger anpassen und
+Bestand in einer Migration neu aufbauen.
+**Gemessen in der Abnahme zu 2.4:** Der Stand der Vorschaubilder (`thumbPending`) gehört nicht in
+den Schlüssel, der die Abfrage neu auslöst: Er ändert sich viele Minuten lang, und die ganze Liste
+samt Gruppen je Sekunde kostete 37 Blockaden des main bis 1,2 s. Er erhöht nur den Stand der Details.
 Umgesetzt in 2.2: Schema 5 (`place_name`, `place_country`, `place_source`, Tabelle `kv`, Indizes
 `images_ort` und `images_ort_ab` mit DESC-Spalten – „ohne Ort“ bleibt auch absteigend am Ende),
 nächster Ort im Bilddienst (`bilddienst/orte.ts` lädt `resources/geo/orte.tsv.gz` nach
@@ -157,6 +166,11 @@ sichtbar + nächste Seite, vor dem übrigen Hintergrund; `vorschauOffenUnter`).
   ohne Index (gemessen bei 50.000 Zeilen 36 statt 11 ms).
 - Entfernung zu einem Bezugspunkt (erst Phase 7): Vorfilter per Begrenzungsrahmen in SQL, genaue
   Entfernung (Haversine) in `geo.ts`; Ergebnis cachen, solange der Bezugspunkt gleich bleibt.
+- **Filter (seit 2.4):** `filterBedingung` in `shared/bildFilter.ts`; in einem Kriterium „oder“,
+  zwischen Kriterien „und“. Kamera und Ort nutzen denselben Ausdruck wie die Gruppen
+  (`gruppenAusdruck`) – so filtert ein Wert aus den Auswahllisten genau die Bilder seiner Gruppe.
+  Suche: `suchAusdruck` macht aus jedem Wort `"wort"*`, Wörter ohne Buchstaben/Ziffern fallen weg
+  (FTS5 lehnte eine leere Phrase ab).
 - Für das Raster: geordnete **Liste der Kennungen** (+ Gruppen-Grenzen) einmal je Abfrage,
   Details nur für den sichtbaren Ausschnitt. Nie 100.000 Objekte über IPC.
 - **Gruppen (seit 2.3):** folgen der Sortierung (`shared/gruppen.ts`: `gruppenArt`, fester

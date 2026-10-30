@@ -127,6 +127,35 @@ describe('Index-Datenbank', () => {
     db.close()
   })
 
+  it('Version 5 → 6: Suchindex aus den vorhandenen Zeilen, danach von Triggern aktuell', () => {
+    const db = new Database(':memory:')
+    migrieren(db, 5)
+    db.prepare(
+      "INSERT INTO folders (id, path, path_key, added_at) VALUES (1, 'D:/x', 'd:/x', 1)"
+    ).run()
+    db.prepare(
+      `INSERT INTO images (id, folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime,
+         title, description, place_name, place_country)
+       VALUES (7, 1, 'a.jpg', 'a.jpg', 'a.jpg', 'a.jpg', 'jpg', 1, 1, 'Altstadt', 'Mauer',
+         'Dubrovnik', 'Kroatien')`
+    ).run()
+    db.prepare("INSERT INTO keywords (image_id, keyword) VALUES (7, 'Urlaub')").run()
+    db.prepare("INSERT INTO keywords (image_id, keyword) VALUES (7, 'Sonne')").run()
+    migrieren(db)
+    const treffer = (q: string): unknown[] =>
+      db.prepare('SELECT rowid FROM images_fts WHERE images_fts MATCH ?').pluck().all(q)
+    for (const q of ['altstadt', 'mauer', 'urlaub', 'sonne', 'dubrovnik', 'kroatien', 'a']) {
+      expect(treffer(q), q).toEqual([7])
+    }
+    expect(treffer('nichts')).toEqual([])
+    // ein neues Bild kommt über den Trigger hinein
+    db.prepare(
+      "INSERT INTO images (id, folder_id, rel_path, rel_key, name, name_sort, ext, size, mtime) VALUES (8, 1, 'b.jpg', 'b.jpg', 'Hafen.jpg', 'hafen', 'jpg', 1, 1)"
+    ).run()
+    expect(treffer('hafen')).toEqual([8])
+    db.close()
+  })
+
   it('Version 4 → 5: alles wird nachgelesen (Ort-Feld), Ort-Spalten, kv, Indizes je Richtung', () => {
     const db = new Database(':memory:')
     migrieren(db, 4)

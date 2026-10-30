@@ -116,6 +116,52 @@ const MIGRATIONEN: readonly string[] = [
   CREATE INDEX images_ort ON images (place_missing, place_sort, taken_at, id);
   CREATE INDEX images_ort_ab ON images (place_missing, place_sort DESC, taken_at DESC, id DESC);
   UPDATE images SET meta_read_at = NULL WHERE status != 'fehlt';
+  `,
+  // 6 – Phase 2.4: Volltextsuche (FTS5) über Name, Titel, Beschreibung, Stichwörter und Ort; rowid
+  // = images.id. Trigger halten sie aktuell – auch beim Löschen über die Ordner-Kaskade und beim
+  // Umbenennen, ohne dass jeder Schreibweg daran denken muss; nur bei echter Änderung (das
+  // Nachlesen schreibt meist dieselben Werte: 200 Zeilen 1,4 statt 5,9 ms). Diakritika entfernt
+  // („munchen“ findet „München“). Vorhandene Zeilen einmal übernehmen (50.000 Zeilen: 217 ms).
+  `
+  CREATE VIRTUAL TABLE images_fts USING fts5 (
+    name, title, description, keywords, place,
+    tokenize = 'unicode61 remove_diacritics 2'
+  );
+  INSERT INTO images_fts (rowid, name, title, description, keywords, place)
+    SELECT id, name, title, description,
+           (SELECT group_concat(keyword, ' ') FROM keywords WHERE image_id = images.id),
+           trim(coalesce(place_name, '') || ' ' || coalesce(place_country, ''))
+      FROM images;
+  CREATE TRIGGER images_fts_neu AFTER INSERT ON images BEGIN
+    INSERT INTO images_fts (rowid, name, title, description, keywords, place)
+    VALUES (new.id, new.name, new.title, new.description, NULL,
+            trim(coalesce(new.place_name, '') || ' ' || coalesce(new.place_country, '')));
+  END;
+  CREATE TRIGGER images_fts_aendern
+    AFTER UPDATE OF name, title, description, place_name, place_country ON images
+    WHEN old.name IS NOT new.name OR old.title IS NOT new.title
+      OR old.description IS NOT new.description OR old.place_name IS NOT new.place_name
+      OR old.place_country IS NOT new.place_country
+  BEGIN
+    DELETE FROM images_fts WHERE rowid = old.id;
+    INSERT INTO images_fts (rowid, name, title, description, keywords, place)
+    VALUES (new.id, new.name, new.title, new.description,
+            (SELECT group_concat(keyword, ' ') FROM keywords WHERE image_id = new.id),
+            trim(coalesce(new.place_name, '') || ' ' || coalesce(new.place_country, '')));
+  END;
+  CREATE TRIGGER images_fts_weg AFTER DELETE ON images BEGIN
+    DELETE FROM images_fts WHERE rowid = old.id;
+  END;
+  CREATE TRIGGER keywords_fts_neu AFTER INSERT ON keywords BEGIN
+    UPDATE images_fts
+       SET keywords = (SELECT group_concat(keyword, ' ') FROM keywords WHERE image_id = new.image_id)
+     WHERE rowid = new.image_id;
+  END;
+  CREATE TRIGGER keywords_fts_weg AFTER DELETE ON keywords BEGIN
+    UPDATE images_fts
+       SET keywords = (SELECT group_concat(keyword, ' ') FROM keywords WHERE image_id = old.image_id)
+     WHERE rowid = old.image_id;
+  END;
   `
 ]
 

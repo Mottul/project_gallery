@@ -1,6 +1,6 @@
 // Hauptfläche der Galerie (docs/PLAN.md, „Galerie-Ansichten“; Entwurf „Galerie – Kacheln/Liste“):
 // ohne Ordner der Einstieg; sonst eine Kopfzeile (gewählter Knoten, Kacheln/Liste, Sortieren,
-// Gruppen, Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
+// Gruppen, Suche, Filter, Größe) über Raster oder Liste. Ordner lassen sich aus dem Explorer hineinziehen – die Seite gibt
 // dabei nur die Datei-Objekte weiter, den Pfad liest der Preload (Schicht C).
 import { BrickWall, FolderInput, FolderPlus, Images, LayoutGrid, List } from 'lucide-react'
 import { useCallback, useEffect, useState, type DragEvent } from 'react'
@@ -18,6 +18,7 @@ import { auswahlAbgleichen, auswahlNur } from '@renderer/lib/auswahl'
 import {
   angezeigtMelden,
   useDetails,
+  useFacetten,
   useKennungen,
   useSichtbarMelden
 } from '@renderer/lib/bildliste'
@@ -27,8 +28,11 @@ import {
   useHinzufuegenStatus,
   useLibrary
 } from '@renderer/lib/library'
+import { filterZuruecksetzen, useBildFilter, useFilterOffen } from '@renderer/lib/filter'
 import { cn } from '@renderer/lib/utils'
+import { filterAktiv } from '@shared/bildFilter'
 import { Betrachter } from './Betrachter'
+import { FilterKnopf, Filterleiste, Suchfeld } from './Filterleiste'
 import { Liste } from './Liste'
 import { Raster } from './Raster'
 import { Gruppenwahl, Sortierwahl } from './Sortierwahl'
@@ -73,7 +77,17 @@ export function Galerie(): JSX.Element | null {
   }, [lib, gemerkt, knoten])
   const ansicht = useAnsicht()
   const blocksatz = ansicht.art === 'blocksatz'
-  const k = useKennungen(lib, knoten, ansicht.sortierung, ansicht.gruppierung, blocksatz)
+  const bildFilter = useBildFilter()
+  const filterOffen = useFilterOffen()
+  const facetten = useFacetten(lib, knoten, filterOffen)
+  const k = useKennungen(
+    lib,
+    knoten,
+    ansicht.sortierung,
+    ansicht.gruppierung,
+    blocksatz,
+    bildFilter
+  )
   const details = useDetails(k?.stand ?? 0)
   const sichtbarMelden = useSichtbarMelden()
   const [ziehen, setZiehen] = useState(false)
@@ -161,8 +175,14 @@ export function Galerie(): JSX.Element | null {
   const pfadText =
     ordner && knoten?.pfad ? `${ordner.name} › ${knoten.pfad.split('/').join(' › ')}` : null
   const liest = lib.folders.some((f) => f.status === 'liest')
-  // neu beim Wechsel von Ordner, Sortierung, Gruppen oder Kacheln/Blocksatz: oben anfangen
-  const schluessel = JSON.stringify([knoten, ansicht.sortierung, ansicht.gruppierung, blocksatz])
+  // neu beim Wechsel von Ordner, Sortierung, Gruppen, Filter oder Kacheln/Blocksatz: oben anfangen
+  const schluessel = JSON.stringify([
+    knoten,
+    ansicht.sortierung,
+    ansicht.gruppierung,
+    blocksatz,
+    bildFilter
+  ])
 
   return (
     <div className="relative flex h-full flex-col" {...zieh}>
@@ -172,13 +192,15 @@ export function Galerie(): JSX.Element | null {
           {pfadText && <p className="truncate text-xs text-muted-foreground">{pfadText}</p>}
         </div>
         {liest && <span className="text-xs text-muted-foreground">Ordner werden eingelesen …</span>}
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <Umschalter art={ansicht.art} />
           <Sortierwahl />
           <Gruppenwahl />
+          <Suchfeld />
+          <FilterKnopf />
           {ansicht.art !== 'liste' && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Größe
+            <label className="flex items-center" title="Größe">
+              <span className="sr-only">Größe</span>
               <input
                 type="range"
                 min={GROESSE_MIN}
@@ -186,17 +208,31 @@ export function Galerie(): JSX.Element | null {
                 step={4}
                 value={ansicht.groesse}
                 onChange={(e) => ansichtAendern({ groesse: Number(e.target.value) })}
-                className="w-32 accent-[rgb(var(--akzent-linie))]"
+                className="w-24 accent-[rgb(var(--akzent-linie))]"
               />
             </label>
           )}
         </div>
       </div>
+      <Filterleiste
+        facetten={facetten}
+        anzahl={k && !k.fehler ? k.ids.length : null}
+        gesamt={k?.gesamt}
+      />
       {k?.fehler && <p className="p-4 text-sm text-danger">Bilder nicht verfügbar: {k.fehler}</p>}
       {k && !k.fehler && k.ids.length === 0 && (
-        <p className="p-8 text-center text-sm text-muted-foreground">
-          {liest ? 'Die Ordner werden gerade eingelesen …' : 'Hier liegen keine Bilder.'}
-        </p>
+        <div className="flex flex-col items-center gap-3 p-8 text-center text-sm text-muted-foreground">
+          {filterAktiv(bildFilter) ? (
+            <>
+              <p>Keine Bilder passen zum Filter.</p>
+              <Button variant="outline" size="sm" onClick={filterZuruecksetzen}>
+                Zurücksetzen
+              </Button>
+            </>
+          ) : (
+            <p>{liest ? 'Die Ordner werden gerade eingelesen …' : 'Hier liegen keine Bilder.'}</p>
+          )}
+        </div>
       )}
       {k &&
         !k.fehler &&

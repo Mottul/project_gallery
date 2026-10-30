@@ -17,6 +17,7 @@ import {
   zahl
 } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
+import { farblabelText } from '@shared/bildFilter'
 import type { ImageInfo, MetaFeld } from '@shared/types'
 
 const QUELLE_TEXT: Record<ImageInfo['takenSource'], string> = {
@@ -26,17 +27,6 @@ const QUELLE_TEXT: Record<ImageInfo['takenSource'], string> = {
   'datei-erstellt': 'Datei (erstellt) – nicht aus der Kamera',
   'datei-geaendert': 'Datei (geändert) – nicht aus der Kamera'
 }
-
-/** Farblabel, wie Lightroom & Co. sie schreiben (englisch) – auf Deutsch; Unbekanntes bleibt */
-const FARBLABEL: Record<string, string> = {
-  red: 'Rot',
-  yellow: 'Gelb',
-  green: 'Grün',
-  blue: 'Blau',
-  purple: 'Lila'
-}
-const farblabelText = (l: string): string =>
-  Object.hasOwn(FARBLABEL, l.toLowerCase()) ? FARBLABEL[l.toLowerCase()] : l
 
 function Zeile({ titel, children }: { titel: string; children: ReactNode }): JSX.Element {
   return (

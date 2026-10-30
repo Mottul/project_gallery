@@ -24,6 +24,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `ueberwachen.mjs` | Änderungen von außen ohne „Neu einlesen“ (dazu, geändert, gelöscht), umbenannter Unterordner behält Kennungen und Vorschaubilder, 120 Dateien auf einmal, Versteckte draußen, Bibliotheksordner weg und wieder da (Fokus), UNC-Pfad `\\localhost\C$\…` periodisch, Log ohne Namen |
 | `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
+| `filter.mjs` | Filter und Suche exakt gegen die Testbilder, Ungültiges abgelehnt, Suchfeld, Filterleiste (Liste ganz sichtbar), Chips, „N von M“, Filter über Ordner/Ansichten/Betrachter, nach Neuladen weg, Suchindex folgt den Dateien, Log ohne Suchbegriffe |
 | `metadaten.mjs` | Bearbeiten einzeln/mehrfach, Werte in der Datei, Pixel-Hash gleich, Konflikt bei Änderung von außen, Rückgängig |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |
@@ -124,6 +125,12 @@ try {
   Spaltenzahl: Zeilen nach `getBoundingClientRect().top` bilden, nie `index / spalten` rechnen.
   Geometrie-Tests (Rahmen) knapp an Kanten enden lassen (± 3 px) – großzügige Ziele lassen eine
   um eine Überschrift (40 px) verschobene Rechnung durch (Gegenprobe 2.3).
+- **Filter** (2.4): Treffer sind wenige, also alle gezeichnet – `zeigt([...])` vergleicht das Raster
+  genau. `Filter (N aktiv)` zählt die Chips, nicht die Suche. Der Filter gilt über alle Ordner:
+  Ein gescheiterter Schritt lässt ihn stehen, Folgeschritte werden dann mit rot (erst den ersten
+  Fehler ansehen). Die Testbilder enthalten kein Hochformat – „hoch“ prüft `repo.test.ts`.
+  Oberfläche immer auch mit `E2E_FENSTER=1024x700` laufen lassen: So fiel in 2.4 auf, dass eine
+  Auswahlliste am rechten Fensterrand abgeschnitten wurde – im Standardfenster war alles grün.
 - **Blocksatz** (2.3b): Kacheln ohne Text darunter; die Lage einer Kachel ist die Box ihres
   ersten Kindes (das Bild). Erwartungen aus dem Gezeichneten ableiten (Rahmen: was die Box
   schneidet) und mit den Maßen aus `library.details` vergleichen (Seitenverhältnis begrenzt auf
