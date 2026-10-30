@@ -117,6 +117,7 @@ Phase 0, zur Laufzeit und im Build gibt es keine Verbindung. Pfade beziehen sich
 | Update-Muster | `services/ffmpeg/ffmpegUpdate.ts`, `ffmpegUpdatePlan.ts`, `e2e/ffmpeg-update.mjs` | Vorbild für die App-Aktualisierung: feste Quelle, Prüfung vor Aktivierung, Test gegen Schein-Server |
 | E2E-Harness | `e2e/harness.mjs`, `e2e/run.mjs` | gebaute App mit Playwright starten, frischer Benutzerordner |
 | CI und Abhängigkeiten | `.github/workflows/ci.yml`, `installer.yml`, `dependabot.yml` (7 Tage Abstand) | Prüfungen, E2E auf Windows/Linux, Installer bei Tag `v*` |
+| Ken-Burns-Bahn (2.5) | `shared/videoGenPlan.ts` (`kenBurnsPath`, `kenBurnsRect`, Stand 3f05492) | Bahn der Diashow in `shared/kenBurns.ts`: Bezug ist das ganze Bild, „automatisch“ wechselt nach der Stelle in der Liste, ohne FFmpeg-Filter |
 
 ## Architektur
 
@@ -287,11 +288,15 @@ kommen mit Phase 1 dazu).
   auch über Gruppengrenzen), Filmstreifen, Diashow mit Intervall.
 - **Kein Moment ohne Bild:** Das gezeigte Bild bleibt stehen, bis das nächste geladen und
   dekodiert ist; die Diashow schaltet erst weiter, wenn das nächste bereit ist.
-- **Diashow mit Überblenden und Ken-Burns-Effekt** (Phase 2): Übergang Schnitt/Überblenden, Ken
-  Burns aus/automatisch (wechselnd Zoom rein/raus, Hochkant schwenkt senkrecht), Stärke sanft/
-  mittel/stark – als CSS-Animation der beiden Bild-Ebenen. Bahn und Übergänge nach dem
-  Video-Generator der Mottulbox (`shared/videoGenPlan.ts`: `kenBurnsPath`; `transitionCss.ts`),
-  kopiert und angepasst, nicht verknüpft.
+- **Diashow mit Überblenden und Ken-Burns-Effekt** (seit 2.5): Übergang Schnitt/Überblenden
+  (Vorgabe, 800 ms), Ken Burns aus/automatisch (Vorgabe; wechselnd Zoom rein/raus, Hochkant schwenkt
+  senkrecht, Panorama waagerecht), Stärke sanft (Vorgabe)/mittel/stark – als Web-Animationen der
+  Bild-Ebenen, nur solange die Diashow läuft. Das Intervall zählt von Wechsel zu Wechsel; Einstellungen
+  im Menü am Knopf „Diashow“, gemerkt. Selbst zoomen hält Ken Burns an, Anhalten führt sanft zurück;
+  hat Windows Animationen abgeschaltet, wechseln die Bilder ohne Effekte. Bahn nach dem
+  Video-Generator der Mottulbox (`shared/videoGenPlan.ts`: `kenBurnsPath`, `kenBurnsRect`), kopiert
+  und angepasst, nicht verknüpft; ein Überblenden wie dort (`transitionCss.ts`: nur das neue kommt
+  herein) ließe Bilder anderer Form am Ende wegspringen, darum geht das alte in der zweiten Hälfte.
 - Info-Panel (seit 2.1): Titel, Beschreibung, Bewertung, Farblabel, Stichwörter, Aufnahme mit
   Quelle des Datums, Kamera, Objektiv, Belichtung, Standort (Koordinaten; Ortsname ab 2.2),
   Datei, „alle Felder“ (auf Abruf frisch aus der Datei, mit Suche); Histogramm später.
@@ -662,7 +667,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 ### Phase 2 – Metadaten lesen, Filtern, Suchen
 
 - Vollständiges Lesen per ExifTool, Info-Panel, „alle Felder“.
-- Diashow mit Überblenden und Ken-Burns-Effekt (siehe [Betrachter](#betrachter)); nur im
+- Diashow mit Überblenden und Ken-Burns-Effekt (2.5 ✅, siehe [Betrachter](#betrachter)); nur im
   Renderer, die zwei Bild-Ebenen dafür gibt es seit 1.5+.
 - Offline-Ortsnamen (GeoNames, Lizenz CC BY 4.0 – Hinweis in „Über“) und **Sortieren nach Ort
   (A–Z)** mit Gruppen.
@@ -671,6 +676,9 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - Filterleiste, Volltextsuche (2.4 ✅), gespeicherte Ansichten (2.4b ✅).
 - **Abnahme:** E2E `sortieren` mit bekannten Testbildern (Reihenfolge exakt erwartet, „Ohne
   Standort“ am Ende in beiden Richtungen).
+- ✅ **Phase 2 umgesetzt** (30.10.2026): alle Teilschritte unten. Offen bleiben der Lizenzhinweis
+  GeoNames in „Über“ (die Seite gibt es noch nicht), die Prüfung an einem verbundenen Netzlaufwerk
+  und der knappe Neustart bei 50.000 Bildern (siehe 2.4).
 
 **Teilschritte** (festgelegt 29.10.2026, je ein Pull Request gegen `main`):
 
@@ -682,7 +690,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | 2.3b ✅ | **Blocksatz-Ansicht** (eigener PR, entschieden 29.10.2026): dritte Ansicht „Blocksatz“ neben Kacheln und Liste; Bilder im Seitenverhältnis (aufgerichtete Maße, begrenzt auf 1:3 … 3:1, unbekannt = quadratisch), Zeilen gleicher Höhe bündig auf die Breite, 4 px Abstand, kein Text darunter (Name als Hinweis); der Größenregler gibt die Zielhöhe vor; gierig mit „mit oder ohne das letzte Bild – was liegt näher an der Zielhöhe“, die letzte Zeile einer Gruppe bleibt linksbündig in Zielhöhe, ab 90 % Füllung gestreckt (`lib/blocksatz.ts`); dieselben Gruppen-Überschriften und dieselbe Rahmen-Auswahl wie im Raster; `library.queryGroups` liefert auf Wunsch je Kennung das Seitenverhältnis (eine Zahl je Bild, geprüfter Schalter) | `galerie` (Seitenverhältnis jeder gezeichneten Kachel wie im Index, Zeilen gleich hoch, volle Zeilen bündig, Abstände, Rahmen 2 px vor bzw. 3 px in einer Kachel, Größenregler, gemerkt nach dem Neuladen; zwei Gegenproben rot: alles quadratisch, Rahmen mit Kachel-Breiten), `abnahme50k` (Seitenverhältnisse aller 50.000 Bilder 84 ms, Umschalten 147 ms, Scrollen p95 17 ms – neben einem fremden E2E-Lauf gemessen); Unit `blocksatz.test.ts` (100.000 Bilder deutlich unter 200 ms), `repo.test.ts`, `eingaben.test.ts` |
 | 2.4 ✅ | **Filterleiste und Volltextsuche** (Aufteilung entschieden 30.10.2026: gespeicherte Ansichten eigener PR): Migration 6 (`images_fts` mit FTS5, Trigger auf `images` und `keywords` halten sie aktuell – auch bei der Ordner-Kaskade; Bestand wird einmal übernommen); `shared/bildFilter.ts` (Beschreibung, Prüfung, SQL nur mit Platzhaltern, Suchausdruck ohne FTS-Syntax aus der Eingabe); `library.queryGroups` mit Filter und `gesamt`, `library.facets` für die Auswahllisten (Werte im Knoten mit Anzahl, höchstens 2.000 je Liste); Suchfeld und Knopf „Filter“ in der Werkzeugleiste, aufklappbare Leiste, Chips, „N von M Bildern“, „Keine Bilder passen zum Filter“ mit Zurücksetzen, Auswahllisten klappen am rechten Fensterrand nach links auf (`galerie/Filterleiste.tsx`, Zustand nur für die Sitzung in `lib/filter.ts`); Werkzeugleiste kompakter (zwei Zeilen im Standardfenster) | `filter` (jedes Kriterium und die Suche exakt gegen die Testbilder, Knoten, Gruppen, `gesamt`, Ungültiges abgelehnt, Oberfläche, Filter über Ordner/Blocksatz/Liste/Betrachter, nach Neuladen weg, neue und gelöschte Dateien im Suchindex, Log ohne Suchbegriffe; zwei Gegenproben rot: ohne Stichwort-Trigger, Filter nicht weitergereicht), `abnahme50k` (Filter und Suche im Median 12–67 ms, Auswahllisten 84 ms; Erstindex 172 s, Vorschaubilder 621 s, IPC Median 52 ms, 99 % unter 216 ms, höchstens 398 ms, main nie blockiert; Migration des Bestands 217 ms, in SQLite gemessen. **Gefunden in der Abnahme:** Jeder Fortschritt der Vorschaubilder löste je Sekunde die ganze Abfrage samt Gruppen und Ordnerbaum aus – seit 2.3 teuer genug für 37 Blockaden bis 1,2 s; jetzt ändert er nur noch die Details des Sichtbaren. Nicht der Suchindex: Seine Trigger kosten 200 Zeilen 1,4 ms. **Neustart** bis Galerie: Median je Lauf 1,57–2,03 s, im Vergleich mit dem alten Verhalten 1,85–2,25 s – das Ziel < 2 s hält knapp, 1.6 lag bei 1,16 s; ein Lauf war mit 2,03 s rot); Unit `bildFilter.test.ts`, `filter.test.ts`, `repo.test.ts`, `db.test.ts` (Migration 5 → 6), `eingaben.test.ts` |
 | 2.4b ✅ | **Gespeicherte Ansichten** (eigener PR; entschieden 30.10.2026: mit Ordner, Abschnitt in der Seitenleiste): Migration 7 (Tabelle `ansichten`, Ordner als Fremdschlüssel mit `ON DELETE CASCADE`, Name ohne Groß/Klein eindeutig); `shared/gespeicherteAnsicht.ts` (Stand, Prüfung beim Speichern und beim Lesen, `standGleich` für die Markierung); `library.views`, `saveView`, `deleteView` (Rückfrage im main), Ereignis `onViewsChanged`; höchstens 200 Ansichten; Abschnitt „Ansichten“ unter den Ordnern, Speichern in der Filterleiste mit Namensfeld an Ort und Stelle, „Ersetzen“ bei vergebenem Namen, Vorschlag: die zuletzt geöffnete (`galerie/Ansichten.tsx`, `lib/gespeichert.ts`). Umbenennen gibt es nicht – eine Ansicht lässt sich unter neuem Namen speichern und die alte löschen | `ansichten` (Speichern, Öffnen stellt alles wieder her, Ordner/Suche/Gruppen, Ersetzen und Abbrechen, Ungültiges im main abgelehnt, fremder Text bleibt Text, nach dem Neustart da und nicht aktiv, Löschen mit Rückfrage, entfernter Ordner nimmt seine Ansichten mit, Log ohne Namen; auch bei 1024 × 700; drei Gegenproben rot: Öffnen ohne Filter, Entfernen ohne Meldung, Ersetzen ohne Freigabe); Unit `gespeicherteAnsicht.test.ts`, `repo.test.ts` (auch: Zeilen fremder Versionen werden übersprungen), `db.test.ts` (Migration 6 → 7), `eingaben.test.ts` |
-| 2.5 | **Diashow mit Überblenden und Ken Burns** (Wunsch 29.10.2026) |
+| 2.5 ✅ | **Diashow mit Überblenden und Ken Burns** (Wunsch 29.10.2026; Werkzeugleiste bleibt, entschieden 30.10.2026): `shared/kenBurns.ts` (Bahn und Stärken aus der Mottulbox, Bezug ist das ganze Bild, Richtung wechselt mit der Stelle in der Liste, Zoom exponentiell, 13 Stützstellen); dritte Ebene `vorher` auf der Bühne, gleicher Schlüssel hält dasselbe `<img>` samt laufender Animation; Web-Animationen statt CSS-Klassen, weil Dauer und Bahn je Bild anders sind; Bühne geändert (Vollbild, Fenster): dieselbe Bahn im neuen Maßstab; Menü `galerie/DiashowMenue.tsx`, Einstellungen samt Intervall in `lib/diashow.ts` (localStorage, geprüft) | `betrachter` (Überblenden mit zwei Ebenen und ohne Moment ohne Bild, Blättern ohne Überblenden, Schnitt, Zoom um die Mitte bis zur Stärke, Hochformat schwenkt bei gleichem Maßstab, altes Bild fährt beim Überblenden weiter, Anhalten führt zurück, selbst zoomen hält an, kleinerer Maßstab bei kleinerer Bühne, Menü ganz sichtbar, gemerkt nach dem Neuladen, „Bewegung reduzieren“; auch bei 1024 × 700; fünf Gegenproben rot – eine erst, nachdem der Test geschärft war: Bahn im alten Maßstab fiel mit einer weiten Grenze nicht auf); Unit `kenBurns.test.ts`, `diashow.test.ts` |
 
 ### Phase 3 – Metadaten bearbeiten
 

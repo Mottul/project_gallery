@@ -20,7 +20,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `netz.mjs` | lokaler Spion-Server: kein einziger Zugriff während Scan, Ansicht, Export – auch mit Testbildern, die Fremd-URLs enthalten (SVG, XMP) |
 | `originale.mjs` | Prüfsummen aller Testbilder vor/nach den Schritten; nur ausdrücklich geänderte Dateien weichen ab; keine Fremddateien (`_original`, Temp) im Bibliotheksordner |
 | `galerie.mjs` | Ordner hinzufügen/entfernen, Scan, Kacheln/Blocksatz/Liste (Seitenverhältnis, bündige Zeilen, Rahmen), Größenregler, Auswahl, Watcher (Datei von außen ändern/löschen), Betrachter |
-| `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad) |
+| `betrachter.mjs` | Bildwechsel ohne leeren Moment (Blättern, Diashow, große Originale), Vorladen ohne zweiten Abruf, Filmstreifen ganz sichtbar, Zoom (Regler, Stufen-Menü, sanft, Touchpad), Diashow-Effekte (Überblenden, Ken Burns, Anhalten, Menü, „Bewegung reduzieren“) |
 | `ueberwachen.mjs` | Änderungen von außen ohne „Neu einlesen“ (dazu, geändert, gelöscht), umbenannter Unterordner behält Kennungen und Vorschaubilder, 120 Dateien auf einmal, Versteckte draußen, Bibliotheksordner weg und wieder da (Fokus), UNC-Pfad `\\localhost\C$\…` periodisch, Log ohne Namen |
 | `abnahme50k.mjs` | nur auf Wunsch: Abnahme-Messung mit 50.000 synthetischen Bildern (Erstindex, Neustart als Median aus 3, Sortieren, Scrollen, Speicher, Blockaden des main aus dem Log); `ABNAHME_BEHALTEN=1` / `ABNAHME_DATEN=<Ordner>` zum schnellen Nachmessen ohne neues Einlesen |
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
@@ -91,6 +91,13 @@ try {
   `Network.enable`, `Network.requestWillBeSent` – `bild://`-Anfragen erscheinen dort wie
   http-Anfragen. Gemessen: Chromium nimmt ein vorgeladenes Bild für dieselbe Adresse wieder,
   obwohl die Antwort `no-store` trägt.
+- **Web-Animationen prüfen** (2.5): Bewegung über `getComputedStyle(img).transform` in kurzen
+  Abständen messen (`ebenenProben` in `betrachter.mjs`: Matrix, Deckkraft, je Ebene), laufend über
+  `img.getAnimations()`, die Bahn über `effect.getKeyframes()`. Eine weite Grenze („höchstens
+  Stärke mal Maßstab“) ließ eine Bahn im alten Maßstab durch – direkt den Maßstab der Keyframes
+  gegen die Bühne vergleichen. „Bewegung reduzieren“: `page.emulateMedia({ reducedMotion: 'reduce' })`.
+- **Ecken mit `elementFromPoint` prüfen:** 8 px Abstand zum Rand – abgerundete Ecken treffen sonst
+  das Element dahinter. `name: 'Diashow'` trifft auch „Einstellungen der Diashow“: `exact: true`.
 - **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
   Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
 - **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter
