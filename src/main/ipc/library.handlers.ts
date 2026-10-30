@@ -1,5 +1,6 @@
 import { Channels } from '@shared/ipc-contracts'
 import {
+  pruefeBildFilterStreng,
   pruefeGruppierungStreng,
   pruefeKennung,
   pruefeKennungen,
@@ -13,6 +14,7 @@ import { DETAILS_MAX } from '../services/library/repo'
 import {
   abfrage,
   abfrageMitGruppen,
+  filterWerte,
   auswahlGroesse,
   bildDetails,
   fensterVon,
@@ -54,13 +56,17 @@ export function registerLibraryHandlers(): void {
   handle(Channels.libraryQuery, (_e, s, f) =>
     abfrage(pruefeSortierungStreng(s), f === undefined ? undefined : pruefeOrdnerFilterStreng(f))
   )
-  handle(Channels.libraryQueryGroups, (_e, s, f, g, seiten) =>
+  handle(Channels.libraryQueryGroups, (_e, s, f, g, seiten, b) =>
     abfrageMitGruppen(
       pruefeSortierungStreng(s),
       f === undefined || f === null ? undefined : pruefeOrdnerFilterStreng(f),
       pruefeGruppierungStreng(g),
-      pruefeSchalterStreng(seiten)
+      pruefeSchalterStreng(seiten),
+      b === undefined || b === null ? undefined : pruefeBildFilterStreng(b)
     )
+  )
+  handle(Channels.libraryFacets, (_e, f) =>
+    filterWerte(f === undefined || f === null ? undefined : pruefeOrdnerFilterStreng(f))
   )
   handle(Channels.libraryDetails, (_e, ids) => bildDetails(pruefeKennungen(ids, DETAILS_MAX)))
   handle(Channels.libraryDirs, () => verzeichnisBaum())

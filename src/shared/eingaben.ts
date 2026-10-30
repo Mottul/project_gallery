@@ -1,6 +1,7 @@
 // Eingaben aus dem Renderer prüfen – rein, getestet in eingaben.test.ts. Auch der eigene Renderer
 // gilt als fremde Eingabe (Skill ipc-kanal): Ungültiges ist ein Fehler, nie still „korrigiert“.
 
+import { pruefeBildFilter, type BildFilter } from './bildFilter'
 import { pruefeGruppierung, type Gruppierung } from './gruppen'
 import {
   pruefeOrdnerFilter,
@@ -34,6 +35,12 @@ export function pruefeGruppierungStreng(v: unknown): Gruppierung {
   const g = pruefeGruppierung(v)
   if (!g) throw new Error('Ungültige Gruppierung')
   return g
+}
+
+export function pruefeBildFilterStreng(v: unknown): BildFilter {
+  const f = pruefeBildFilter(v)
+  if (!f) throw new Error('Ungültiger Filter')
+  return f
 }
 
 /** Ein Schalter aus dem Renderer: fehlt = aus, sonst nur true/false. */

@@ -33,7 +33,7 @@ const STUFE_TEXT: Record<Gruppierung, string> = {
   jahr: 'Jahr'
 }
 
-const AUSWAHL =
+export const AUSWAHL =
   'h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70'
 
 export function Sortierwahl(): JSX.Element {
@@ -42,7 +42,7 @@ export function Sortierwahl(): JSX.Element {
   return (
     <div className="flex items-center gap-1.5">
       <label htmlFor="sortierung" className="text-xs text-muted-foreground">
-        Sortieren nach
+        Sortieren<span className="sr-only"> nach</span>
       </label>
       <select
         id="sortierung"

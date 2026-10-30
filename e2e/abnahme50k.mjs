@@ -376,6 +376,55 @@ try {
       }
     ],
     [
+      'Filter und Suche (2.4): jede Abfrage im Median < 200 ms, auch die Auswahllisten',
+      async () => {
+        // nach dem Scrollen arbeitet der main noch Abrufe ab: je Abfrage Median und Maximum aus 5
+        await sleep(1_000)
+        const r = await ctx.page.evaluate(async () => {
+          const s = { feld: 'aufnahme', richtung: 'auf' }
+          const mal5 = async (fn) => {
+            const t = []
+            let anzahl
+            for (let i = 0; i < 5; i++) {
+              const t0 = performance.now()
+              anzahl = await fn()
+              t.push(performance.now() - t0)
+            }
+            t.sort((a, b) => a - b)
+            return { median: t[2], max: t[4], anzahl }
+          }
+          const mess = (f) =>
+            mal5(
+              async () =>
+                (await window.api.library.queryGroups(s, undefined, 'monat', false, f)).ids.length
+            )
+          return {
+            // ein Treffer, viele über ein Präfix, alle
+            sucheSelten: await mess({ suche: '000143' }),
+            suchePraefix: await mess({ suche: '0001' }),
+            sucheAlle: await mess({ suche: 'img' }),
+            zeitraum: await mess({ von: '2024-01-01', bis: '2024-12-31' }),
+            format: await mess({ formate: ['jpeg'] }),
+            zusammen: await mess({ formate: ['jpeg'], von: '2024-01-01', suche: 'img' }),
+            auswahllisten: await mal5(() => window.api.library.facets())
+          }
+        })
+        ergebnis.filter = Object.fromEntries(
+          Object.entries(r).map(([k, v]) => [
+            k,
+            `Median ${ms(v.median)}, höchstens ${ms(v.max)}` +
+              (typeof v.anzahl === 'number' ? ` (${v.anzahl} Treffer)` : '')
+          ])
+        )
+        assert.ok(r.sucheSelten.anzahl >= 1, 'Suche findet nichts – prüft nichts')
+        assert.ok(r.sucheAlle.anzahl === ANZAHL, `„img“ findet ${r.sucheAlle.anzahl}`)
+        assert.ok(
+          Math.max(...Object.values(r).map((v) => v.median)) < 200,
+          JSON.stringify(ergebnis.filter)
+        )
+      }
+    ],
+    [
       'Blocksatz (2.3b): Umschalten < 200 ms, Scrollen ohne Ruckeln',
       async () => {
         // Seitenverhältnisse aller 50.000 Bilder mit der Abfrage

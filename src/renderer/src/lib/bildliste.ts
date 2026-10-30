@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
+import { filterAktiv, type BildFilter, type Facetten } from '@shared/bildFilter'
 import type { Gruppe, Gruppierung } from '@shared/gruppen'
 import type { Sortierung } from '@shared/sortFilter'
 import type { ImageInfo, LibraryDirs, LibraryState } from '@shared/types'
@@ -16,13 +17,16 @@ const NEU_FRAGEN_MS = 1000
 /** Höchstens so viele Details je Anfrage (wie DETAILS_MAX im main) */
 const DETAILS_STAPEL = 1000
 
-/** Schlüssel, der sich ändert, wenn sich am Inhalt der Bibliothek etwas getan hat. */
+/**
+ * Schlüssel, der sich ändert, wenn sich an der Liste der Bilder etwas getan haben kann. Der Stand
+ * der Vorschaubilder gehört nicht dazu: Er läuft bei großen Bibliotheken viele Minuten, und die
+ * ganze Abfrage je Sekunde (samt Gruppen und Ordnerbaum) hielte den main unnötig auf (Abnahme 2.4).
+ */
 function inhaltsSchluessel(lib: LibraryState | null): string {
   if (!lib) return ''
   return [
     lib.total,
     lib.metaPending,
-    lib.thumbPending,
     lib.revision,
     ...lib.folders.map((f) => `${f.id}:${f.count}:${f.found}:${f.missing}:${f.mode}`)
   ].join('|')
@@ -56,6 +60,8 @@ export interface Kennungen {
   gruppen: Gruppe[]
   /** Blocksatz: Seitenverhältnis je Kennung (nur angefragt) */
   seiten?: number[]
+  /** bei aktivem Filter: Bilder im Knoten ohne Filter */
+  gesamt?: number
   /** zählt jede neue Antwort – Details älterer Stände gelten als veraltet */
   stand: number
   fehler: string | null
@@ -67,27 +73,42 @@ export function useKennungen(
   knoten: Knoten,
   sortierung: Sortierung,
   gruppierung: Gruppierung,
-  mitSeiten = false
+  mitSeiten = false,
+  bildFilter?: BildFilter
 ): Kennungen | null {
   const [k, setK] = useState<Kennungen | null>(null)
   const anfrage = useRef(0)
-  const sofort = JSON.stringify([knoten, sortierung, gruppierung, mitSeiten])
+  const stand = useRef(0)
+  const sofort = JSON.stringify([knoten, sortierung, gruppierung, mitSeiten, bildFilter])
   useGedrosselt(
     () => {
       const nr = ++anfrage.current
       api.library
-        .queryGroups(sortierung, knoten ?? undefined, gruppierung, mitSeiten)
+        .queryGroups(
+          sortierung,
+          knoten ?? undefined,
+          gruppierung,
+          mitSeiten,
+          filterAktiv(bildFilter) ? bildFilter : undefined
+        )
         .then(
           (r) => ({ ...r, fehler: null }),
           (err) => ({ ids: [] as number[], gruppen: [] as Gruppe[], fehler: errorText(err) })
         )
         .then((r) => {
           // eine neuere Anfrage hat Vorrang
-          if (nr === anfrage.current) setK({ ...r, stand: nr })
+          if (nr === anfrage.current) setK({ ...r, stand: ++stand.current })
         })
     },
     inhaltsSchluessel(lib),
     sofort,
+    lib !== null
+  )
+  // neue Vorschaubilder ändern nur Details (Farbe, „defekt“): dieselbe Liste, neuer Stand
+  useGedrosselt(
+    () => setK((alt) => alt && { ...alt, stand: ++stand.current }),
+    String(lib?.thumbPending ?? 0),
+    '',
     lib !== null
   )
   return k
@@ -130,6 +151,30 @@ export function useDetails(stand: number): {
 
   const get = useCallback((id: number) => cache.current.get(id)?.info, [])
   return { get, anfordern }
+}
+
+/** Auswahllisten der Filterleiste – nur solange sie offen ist (gedrosselt neu bei Änderungen). */
+export function useFacetten(
+  lib: LibraryState | null,
+  knoten: Knoten,
+  aktiv: boolean
+): Facetten | null {
+  const [f, setF] = useState<Facetten | null>(null)
+  const anfrage = useRef(0)
+  useGedrosselt(
+    () => {
+      const nr = ++anfrage.current
+      // eine neuere Anfrage hat Vorrang (anderer Knoten)
+      api.library.facets(knoten ?? undefined).then(
+        (w) => nr === anfrage.current && setF(w),
+        () => nr === anfrage.current && setF(null)
+      )
+    },
+    inhaltsSchluessel(lib),
+    JSON.stringify([knoten, aktiv]),
+    lib !== null && aktiv
+  )
+  return f
 }
 
 /** Ordnerbaum-Daten: Unterordner je Bibliotheksordner (gedrosselt neu bei Änderungen). */

@@ -8,6 +8,7 @@
 
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { basename, isAbsolute, join } from 'node:path'
+import type { BildFilter, Facetten } from '@shared/bildFilter'
 import { landName } from '@shared/geo'
 import { gruppenArt, type Gruppe, type Gruppierung } from '@shared/gruppen'
 import { grundfelderAus, type Grundfelder } from '@shared/grundfelder'
@@ -475,20 +476,33 @@ export function abfrage(sortierung: Sortierung, filter?: OrdnerFilter): number[]
 /**
  * Kennungen mit Gruppen-Überschriften (2.3): Die Gruppen folgen der Sortierung; ohne Gruppen
  * (Gruppierung „aus“ oder eine Sortierung ohne Gruppen) eine leere Liste. `mitSeiten` (2.3b):
- * dazu je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt).
+ * dazu je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt). `bildFilter` (2.4):
+ * Filter und Suche (geprüft); dann auch `gesamt`, die Zahl der Bilder im Knoten ohne Filter.
  */
 export function abfrageMitGruppen(
   sortierung: Sortierung,
   filter: OrdnerFilter | undefined,
   gruppierung: Gruppierung,
-  mitSeiten = false
-): { ids: number[]; gruppen: Gruppe[]; seiten?: number[] } {
+  mitSeiten = false,
+  bildFilter?: BildFilter
+): { ids: number[]; gruppen: Gruppe[]; seiten?: number[]; gesamt?: number } {
   const art = gruppierung === 'aus' ? null : gruppenArt(sortierung.feld)
-  if (!art && !mitSeiten) {
-    return { ids: repo.kennungen(db(), sortierung, filter, WINDOWS), gruppen: [] }
-  }
-  const stufe = gruppierung === 'aus' ? 'monat' : gruppierung
-  return repo.kennungenMitGruppen(db(), sortierung, filter, art, stufe, WINDOWS, mitSeiten)
+  return repo.abfrageAnsicht(
+    db(),
+    {
+      sortierung,
+      ordner: filter,
+      gruppe: art ? { art, stufe: gruppierung === 'aus' ? 'monat' : gruppierung } : null,
+      mitSeiten,
+      bildFilter
+    },
+    WINDOWS
+  )
+}
+
+/** Auswahllisten der Filterleiste: was es im Knoten gibt (2.4). */
+export function filterWerte(filter?: OrdnerFilter): Facetten {
+  return repo.facetten(db(), filter, WINDOWS)
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer direkten Dateien (Ordnerbaum). */

@@ -602,6 +602,189 @@ describe('Abfragen', () => {
     expect(repo.seitenVerhaeltnis(30000, 2000)).toBe(15)
   })
 
+  describe('Filter und Suche (2.4)', () => {
+    /** drei Bilder mit bekannten Werten */
+    function bilder(): Record<string, number> {
+      const k = mitDateien()
+      const satz = db.prepare(
+        `UPDATE images SET taken_at = @t, rating = @r, color_label = @f, camera_make = @mk,
+           camera_model = @m, format = @fm, width = @w, height = @h, gps_lat = @g, title = @ti,
+           description = @d, place_name = @o, place_country = @l, place_missing = @pm WHERE id = @id`
+      )
+      satz.run({
+        id: k['A.jpg'],
+        t: '2024-07-14T18:30:05',
+        r: 5,
+        f: 'Red',
+        mk: 'Galeria',
+        m: 'Modell A',
+        fm: 'jpeg',
+        w: 300,
+        h: 200,
+        g: 48.1,
+        ti: 'Altstadt am Abend',
+        d: 'Blick über die Mauer',
+        o: 'München',
+        l: 'Deutschland',
+        pm: 0
+      })
+      satz.run({
+        id: k['b.png'],
+        t: '2024-07-31T23:59:59',
+        r: 2,
+        f: null,
+        mk: 'Galeria',
+        m: 'Modell B',
+        fm: 'png',
+        w: 200,
+        h: 300,
+        g: null,
+        ti: null,
+        d: null,
+        o: 'Paris',
+        l: 'Frankreich',
+        pm: 0
+      })
+      satz.run({
+        id: k['c.jpg'],
+        t: '2024-08-01T00:00:00',
+        r: null,
+        f: null,
+        mk: null,
+        m: null,
+        fm: 'jpeg',
+        w: 100,
+        h: 100,
+        g: null,
+        ti: null,
+        d: null,
+        o: null,
+        l: null,
+        pm: 1
+      })
+      const wort = db.prepare('INSERT INTO keywords (image_id, keyword) VALUES (?, ?)')
+      wort.run(k['A.jpg'], 'Urlaub')
+      wort.run(k['A.jpg'], 'Familie')
+      wort.run(k['b.png'], 'Winter')
+      return k
+    }
+    const s = { feld: 'name', richtung: 'auf' } as const
+    const namen = (f: Parameters<typeof repo.abfrageAnsicht>[1]['bildFilter']): string[] =>
+      repo
+        .details(db, repo.abfrageAnsicht(db, { sortierung: s, bildFilter: f }, true).ids)
+        .map((d) => d.name)
+
+    it('Kriterien einzeln: in einem Kriterium „oder“, Zeitraum einschließlich', () => {
+      bilder()
+      expect(namen({ bewertung: 2 })).toEqual(['A.jpg', 'b.png'])
+      expect(namen({ bewertung: 5 })).toEqual(['A.jpg'])
+      expect(namen({ farben: ['Red'] })).toEqual(['A.jpg'])
+      expect(namen({ kameras: ['Galeria Modell A', 'Galeria Modell B'] })).toEqual([
+        'A.jpg',
+        'b.png'
+      ])
+      expect(namen({ orte: ['Paris\u0001Frankreich'] })).toEqual(['b.png'])
+      expect(namen({ stichwoerter: ['Urlaub', 'Winter'] })).toEqual(['A.jpg', 'b.png'])
+      expect(namen({ formate: ['jpeg'] })).toEqual(['A.jpg', 'c.jpg'])
+      expect(namen({ ausrichtung: 'hoch' })).toEqual(['b.png'])
+      expect(namen({ ausrichtung: 'quer' })).toEqual(['A.jpg'])
+      expect(namen({ ausrichtung: 'quadrat' })).toEqual(['c.jpg'])
+      expect(namen({ standort: 'mit' })).toEqual(['A.jpg'])
+      expect(namen({ standort: 'ohne' })).toEqual(['b.png', 'c.jpg'])
+      // 31.7. 23:59:59 gehört dazu, 1.8. 00:00:00 nicht
+      expect(namen({ von: '2024-07-15', bis: '2024-07-31' })).toEqual(['b.png'])
+      expect(namen({ von: '2024-08-01' })).toEqual(['c.jpg'])
+    })
+
+    it('Kriterien zusammen: „und“; Gruppen passen zur gefilterten Liste; „gesamt“ ohne Filter', () => {
+      const k = bilder()
+      expect(namen({ bewertung: 2, formate: ['png'] })).toEqual(['b.png'])
+      expect(namen({ bewertung: 5, formate: ['png'] })).toEqual([])
+      const r = repo.abfrageAnsicht(
+        db,
+        {
+          sortierung: { feld: 'aufnahme', richtung: 'auf' },
+          ordner: { ordner: id, pfad: '' },
+          gruppe: { art: 'aufnahme', stufe: 'monat' },
+          mitSeiten: true,
+          bildFilter: { bewertung: 2 }
+        },
+        true
+      )
+      expect(r.ids).toEqual([k['A.jpg'], k['b.png']])
+      expect(r.gruppen).toEqual([{ titel: 'Juli 2024', von: 0, anzahl: 2 }])
+      expect(r.seiten).toEqual([1.5, 0.667])
+      expect(r.gesamt).toBe(3)
+      // ohne Filter keine Gesamtzahl (die Liste ist es schon)
+      expect(
+        repo.abfrageAnsicht(db, { sortierung: s, bildFilter: {} }, true).gesamt
+      ).toBeUndefined()
+    })
+
+    it('Suche: Titel, Beschreibung, Stichwort, Ort, Name; Präfix, ohne Umlaute, alle Wörter', () => {
+      bilder()
+      expect(namen({ suche: 'altstadt' })).toEqual(['A.jpg'])
+      expect(namen({ suche: 'Mauer' })).toEqual(['A.jpg'])
+      expect(namen({ suche: 'urlaub' })).toEqual(['A.jpg'])
+      expect(namen({ suche: 'pari' })).toEqual(['b.png'])
+      expect(namen({ suche: 'frankreich' })).toEqual(['b.png'])
+      expect(namen({ suche: 'munchen' })).toEqual(['A.jpg'])
+      expect(namen({ suche: 'Blick Familie' })).toEqual(['A.jpg'])
+      expect(namen({ suche: 'Blick Winter' })).toEqual([])
+      expect(namen({ suche: 'c.jpg' })).toEqual(['c.jpg'])
+      // Syntax aus der Eingabe wirkt nicht und wirft nicht
+      for (const q of ['a OR b', 'NEAR(x y)', 'title:Altstadt', '-Mauer', 'x AND', '*', '- .']) {
+        expect(() => namen({ suche: q }), q).not.toThrow()
+      }
+      expect(namen({ suche: 'title:Altstadt' })).toEqual([])
+    })
+
+    it('Suche bleibt aktuell: geändert, Stichwort weg, umbenannt, Ordner entfernt', () => {
+      const k = bilder()
+      db.prepare("UPDATE images SET title = 'Hafen' WHERE id = ?").run(k['A.jpg'])
+      expect(namen({ suche: 'altstadt' })).toEqual([])
+      expect(namen({ suche: 'hafen' })).toEqual(['A.jpg'])
+      // der Titel änderte sich – die Stichwörter sind noch auffindbar
+      expect(namen({ suche: 'urlaub' })).toEqual(['A.jpg'])
+      db.prepare("DELETE FROM keywords WHERE keyword = 'Urlaub'").run()
+      expect(namen({ suche: 'urlaub' })).toEqual([])
+      expect(namen({ suche: 'familie' })).toEqual(['A.jpg'])
+      db.prepare("UPDATE images SET name = 'neu.jpg' WHERE id = ?").run(k['c.jpg'])
+      expect(namen({ suche: 'neu' })).toEqual(['neu.jpg'])
+      // Kaskade beim Entfernen des Ordners: nichts bleibt im Suchindex
+      db.prepare('DELETE FROM folders WHERE id = ?').run(id)
+      expect(db.prepare('SELECT count(*) FROM images_fts').pluck().get()).toBe(0)
+    })
+
+    it('Auswahllisten: was es im Knoten gibt, mit Anzahl, ohne Fehlende', () => {
+      bilder()
+      db.prepare("UPDATE images SET status = 'fehlt' WHERE name = 'c.jpg'").run()
+      const f = repo.facetten(db, undefined, true)
+      expect(f.kameras).toEqual([
+        { wert: 'Galeria Modell A', titel: 'Galeria Modell A', anzahl: 1 },
+        { wert: 'Galeria Modell B', titel: 'Galeria Modell B', anzahl: 1 }
+      ])
+      expect(f.orte).toEqual([
+        { wert: 'München\u0001Deutschland', titel: 'München · Deutschland', anzahl: 1 },
+        { wert: 'Paris\u0001Frankreich', titel: 'Paris · Frankreich', anzahl: 1 }
+      ])
+      expect(f.stichwoerter.map((w) => [w.wert, w.anzahl])).toEqual([
+        ['Familie', 1],
+        ['Urlaub', 1],
+        ['Winter', 1]
+      ])
+      expect(f.formate).toEqual([
+        { wert: 'jpeg', titel: 'JPEG', anzahl: 1 },
+        { wert: 'png', titel: 'PNG', anzahl: 1 }
+      ])
+      expect(f.farben).toEqual([{ wert: 'Red', titel: 'Rot', anzahl: 1 }])
+      expect(f.zeitraum).toEqual({ von: '2024-07-14', bis: '2024-07-31' })
+      // jede Auswahl filtert auch wirklich
+      for (const w of f.kameras) expect(namen({ kameras: [w.wert] })).toHaveLength(1)
+      for (const w of f.orte) expect(namen({ orte: [w.wert] })).toHaveLength(1)
+    })
+  })
+
   it('Gruppen nach Ordner: je Verzeichnis ein Block, auch wenn Namen dazwischen sortierten', () => {
     const seq = repo.scanBeginnen(db, id)
     repo.stapelSchreiben(

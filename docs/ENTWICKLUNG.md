@@ -202,6 +202,12 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   bauen daraus Zeilen (`lib/zeilen.ts`: Kopfzeile, dann Bildzeilen; jede Gruppe in neuer Zeile).
   Die Höhen für den Virtualisierer und die Geometrie des Rahmens kommen aus demselben Feld der
   oberen Kanten – getrennt gerechnet liefen sie mit jeder Überschrift auseinander.
+- **Filter und Suche (2.4):** Der Renderer schickt eine Beschreibung (`BildFilter`), der main
+  prüft sie und baut die Bedingung – Spalten nur aus `shared/bildFilter.ts`, Werte nur als
+  Parameter, die Suche als FTS5-Ausdruck aus Wörtern in Anführungszeichen. `images_fts` halten
+  Trigger aktuell (Migration 6): Wer `images` oder `keywords` schreibt, muss nichts tun. Die
+  Auswahllisten kommen aus `library.facets` und nur, solange die Leiste offen ist (`useFacetten`).
+  Der Filter selbst lebt nur in der Sitzung (`lib/filter.ts`).
 - **Blocksatz (2.3b):** dieselbe Raster-Komponente; mit `seiten` (je Kennung Breite durch Höhe
   aus `library.queryGroups(…, true)`) baut sie die Zeilen mit `lib/blocksatz.ts` statt
   `zeilenBilden`: Zeilen samt Höhe und Breite je Bild. Höhen für den Virtualisierer, Lage der

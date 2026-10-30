@@ -10,6 +10,14 @@
 // Abschluss beider (gleiche Endung, Größe und Änderungszeit, eindeutig): Die alte Zeile übernimmt
 // den neuen Pfad und behält Kennung, Metadaten und Vorschaubild.
 
+import {
+  farblabelText,
+  filterAktiv,
+  filterBedingung,
+  type BildFilter,
+  type Facetten,
+  type FilterWert
+} from '@shared/bildFilter'
 import { dateiDatum } from '@shared/dates'
 import type { Grundfelder } from '@shared/grundfelder'
 import { pfadSchluessel } from '@shared/ordnerPruefen'
@@ -18,6 +26,7 @@ import { orderBy, unterordnerBereich, type OrdnerFilter, type Sortierung } from 
 import {
   gruppenAus,
   gruppenAusdruck,
+  gruppenTitel,
   type Gruppe,
   type GruppenArt,
   type ZeitStufe
@@ -518,6 +527,45 @@ export function kennungen(
   return abfragen(db, sortierung, filter, windows, null).map((z) => z.id)
 }
 
+/** Eine Abfrage der Galerie: Sortierung, Knoten, Gruppen, Blocksatz, Filter und Suche. */
+export interface Anfrage {
+  sortierung: Sortierung
+  ordner?: OrdnerFilter
+  gruppe?: { art: GruppenArt; stufe: ZeitStufe } | null
+  mitSeiten?: boolean
+  /** geprüft (`pruefeBildFilter`) */
+  bildFilter?: BildFilter
+}
+
+/**
+ * Kennungen samt Gruppen (2.3), Seitenverhältnissen (2.3b) und – bei aktivem Filter (2.4) – der
+ * Zahl der Bilder im Knoten ohne Filter („12 von 340“).
+ */
+export function abfrageAnsicht(
+  db: DB,
+  a: Anfrage,
+  windows = process.platform === 'win32'
+): { ids: number[]; gruppen: Gruppe[]; seiten?: number[]; gesamt?: number } {
+  const { art, stufe } = a.gruppe ?? { art: null, stufe: 'monat' as const }
+  const r = kennungenMitGruppen(
+    db,
+    a.sortierung,
+    a.ordner,
+    art,
+    stufe,
+    windows,
+    a.mitSeiten,
+    a.bildFilter
+  )
+  if (!filterAktiv(a.bildFilter)) return r
+  const knoten = knotenBedingung(a.ordner, windows)
+  const gesamt = db
+    .prepare(`SELECT count(*) FROM images WHERE ${knoten.sql}`)
+    .pluck()
+    .get(...knoten.werte) as number
+  return { ...r, gesamt }
+}
+
 /**
  * Wie `kennungen`, dazu die Gruppen (2.3) aus demselben Durchlauf – Liste und Gruppen passen so
  * immer zusammen. Der Schlüssel kommt aus einem festen Ausdruck (gruppen.ts).
@@ -529,7 +577,8 @@ export function kennungenMitGruppen(
   art: GruppenArt | null,
   stufe: ZeitStufe,
   windows = process.platform === 'win32',
-  mitSeiten = false
+  mitSeiten = false,
+  bildFilter?: BildFilter
 ): { ids: number[]; gruppen: Gruppe[]; seiten?: number[] } {
   const zeilen = abfragen(
     db,
@@ -537,7 +586,8 @@ export function kennungenMitGruppen(
     filter,
     windows,
     art ? gruppenAusdruck(art, stufe) : null,
-    mitSeiten
+    mitSeiten,
+    bildFilter
   )
   return {
     ids: zeilen.map((z) => z.id),
@@ -564,8 +614,36 @@ interface AbfrageZeile {
 }
 
 /**
+ * Bedingung für den gewählten Knoten: alle vorhandenen Bilder, ein Ordner oder ein Unterordner
+ * (Bereich auf dem Vergleichsschlüssel – nutzt den Index folder_id, rel_key; ohne Groß/Klein).
+ */
+function knotenBedingung(
+  filter: OrdnerFilter | undefined,
+  windows: boolean
+): { sql: string; werte: (string | number)[] } {
+  if (!filter) return { sql: "status != 'fehlt'", werte: [] }
+  if (!filter.pfad) return { sql: "status != 'fehlt' AND folder_id = ?", werte: [filter.ordner] }
+  const [von, bis] = unterordnerBereich(pfadSchluessel(filter.pfad, windows))
+  return {
+    sql: "status != 'fehlt' AND folder_id = ? AND rel_key >= ? AND rel_key < ?",
+    werte: [filter.ordner, von, bis]
+  }
+}
+
+/** Knoten und (geprüfter) Bild-Filter zusammen – Werte nur als Parameter. */
+function bedingung(
+  filter: OrdnerFilter | undefined,
+  windows: boolean,
+  bildFilter: BildFilter | undefined
+): { sql: string; werte: (string | number)[] } {
+  const k = knotenBedingung(filter, windows)
+  const f = bildFilter ? filterBedingung(bildFilter) : { sql: '', werte: [] }
+  return f.sql ? { sql: `${k.sql} AND ${f.sql}`, werte: [...k.werte, ...f.werte] } : k
+}
+
+/**
  * Geordnete Zeilen (Kennung, wahlweise Gruppen-Schlüssel und Maße für den Blocksatz) – ganz, je
- * Ordner oder Unterordner.
+ * Ordner oder Unterordner, wahlweise gefiltert (2.4).
  */
 function abfragen(
   db: DB,
@@ -573,32 +651,66 @@ function abfragen(
   filter: OrdnerFilter | undefined,
   windows: boolean,
   gruppe: string | null,
-  mitSeiten = false
+  mitSeiten = false,
+  bildFilter?: BildFilter
 ): AbfrageZeile[] {
   const spalten = [
     'id',
     gruppe ? `${gruppe} AS g` : 'NULL AS g',
     mitSeiten ? 'width AS w, height AS h' : 'NULL AS w, NULL AS h'
   ].join(', ')
-  const ordnung = `ORDER BY ${orderBy(sortierung)}`
-  if (!filter) {
-    return db
-      .prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' ${ordnung}`)
-      .all() as AbfrageZeile[]
-  }
-  if (!filter.pfad) {
-    return db
-      .prepare(`SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ? ${ordnung}`)
-      .all(filter.ordner) as AbfrageZeile[]
-  }
-  // Unterordner: Bereich auf dem Vergleichsschlüssel (Index folder_id, rel_key), ohne Groß/Klein
-  const [von, bis] = unterordnerBereich(pfadSchluessel(filter.pfad, windows))
+  const b = bedingung(filter, windows, bildFilter)
   return db
+    .prepare(`SELECT ${spalten} FROM images WHERE ${b.sql} ORDER BY ${orderBy(sortierung)}`)
+    .all(...b.werte) as AbfrageZeile[]
+}
+
+/** Höchstens so viele Werte je Auswahlliste der Filterleiste */
+const FACETTEN_MAX = 2000
+
+/**
+ * Was es im Knoten gibt (ohne Filter): Kameras, Orte, Stichwörter, Formate, Farblabel mit
+ * Anzahl, A–Z; dazu der früheste und späteste Aufnahmetag.
+ */
+export function facetten(
+  db: DB,
+  filter?: OrdnerFilter,
+  windows = process.platform === 'win32'
+): Facetten {
+  const k = knotenBedingung(filter, windows)
+  const liste = (ausdruck: string, titel: (w: string) => string): FilterWert[] =>
+    (
+      db
+        .prepare(
+          `SELECT ${ausdruck} AS wert, count(*) AS anzahl FROM images
+            WHERE ${k.sql} AND ${ausdruck} IS NOT NULL AND ${ausdruck} != ''
+            GROUP BY wert ORDER BY wert COLLATE NOCASE LIMIT ${FACETTEN_MAX}`
+        )
+        .all(...k.werte) as { wert: string; anzahl: number }[]
+    ).map((z) => ({ wert: z.wert, titel: titel(z.wert), anzahl: z.anzahl }))
+  const stichwoerter = (
+    db
+      .prepare(
+        `SELECT keyword AS wert, count(*) AS anzahl FROM keywords
+          WHERE image_id IN (SELECT id FROM images WHERE ${k.sql})
+          GROUP BY keyword ORDER BY keyword COLLATE NOCASE LIMIT ${FACETTEN_MAX}`
+      )
+      .all(...k.werte) as { wert: string; anzahl: number }[]
+  ).map((z) => ({ ...z, titel: z.wert }))
+  const zeitraum = db
     .prepare(
-      `SELECT ${spalten} FROM images WHERE status != 'fehlt' AND folder_id = ?
-          AND rel_key >= ? AND rel_key < ? ${ordnung}`
+      `SELECT substr(min(taken_at), 1, 10) AS von, substr(max(taken_at), 1, 10) AS bis
+         FROM images WHERE ${k.sql}`
     )
-    .all(filter.ordner, von, bis) as AbfrageZeile[]
+    .get(...k.werte) as { von: string | null; bis: string | null }
+  return {
+    kameras: liste(gruppenAusdruck('kamera', 'monat'), (w) => w),
+    orte: liste(gruppenAusdruck('ort', 'monat'), (w) => gruppenTitel('ort', w)),
+    stichwoerter,
+    formate: liste('coalesce(format, ext)', (w) => w.toUpperCase()),
+    farben: liste('color_label', farblabelText),
+    zeitraum
+  }
 }
 
 /** Unterordner je Bibliotheksordner mit der Zahl ihrer (direkten) Dateien – für den Ordnerbaum. */

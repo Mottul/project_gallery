@@ -2,6 +2,7 @@
 // bereitstellt. Einzige Quelle für main (Handler) und renderer (Aufruf); neue Fläche nach Skill
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
+import type { BildFilter, Facetten } from './bildFilter'
 import type { Gruppe, Gruppierung } from './gruppen'
 import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
@@ -29,6 +30,7 @@ export const Channels = {
   libraryRescan: 'library:rescan',
   libraryQuery: 'library:query',
   libraryQueryGroups: 'library:queryGroups',
+  libraryFacets: 'library:facets',
   libraryDetails: 'library:details',
   libraryDirs: 'library:dirs',
   librarySize: 'library:size',
@@ -64,15 +66,19 @@ export interface GalerieApi {
      *  Bibliotheksordner bzw. ein Unterordner samt allem darunter */
     query(sortierung: Sortierung, filter?: OrdnerFilter): Promise<number[]>
     /**
-     * Wie query, dazu die Gruppen-Überschriften (folgen der Sortierung; „aus“ = keine) und mit
-     * `seiten` je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt)
+     * Wie query, dazu die Gruppen-Überschriften (folgen der Sortierung; „aus“ = keine), mit
+     * `seiten` je Kennung das Seitenverhältnis für den Blocksatz (0 = unbekannt) und mit
+     * `bildFilter` nur die passenden Bilder (`gesamt` = Bilder im Knoten ohne Filter)
      */
     queryGroups(
       sortierung: Sortierung,
       filter: OrdnerFilter | undefined,
       gruppierung: Gruppierung,
-      seiten?: boolean
-    ): Promise<{ ids: number[]; gruppen: Gruppe[]; seiten?: number[] }>
+      seiten?: boolean,
+      bildFilter?: BildFilter
+    ): Promise<{ ids: number[]; gruppen: Gruppe[]; seiten?: number[]; gesamt?: number }>
+    /** Werte für die Auswahllisten der Filterleiste (Kameras, Orte, Stichwörter …) im Knoten */
+    facets(filter?: OrdnerFilter): Promise<Facetten>
     /** Details zu höchstens 1000 Kennungen (sichtbarer Ausschnitt), ohne Pfade */
     details(ids: number[]): Promise<ImageInfo[]>
     /** Unterordner je Bibliotheksordner mit Anzahl (Ordnerbaum) */
