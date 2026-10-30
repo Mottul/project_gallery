@@ -782,12 +782,12 @@ try {
           .getByRole('combobox', { name: 'Intervall der Diashow' })
           .selectOption('2')
         const vorher = await angezeigt()
-        await betrachter().getByRole('button', { name: 'Diashow' }).click()
+        await betrachter().getByRole('button', { name: 'Diashow', exact: true }).click()
         assert.ok(
           await waitFor(async () => (await angezeigt()) !== vorher, 5_000),
           'blättert nicht'
         )
-        await betrachter().getByRole('button', { name: 'Diashow' }).click()
+        await betrachter().getByRole('button', { name: 'Diashow', exact: true }).click()
         const jetzt = await angezeigt()
         await sleep(2_600)
         assert.equal(await angezeigt(), jetzt, 'blättert nach der Pause weiter')

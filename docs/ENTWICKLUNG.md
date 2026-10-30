@@ -178,6 +178,11 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   in einem Zug (gleicher `key` = gleiches `<img>`, kein zweites Laden). Ein kleiner Puffer
   (`Bildpuffer`) hält die Nachbarn vorgeladen und dekodiert; die Diashow wartet auf ihn. Zoom-
   Rechnung (Grenzen, Regler, Mausrad) rein in `lib/zoom.ts`, die Leiste in `galerie/Zoomleiste.tsx`.
+- **Diashow-Effekte (2.5):** Web-Animationen (`el.animate`), weil Dauer und Bahn je Bild anders sind.
+  Sie hängen am `<img>`: Solange sein `key` gleich bleibt, läuft die Bahn weiter, auch wenn das Bild
+  zur Ebene `vorher` wird. Eine Animation überschreibt den Transform aus `zoom` – deshalb hält
+  `kenBurns` an, sobald der Nutzer zoomt. Bahn rein in `shared/kenBurns.ts`; Phase 7 (Diashow als
+  Video) soll dieselbe rechnen. Einstellungen in `lib/diashow.ts`.
 - **Überwachen** (1.6): Der Bilddienst beobachtet lokale Ordner (`bilddienst/beobachter.ts`:
   `fs.watch` rekursiv, Pfade sammeln und zusammenfassen, „Ordner weg“ erkennen) und meldet
   Änderungen ohne Auftrag (`client.ts`: `onAenderung`, nach einem Absturz `onEnde`).

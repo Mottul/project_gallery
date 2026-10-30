@@ -8,7 +8,11 @@
 // Nachbarn werden vorgeladen und dekodiert (Puffer unten) – Chromium nimmt das vorgeladene Bild für
 // dieselbe Adresse wieder, trotz no-store (gemessen, e2e/betrachter.mjs). Die Diashow schaltet erst
 // weiter, wenn das nächste Bild bereit ist.
-// Bewertung, Drehen und das volle Info-Panel (Ort, Histogramm) kommen mit Phase 2.
+//
+// Diashow-Effekte (Phase 2.5): Überblenden und Ken Burns als Web-Animationen auf den Ebenen, nur
+// solange die Diashow läuft. Das alte Bild bleibt dafür als eigene Ebene (`vorher`) stehen und fährt
+// seine Bahn zu Ende. Der gleiche Schlüssel hält dabei dasselbe <img> – samt laufender Animation.
+// Bewertung und Drehen kommen mit Phase 3.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowLeft,
@@ -22,18 +26,33 @@ import {
   Play,
   Trash2
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent
+} from 'react'
 import { api } from '@renderer/lib/api'
+import {
+  diashowAendern,
+  DIASHOW_INTERVALLE,
+  UEBERBLENDEN_MS,
+  useDiashowWahl,
+  useWenigBewegung
+} from '@renderer/lib/diashow'
 import { zahl } from '@renderer/lib/format'
 import { cn, errorText } from '@renderer/lib/utils'
 import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
 import { bildUrl } from '@shared/bild'
+import { kenBurnsBahn, kenBurnsFrames, type KenBurnsBahn } from '@shared/kenBurns'
 import type { ImageInfo } from '@shared/types'
+import { DiashowMenue } from './DiashowMenue'
 import { InfoPanel } from './InfoPanel'
 import { Vorschaubild } from './Vorschaubild'
 import { Zoomleiste } from './Zoomleiste'
 
-const DIASHOW_INTERVALLE = [2, 3, 5, 10]
 const FILM = 72
 /** Rand über und unter den Bildern im Filmstreifen (Platz für den Rahmen des gewählten) */
 const FILM_RAND = 8
@@ -57,6 +76,10 @@ interface Gezeigt {
 }
 
 const schluessel = (b: { id: number; mtime: number }): string => `${b.id}:${b.mtime}`
+
+/** Das <img> eines Bildes auf der Bühne */
+const ebene = (buehne: HTMLElement | null, k: string): HTMLImageElement | null =>
+  buehne?.querySelector<HTMLImageElement>(`img[data-ebene="${k}"]`) ?? null
 
 /**
  * Vorgeladene, dekodierte Originale der Nachbarn. Das Image-Objekt bleibt hier, solange der
@@ -203,7 +226,11 @@ export function Betrachter({
   const [laedtLange, setLaedtLange] = useState(false)
   const [info, setInfo] = useState(false)
   const [diashow, setDiashow] = useState(false)
-  const [intervall, setIntervall] = useState(3)
+  const wahl = useDiashowWahl()
+  const { intervall } = wahl
+  const wenigBewegung = useWenigBewegung()
+  /** Das Bild, das gerade ausgeblendet wird; liegt unter dem gezeigten */
+  const [vorher, setVorher] = useState<Gezeigt | null>(null)
   const [vollbild, setVollbild] = useState(false)
   const [hinweis, setHinweis] = useState<string | null>(null)
   const wurzel = useRef<HTMLDivElement>(null)
@@ -220,6 +247,11 @@ export function Betrachter({
   const ziel = bild ? schluessel(bild) : null
   const zielRef = useRef(ziel)
   zielRef.current = ziel
+  const gezeigtRef = useRef(gezeigt)
+  gezeigtRef.current = gezeigt
+  const ueberblenden = diashow && wahl.uebergang === 'ueberblenden' && !wenigBewegung
+  const ueberblendenRef = useRef(ueberblenden)
+  ueberblendenRef.current = ueberblenden
   const gk = gezeigt ? schluessel(gezeigt) : null
   const bereit = ziel !== null && ziel === gk
 
@@ -249,6 +281,7 @@ export function Betrachter({
   const geladen = useCallback(async (img: HTMLImageElement, b: ImageInfo): Promise<void> => {
     await img.decode().catch(() => {})
     if (zielRef.current !== schluessel(b)) return // inzwischen weitergeblättert
+    setVorher(ueberblendenRef.current ? gezeigtRef.current : null)
     setGezeigt({
       id: b.id,
       mtime: b.mtime,
@@ -319,10 +352,72 @@ export function Betrachter({
     else void wurzel.current?.requestFullscreen()
   }, [])
 
-  const passend =
-    gezeigt && buehne.w && buehne.h ? Math.min(1, buehne.w / gezeigt.w, buehne.h / gezeigt.h) : 1
+  /** Maßstab, mit dem ein Bild ganz auf die Bühne passt */
+  const fit = useCallback(
+    (g: Gezeigt): number =>
+      buehne.w && buehne.h ? Math.min(1, buehne.w / g.w, buehne.h / g.h) : 1,
+    [buehne.w, buehne.h]
+  )
+  const passend = gezeigt ? fit(gezeigt) : 1
   const skala = zoom.art === 'anpassen' ? passend : zoom.s
   const verschoben = zoom.art === 'frei' ? { x: zoom.x, y: zoom.y } : { x: 0, y: 0 }
+
+  // Überblenden: Das neue kommt linear herein; das alte bleibt die erste Hälfte voll stehen, sonst
+  // schiene dazwischen die Bühne durch (beide halb durchsichtig), und geht dann, statt am Ende an
+  // den Rändern wegzuspringen, wo es über das neue hinausragt.
+  useLayoutEffect(() => {
+    if (!vorher || !gk) return
+    const dauer = { duration: UEBERBLENDEN_MS, easing: 'linear' }
+    ebene(buehneRef.current, gk)?.animate([{ opacity: 0 }, { opacity: 1 }], dauer)
+    ebene(buehneRef.current, schluessel(vorher))?.animate(
+      [
+        { opacity: 1, offset: 0 },
+        { opacity: 1, offset: 0.5 },
+        { opacity: 0, offset: 1 }
+      ],
+      { ...dauer, fill: 'forwards' }
+    )
+    const t = setTimeout(() => setVorher(null), UEBERBLENDEN_MS)
+    return () => clearTimeout(t)
+  }, [vorher, gk])
+
+  // Ken Burns: läuft, bis das Bild ganz ausgeblendet ist, und hält sonst am Ende an. Wer selbst
+  // zoomt, hält ihn an – die Bewegung darf nicht gegen den Nutzer arbeiten.
+  const kenBurns = diashow && wahl.kenBurns === 'auto' && !wenigBewegung && zoom.art === 'anpassen'
+  const kb = useRef<{ key: string; bahn: KenBurnsBahn; anim: Animation } | null>(null)
+  const indexRef = useRef(index)
+  indexRef.current = index
+  useLayoutEffect(() => {
+    const el = gk ? ebene(buehneRef.current, gk) : null
+    if (!kenBurns || !el || !gezeigt || !gk || !buehne.w || !buehne.h) return
+    if (kb.current?.key === gk) {
+      // Bühne geändert (Vollbild, Info): dieselbe Bahn im neuen Maßstab, die Zeit läuft weiter
+      const wirkung = kb.current.anim.effect as KeyframeEffect
+      wirkung.setKeyframes(kenBurnsFrames(kb.current.bahn, gezeigt, passend))
+      return
+    }
+    const bahn = kenBurnsBahn(indexRef.current, wahl.staerke, gezeigt, buehne)
+    const anim = el.animate(kenBurnsFrames(bahn, gezeigt, passend), {
+      duration: intervall * 1000 + UEBERBLENDEN_MS,
+      easing: 'linear',
+      fill: 'forwards'
+    })
+    kb.current = { key: gk, bahn, anim }
+  }, [kenBurns, gk, gezeigt, passend, buehne, wahl.staerke, intervall])
+
+  // Angehalten: vom aktuellen Stand sanft zurück in die normale Lage
+  useLayoutEffect(() => {
+    const k = kb.current
+    if (kenBurns || !k) return
+    kb.current = null
+    const el = ebene(buehneRef.current, k.key)
+    const von = el && getComputedStyle(el).transform
+    k.anim.cancel()
+    if (el && von) {
+      const nach = getComputedStyle(el).transform
+      el.animate([{ transform: von }, { transform: nach }], { duration: 150, easing: 'ease-out' })
+    }
+  }, [kenBurns])
 
   /** Zoomen um den Punkt (px, py) relativ zur Bühnenmitte – er bleibt unter dem Mauszeiger. */
   const zoomen = useCallback(
@@ -475,7 +570,7 @@ export function Betrachter({
           <select
             aria-label="Intervall der Diashow"
             value={intervall}
-            onChange={(e) => setIntervall(Number(e.target.value))}
+            onChange={(e) => diashowAendern({ intervall: Number(e.target.value) })}
             className="h-8 rounded-md border border-border bg-background px-1 text-xs"
           >
             {DIASHOW_INTERVALLE.map((s) => (
@@ -484,6 +579,7 @@ export function Betrachter({
               </option>
             ))}
           </select>
+          <DiashowMenue knopf={knopf} />
           <button
             type="button"
             className={knopf}
@@ -550,9 +646,26 @@ export function Betrachter({
             />
           )}
           {[
+            vorher && schluessel(vorher) !== gk && (
+              <img
+                key={schluessel(vorher)}
+                data-ebene={schluessel(vorher)}
+                src={bildUrl(vorher.id, vorher.mtime)}
+                alt=""
+                aria-hidden
+                draggable={false}
+                className="absolute left-1/2 top-1/2 max-w-none select-none"
+                style={{
+                  width: vorher.w,
+                  height: vorher.h,
+                  transform: `translate(-50%, -50%) scale(${fit(vorher)})`
+                }}
+              />
+            ),
             alt && (
               <img
                 key={schluessel(alt)}
+                data-ebene={schluessel(alt)}
                 src={bildUrl(alt.id, alt.mtime)}
                 alt={alt.name}
                 draggable={false}

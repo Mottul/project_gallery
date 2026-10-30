@@ -13,11 +13,12 @@ dem Plan, je ein PR gegen `main`; 1.1 (Index, Bilddienst, Ordner), 1.2 (Grundfel
 Sortieren), 1.3 (Vorschaubilder, verschlüsselter Cache, `thumb://`), 1.4 (Galerie-Oberfläche:
 Ordnerbaum, virtualisiertes Raster, Liste, Auswahl, Ordner per Drag & Drop), 1.5 (Betrachter,
 `bild://`, Papierkorb; Feinschliff nach Rückmeldung: Bildwechsel ohne Blitzer, Zoom-Regler) und
-1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). **Phase 2 läuft**
+1.6 (Überwachen, Abnahme mit 50.000 Bildern, Sandbox mit Testbildern). **Phase 2 umgesetzt**
 (Metadaten lesen, Filtern, Suchen; Teilschritte 2.1–2.5 im Plan); 2.1 (alle Metadaten, Info-Panel,
 Fehlende entfernen), 2.2 (Orte offline, Sortieren nach Ort A–Z) und 2.3 (weitere Sortierfelder,
-Gruppen-Überschriften in Raster und Liste), 2.3b (Blocksatz), 2.4 (Filterleiste, Volltextsuche)
-und 2.4b (gespeicherte Ansichten) sind umgesetzt. Grundlage ist
+Gruppen-Überschriften in Raster und Liste), 2.3b (Blocksatz), 2.4 (Filterleiste, Volltextsuche),
+2.4b (gespeicherte Ansichten) und 2.5 (Diashow mit Überblenden und Ken Burns). Als Nächstes
+Phase 3 (Metadaten bearbeiten). Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -98,7 +99,8 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
 - **Betrachter:** `renderer/src/galerie/Betrachter.tsx`; Original über `bild://id/<kennung>`
   (`services/protocols/bild.ts`, Nachschlagen und Prüfen in `library/anzeige.ts`, TIFF als
   Umrechnung aus dem Bilddienst, nur im Arbeitsspeicher); Bildwechsel über zwei Ebenen (das alte
-  Bild bleibt, bis das neue dekodiert ist), Zoom rein in `lib/zoom.ts`. Eigene Protokolle nur in
+  Bild bleibt, bis das neue dekodiert ist), Zoom rein in `lib/zoom.ts`, Diashow-Effekte als
+  Web-Animationen (Bahn rein in `shared/kenBurns.ts`, Einstellungen in `lib/diashow.ts`). Eigene Protokolle nur in
   `protocols/schemata.ts` anmelden. Vor jedem Lesen einer Nutzerdatei `dateien/pruefeDatei.ts`.
   Papierkorb nur über `inPapierkorb` (`library.ts`: Rückfrage, nie „nur lesen“, `shell.trashItem`).
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
