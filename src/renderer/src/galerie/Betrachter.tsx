@@ -14,7 +14,9 @@
 // seine Bahn zu Ende. Der gleiche Schlüssel hält dabei dasselbe <img> – samt laufender Animation.
 //
 // Schnellbewertung (Phase 3.1; entschieden 30.10.2026): Tasten 0–5 und 6–9 schreiben sofort in die
-// Datei, „Rückgängig“ (auch Strg+Z) nimmt es zurück. Drehen kommt mit 3.4.
+// Datei, „Rückgängig“ (auch Strg+Z) nimmt es zurück. Das Bearbeiten-Panel (3.2, Taste E) liest aus
+// der Datei; solange es Ungespeichertes hält, lässt der Betrachter nicht weiterblättern. Drehen
+// kommt mit 3.4.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowLeft,
@@ -50,10 +52,17 @@ import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
 import { bildUrl } from '@shared/bild'
 import { farblabelText } from '@shared/bildFilter'
 import { kenBurnsBahn, kenBurnsFrames, type KenBurnsBahn } from '@shared/kenBurns'
-import type { Farblabel, MetaAenderung } from '@shared/metaFields'
+import {
+  schreibbar,
+  type Farblabel,
+  type MetaAenderung,
+  type SchreibBericht
+} from '@shared/metaFields'
 import type { ImageInfo } from '@shared/types'
+import { useLibrary } from '@renderer/lib/library'
 import { DiashowMenue } from './DiashowMenue'
 import { InfoPanel } from './InfoPanel'
+import { MetaFormular } from './MetaFormular'
 import { Vorschaubild } from './Vorschaubild'
 import { Zoomleiste } from './Zoomleiste'
 
@@ -252,6 +261,12 @@ export function Betrachter({
   const [hinweis, setHinweis] = useState<string | null>(null)
   /** Gerade gespeichert: Text und was „Rückgängig“ zurücknimmt */
   const [rueck, setRueck] = useState<{ text: string; journal: number[] } | null>(null)
+  const [bearbeiten, setBearbeiten] = useState(false)
+  const bearbeitenRef = useRef(bearbeiten)
+  bearbeitenRef.current = bearbeiten
+  /** Das Panel hält Ungespeichertes */
+  const ungespeichert = useRef(false)
+  const lib = useLibrary()
   const wurzel = useRef<HTMLDivElement>(null)
   const buehneRef = useRef<HTMLDivElement>(null)
   const puffer = useRef(new Bildpuffer())
@@ -331,9 +346,20 @@ export function Betrachter({
     return () => ro.disconnect()
   }, [])
 
+  /** Ungespeichertes im Panel: nicht weg, sondern sagen, was zu tun ist. */
+  const gesperrt = useCallback((): boolean => {
+    if (ungespeichert.current) setHinweis('Bitte erst in die Datei schreiben oder abbrechen.')
+    return ungespeichert.current
+  }, [])
+  const schliessen = useCallback(() => {
+    if (!gesperrt()) onSchliessen(idRef.current)
+  }, [gesperrt, onSchliessen])
+
   const gehe = useCallback(
-    (i: number) => setIndex(Math.max(0, Math.min(ids.length - 1, i))),
-    [ids.length]
+    (i: number) => {
+      if (!gesperrt()) setIndex(Math.max(0, Math.min(ids.length - 1, i)))
+    },
+    [ids.length, gesperrt]
   )
 
   // Diashow: steht das Bild (oder ließ es sich nicht zeigen), nach dem Intervall weiter – aber erst,
@@ -490,7 +516,7 @@ export function Betrachter({
   }
 
   const papierkorb = useCallback(async (): Promise<void> => {
-    if (id === undefined) return
+    if (id === undefined || gesperrt()) return
     setDiashow(false)
     try {
       const r = await api.library.trash([id])
@@ -501,7 +527,7 @@ export function Betrachter({
     } catch (err) {
       setHinweis(errorText(err))
     }
-  }, [id])
+  }, [id, gesperrt])
 
   const aendern = useCallback(async (a: MetaAenderung, text: string): Promise<void> => {
     const kennung = idRef.current
@@ -535,11 +561,52 @@ export function Betrachter({
     return () => clearTimeout(t)
   }, [rueck])
 
+  /** Warum sich das Bild nicht bearbeiten lässt; null = es geht */
+  const bearbeitenGesperrt = !bild
+    ? 'Das Bild wird noch geladen.'
+    : lib?.folders.find((f) => f.id === bild.folderId)?.mode === 'nur-lesen'
+      ? 'Der Ordner steht auf „nur lesen“.'
+      : bild.format === null
+        ? 'Die Metadaten werden noch gelesen.'
+        : !schreibbar(bild.format)
+          ? `In ${bild.format.toUpperCase()}-Dateien lässt sich nichts schreiben.`
+          : null
+  const bearbeitungOeffnen = useCallback(() => {
+    if (bearbeitenGesperrt) {
+      setHinweis(bearbeitenGesperrt)
+      return
+    }
+    setDiashow(false)
+    setHinweis(null)
+    setBearbeiten(true)
+  }, [bearbeitenGesperrt])
+
+  const gespeichert = useCallback((r: SchreibBericht<ImageInfo>) => {
+    ungespeichert.current = false
+    listeRef.current.details.setzen(r.geschrieben)
+    setBearbeiten(false)
+    setInfo(true)
+    setHinweis(null)
+    setRueck({ text: 'In die Datei geschrieben', journal: r.journal })
+  }, [])
+  const geaendert = useCallback((ja: boolean) => {
+    ungespeichert.current = ja
+    if (!ja) setHinweis(null)
+  }, [])
+  const abbrechen = useCallback(() => {
+    ungespeichert.current = false
+    setBearbeiten(false)
+  }, [])
+
   // Tasten (nur solange der Betrachter offen ist; nicht in Auswahl und Regler)
   useEffect(() => {
     const taste = (e: KeyboardEvent): void => {
       const tag = (e.target as HTMLElement)?.tagName
-      if (tag === 'SELECT' || tag === 'INPUT') return
+      if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return
+      // im Panel gelten die Tasten des Panels; blättern geht weiter
+      if (bearbeitenRef.current && !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) {
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (rueck) void rueckgaengig(rueck.journal)
@@ -572,10 +639,11 @@ export function Betrachter({
         '-': () => zoomen(1 / ZOOM_SCHRITT),
         ' ': () => setDiashow((d) => !d),
         i: () => setInfo((v) => !v),
+        e: () => bearbeitungOeffnen(),
         F11: vollbildUmschalten,
         Delete: () => void papierkorb(),
         Escape: () => {
-          if (!document.fullscreenElement) onSchliessen(idRef.current)
+          if (!document.fullscreenElement) schliessen()
         }
       }
       const f = Object.hasOwn(weiter, e.key) ? weiter[e.key] : undefined
@@ -592,11 +660,12 @@ export function Betrachter({
     zoomen,
     vollbildUmschalten,
     papierkorb,
-    onSchliessen,
+    schliessen,
     aendern,
     rueckgaengig,
     rueck,
-    bild?.colorLabel
+    bild?.colorLabel,
+    bearbeitungOeffnen
   ])
 
   const knopf =
@@ -619,7 +688,7 @@ export function Betrachter({
         <button
           type="button"
           className={knopf}
-          onClick={() => onSchliessen(idRef.current)}
+          onClick={schliessen}
           aria-label="Zurück zur Galerie"
         >
           <ArrowLeft className="size-4" aria-hidden />
@@ -653,6 +722,7 @@ export function Betrachter({
             type="button"
             className={knopf}
             aria-pressed={diashow}
+            disabled={bearbeiten}
             onClick={() => setDiashow((d) => !d)}
           >
             {diashow ? (
@@ -833,7 +903,24 @@ export function Betrachter({
             <ChevronRight className="size-5" aria-hidden />
           </button>
         </div>
-        {info && bild && <InfoPanel bild={bild} />}
+        {bearbeiten && bild ? (
+          <MetaFormular
+            key={bild.id}
+            bild={bild}
+            onGespeichert={gespeichert}
+            onAbbrechen={abbrechen}
+            onGeaendert={geaendert}
+          />
+        ) : (
+          info &&
+          bild && (
+            <InfoPanel
+              bild={bild}
+              gesperrt={bearbeitenGesperrt}
+              onBearbeiten={bearbeitungOeffnen}
+            />
+          )
+        )}
       </div>
 
       <Filmstreifen ids={ids} index={index} details={details} onWahl={gehe} />

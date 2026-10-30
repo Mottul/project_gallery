@@ -123,11 +123,11 @@ function ersterText(werte: unknown[], max: number): string | null {
 }
 
 /** Höchstens so viele Stichwörter je Datei, je höchstens so lang */
-const STICHWORT_MAX = 200
-const STICHWORT_LAENGE = 100
+export const STICHWORT_MAX = 200
+export const STICHWORT_LAENGE = 100
 
 /** Stichwörter aus XMP, IPTC und Windows (XPKeywords, „;“-getrennt) – zusammengeführt, ohne Doppelte. */
-function stichwoerterAus(r: Record<string, unknown>): string[] {
+export function stichwoerterAus(r: Record<string, unknown>): string[] {
   const roh = [r['XMP:Subject'], r['IPTC:Keywords']].flatMap((v) => (Array.isArray(v) ? v : [v]))
   const xp = r['EXIF:XPKeywords']
   if (typeof xp === 'string') roh.push(...xp.split(';'))
@@ -144,7 +144,7 @@ function stichwoerterAus(r: Record<string, unknown>): string[] {
 }
 
 /** Standort: Composite (EXIF mit Ref, vorzeichenrichtig) vor XMP; 0/0 gilt als keiner. */
-function gpsAus(r: Record<string, unknown>): Grundfelder['gps'] {
+export function gpsAus(r: Record<string, unknown>): Grundfelder['gps'] {
   const breite = zahl(r['Composite:GPSLatitude'], -90, 90) ?? zahl(r['XMP:GPSLatitude'], -90, 90)
   const laenge =
     zahl(r['Composite:GPSLongitude'], -180, 180) ?? zahl(r['XMP:GPSLongitude'], -180, 180)

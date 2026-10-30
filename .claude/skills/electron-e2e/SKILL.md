@@ -26,7 +26,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
 | `filter.mjs` | Filter und Suche exakt gegen die Testbilder, Ungültiges abgelehnt, Suchfeld, Filterleiste (Liste ganz sichtbar), Chips, „N von M“, Filter über Ordner/Ansichten/Betrachter, nach Neuladen weg, Suchindex folgt den Dateien, Log ohne Suchbegriffe |
 | `ansichten.mjs` | Speichern über die Filterleiste, Öffnen stellt Ordner, Darstellung, Sortierung, Gruppen, Größe, Filter und Suche wieder her, Ersetzen nur ausdrücklich, Ungültiges abgelehnt, nach dem Neustart nicht aktiv, Löschen mit Rückfrage, entfernter Ordner nimmt seine Ansichten mit, Log ohne Namen |
-| `metadaten.mjs` | Schnellbewertung: Werte unabhängig von der App mit ExifTool nachgelesen, Pixel gleich, Rückgängig, Sicherung einmal und bytegleich, Konflikt bei Änderung von außen, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen, Log ohne Werte, keine Nachbardatei; ab 3.2 Panel, ab 3.3 mehrfach |
+| `metadaten.mjs` | Schnellbewertung und Bearbeiten-Panel: Werte unabhängig von der App mit ExifTool nachgelesen, Pixel gleich, nur Geändertes geschrieben, Rückgängig, Sicherung einmal und bytegleich, Konflikt bei Änderung von außen, Ungespeichertes, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen, Log ohne Werte, keine Nachbardatei; ab 3.3 mehrfach |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |
 | `paket.mjs` | gepackte App: Start aus `app.asar`, sharp aus `app.asar.unpacked`, ExifTool aus `resources/` |
@@ -104,6 +104,10 @@ try {
   Sicherungen (Windows: `<userData>/lokal/Galeria Beata Sicherungen`, Linux-CI: `<userData>/lokal
   Sicherungen`). Ein E2E, das beim ersten Mal grün ist,
   beweist nichts: Gegenproben im main und im Dienst.
+- **Formulare** (3.2): `getByLabel` fand das `<textarea>` in einem `<label>` nicht, `getByRole('textbox',
+  { name })` schon. `datetime-local` lässt volle Sekunden im Wert weg. Ändert ein Test eine Datei
+  von außen, antwortet ein Abruf in der Lücke bis zum Abgleich 409 – das ist ein Konsolenfehler, also
+  gezielt ausnehmen, nicht alle.
 - **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
   Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
 - **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter

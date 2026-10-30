@@ -1,40 +1,48 @@
 import { describe, expect, it } from 'vitest'
-import { schreibArgumente, tagArgument } from './args'
+import { schreibArgumente, tagArgumente } from './args'
+
+const eins = (t: Parameters<typeof tagArgumente>[0]): string => tagArgumente(t)[0]
 
 const P = process.platform === 'win32' ? 'C:\\b\\' : '/b/'
 
-describe('tagArgument', () => {
+describe('tagArgumente', () => {
   it('schreibt jeden Wert als C-Zeichenkette in eine Zeile', () => {
-    expect(tagArgument({ tag: 'XMP-xmp:Rating', wert: 4 })).toBe('#[CSTR]-XMP-xmp:Rating=4')
-    expect(tagArgument({ tag: 'XMP-dc:Title', wert: 'Süden 🌞' })).toBe(
-      '#[CSTR]-XMP-dc:Title=Süden 🌞'
-    )
+    expect(eins({ tag: 'XMP-xmp:Rating', wert: 4 })).toBe('#[CSTR]-XMP-xmp:Rating=4')
+    expect(eins({ tag: 'XMP-dc:Title', wert: 'Süden 🌞' })).toBe('#[CSTR]-XMP-dc:Title=Süden 🌞')
   })
 
   it('ohne Wert wird der Tag entfernt', () => {
-    expect(tagArgument({ tag: 'XMP-xmp:Label', wert: null })).toBe('#[CSTR]-XMP-xmp:Label=')
+    expect(eins({ tag: 'XMP-xmp:Label', wert: null })).toBe('#[CSTR]-XMP-xmp:Label=')
   })
 
   it('ein Zeilenumbruch im Wert wird nie zu einem neuen Argument', () => {
-    const a = tagArgument({ tag: 'XMP-dc:Description', wert: 'x\n-delete_original\r\n-all=' })
+    const a = eins({ tag: 'XMP-dc:Description', wert: 'x\n-delete_original\r\n-all=' })
     expect(a).not.toMatch(/[\r\n]/)
     expect(a).toBe('#[CSTR]-XMP-dc:Description=x\\n-delete_original\\r\\n-all=')
   })
 
   it('Backslash und Tabulator bleiben Text', () => {
-    expect(tagArgument({ tag: 'XMP-dc:Title', wert: 'C:\\neu\tx' })).toBe(
+    expect(eins({ tag: 'XMP-dc:Title', wert: 'C:\\neu\tx' })).toBe(
       '#[CSTR]-XMP-dc:Title=C:\\\\neu\\tx'
     )
   })
 
+  it('eine Liste ergibt je Wert ein Argument, leer entfernt den Tag', () => {
+    expect(tagArgumente({ tag: 'XMP-dc:Subject', wert: ['Meer', 'a\nb'] })).toEqual([
+      '#[CSTR]-XMP-dc:Subject=Meer',
+      '#[CSTR]-XMP-dc:Subject=a\\nb'
+    ])
+    expect(tagArgumente({ tag: 'XMP-dc:Subject', wert: [] })).toEqual(['#[CSTR]-XMP-dc:Subject='])
+  })
+
   it('verweigert Tag-Namen, die nicht aus der Zuordnung kommen können', () => {
     for (const tag of ['Title', '-all', 'XMP-dc:Title=x', 'a:b c', '']) {
-      expect(() => tagArgument({ tag, wert: 'x' })).toThrow('Tag-Name')
+      expect(() => eins({ tag, wert: 'x' })).toThrow('Tag-Name')
     }
   })
 
   it('verweigert Steuerzeichen im Wert', () => {
-    expect(() => tagArgument({ tag: 'XMP-dc:Title', wert: 'a\u0000b' })).toThrow('Steuerzeichen')
+    expect(() => eins({ tag: 'XMP-dc:Title', wert: 'a\u0000b' })).toThrow('Steuerzeichen')
   })
 })
 

@@ -28,8 +28,12 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
   So kennt das Journal je Tag den alten Wert, und die Nachprüfung vergleicht genau das Geschriebene.
   Was je Format geht, ist gemessen (`scripts/labor/exiftool-schreiben.mjs`). **Neues Feld zuerst
   dort messen**, auch im Explorer (`System.Title` usw. über die Shell) – erst dann gilt es.
-- **Grenzen der Formate beachten** (beide gemessen): IPTC `ObjectName` höchstens 64 Bytes – was nicht
-  passt, schnitte ExifTool ab, darum dort entfernen; XP-Felder speichern keine Emoji.
+- **Grenzen der Formate beachten** (gemessen): IPTC begrenzt die Länge je Feld in Bytes – was nicht
+  passt, schnitte ExifTool ab, darum dort entfernen (`IPTC_MAX`); XP-Felder speichern keine Emoji, ein
+  Stichwort mit Emoji fehlt dort ganz, weil es gekürzt als zweites zurückkäme. Stichwörter stehen in
+  XMP, IPTC und XP und werden beim Lesen zusammengeführt: Ersetzen muss alle drei schreiben.
+- **Neues Feld:** in `VOLL` von `schreiben.lab.test.ts`. Dort muss es in allen Formaten durch den
+  Schreibweg und aus `werteAus` und `grundfelderAus` genau so wieder herauskommen.
 - **Mehrfachauswahl:** nur geänderte Felder schreiben; Stichwörter als Hinzufügen/Entfernen
   (`-Keywords+=`/`-Keywords-=`), nie die Liste der ersten Datei auf alle kopieren.
 - **Lesen für den Index** mit `-json -n -G0` (Zahlen statt Text; Tags fest in

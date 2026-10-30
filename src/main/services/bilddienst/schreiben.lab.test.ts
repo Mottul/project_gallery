@@ -16,7 +16,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { abweichend, alteWerte, tagsFuer, type MetaAenderung } from '@shared/metaFields'
+import { grundfelderAus } from '@shared/grundfelder'
+import {
+  abweichend,
+  alteWerte,
+  tagsFuer,
+  werteAus,
+  WERTE_TAGS,
+  type MetaAenderung
+} from '@shared/metaFields'
 import { zwischenName } from '@shared/scanRegeln'
 import { ExifToolPool, leseTags } from '../exiftool/exiftool'
 import type { SchreibErgebnis } from './protokoll'
@@ -98,12 +106,21 @@ describe.skipIf(!existsSync(BIN))('Schreibweg (Labor)', () => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   })
 
-  const VOLL: MetaAenderung = {
+  const VOLL = {
     bewertung: 4,
     farblabel: 'Red',
     titel: 'Süden 🌞 "x" \\ #1',
-    beschreibung: 'erste Zeile\nzweite Zeile mit ä'
-  }
+    beschreibung: 'erste Zeile\nzweite Zeile mit ä',
+    stichwoerter: ['Meer', 'Süden 🌞', 'Familie'],
+    aufnahme: { lokal: '2021-06-05T14:03:02', offset: '+02:00' },
+    standort: { breite: -33.8568, laenge: 151.2153 },
+    ort: 'Köln',
+    region: 'Nordrhein-Westfalen',
+    land: 'Deutschland',
+    ortsteil: 'Altstadt',
+    urheber: 'Testperson Ä',
+    copyright: '© 2021 Testperson'
+  } satisfies MetaAenderung
 
   it.each(Object.keys(FORMATE))(
     '%s: Werte stehen drin, Pixel gleich, kein Rest',
@@ -124,6 +141,117 @@ describe.skipIf(!existsSync(BIN))('Schreibweg (Labor)', () => {
       }
     }
   )
+
+  it.each(Object.keys(FORMATE))(
+    '%s: Was hineinging, kommt als dieselben Felder heraus',
+    async (f) => {
+      const p = await neu(f)
+      expect(await schreiben(p, VOLL, f)).toMatchObject({ ok: true })
+      const r = await leseTags(
+        pool,
+        [p],
+        WERTE_TAGS.map((t) => `-${t.tag}`)
+      )
+      expect(werteAus(r.get(p) as Record<string, unknown>)).toEqual(VOLL)
+    }
+  )
+
+  it.each(Object.keys(FORMATE))('%s: Der Index liest dasselbe', async (f) => {
+    const p = await neu(f)
+    const r = await schreiben(p, VOLL, f)
+    if (!r.ok) throw new Error(r.code)
+    const g = grundfelderAus(r.roh, { btime: null, mtime: r.mtime })
+    expect(g.bewertung).toBe(4)
+    expect(g.stichwoerter).toEqual(VOLL.stichwoerter)
+    expect(g.aufnahme.lokal).toBe(VOLL.aufnahme.lokal)
+    expect(g.aufnahme.offset).toBe(VOLL.aufnahme.offset)
+    expect(g.gps?.breite).toBeCloseTo(VOLL.standort.breite, 5)
+    expect(g.gps?.laenge).toBeCloseTo(VOLL.standort.laenge, 5)
+    expect(g.ortMeta?.name).toBe('Köln')
+  })
+
+  it('Standort entfernen: kein GPS-Tag bleibt, auch keiner, den die App nicht zeigt', async () => {
+    const p = await neu()
+    await schreibe(
+      {
+        datei: datei(p),
+        tags: [
+          { tag: 'EXIF:GPSLatitude', wert: 42.65 },
+          { tag: 'EXIF:GPSLatitudeRef', wert: 'N' },
+          { tag: 'EXIF:GPSLongitude', wert: 18.09 },
+          { tag: 'EXIF:GPSLongitudeRef', wert: 'E' },
+          { tag: 'EXIF:GPSAltitude', wert: 12 },
+          { tag: 'EXIF:GPSImgDirection', wert: 90 },
+          { tag: 'EXIF:GPSDateStamp', wert: '2021:06:05' },
+          { tag: 'XMP-exif:GPSLatitude', wert: 42.65 },
+          { tag: 'XMP-exif:GPSLongitude', wert: 18.09 }
+        ],
+        sicherung: null,
+        zwischen: zwischenName(p, ++nr)
+      },
+      pool
+    )
+    const pix = await pixel(p)
+    const alles = await pool.ausfuehren(['-json', '-n', '-G0', '-a', p])
+    expect(alles.ausgabe).toContain('GPSImgDirection')
+    expect(await schreiben(p, { standort: null })).toMatchObject({ ok: true })
+    const danach = await pool.ausfuehren(['-json', '-n', '-G0', '-a', p])
+    expect(danach.ausgabe).not.toMatch(/GPS/)
+    expect(await pixel(p)).toBe(pix)
+  })
+
+  it('Rückgängig bringt Listen und GPS zurück', async () => {
+    const p = await neu()
+    await schreiben(p, { stichwoerter: ['alt', 'älter'], standort: { breite: 1.5, laenge: 2.5 } })
+    const a: MetaAenderung = { stichwoerter: ['neu'], standort: null }
+    const vorher = alteWerte(tagsFuer(a, 'jpeg'), await lesen(p, a))
+    expect(await schreiben(p, a)).toMatchObject({ ok: true })
+    const r = await schreibe(
+      { datei: datei(p), tags: vorher, sicherung: null, zwischen: zwischenName(p, ++nr) },
+      pool
+    )
+    expect(r).toMatchObject({ ok: true })
+    if (!r.ok) return
+    const g = grundfelderAus(r.roh, { btime: null, mtime: r.mtime })
+    expect(g.stichwoerter).toEqual(['alt', 'älter'])
+    expect(g.gps?.breite).toBeCloseTo(1.5, 5)
+    expect(g.gps?.laenge).toBeCloseTo(2.5, 5)
+  })
+
+  it('Stichwörter ersetzen: Entfernte verschwinden aus XMP, IPTC und Windows', async () => {
+    const p = await neu()
+    await schreiben(p, { stichwoerter: ['weg', 'bleibt'] })
+    await schreiben(p, { stichwoerter: ['bleibt'] })
+    const ist = await lesen(p, { stichwoerter: ['x'] })
+    expect(ist['XMP:Subject']).toBe('bleibt')
+    expect(ist['IPTC:Keywords']).toBe('bleibt')
+    expect(ist['EXIF:XPKeywords']).toBe('bleibt')
+    expect(await schreiben(p, { stichwoerter: [] })).toMatchObject({ ok: true })
+    expect(await lesen(p, { stichwoerter: ['x'] })).toEqual({ SourceFile: p.replaceAll('\\', '/') })
+  })
+
+  it('Datum ohne Zone und alte Sekundenbruchteile', async () => {
+    const p = await neu()
+    await schreibe(
+      {
+        datei: datei(p),
+        tags: [
+          { tag: 'EXIF:DateTimeOriginal', wert: '2020:01:02 03:04:05' },
+          { tag: 'EXIF:SubSecTimeOriginal', wert: '123' },
+          { tag: 'EXIF:OffsetTimeOriginal', wert: '+05:00' }
+        ],
+        sicherung: null,
+        zwischen: zwischenName(p, ++nr)
+      },
+      pool
+    )
+    const r = await schreiben(p, { aufnahme: { lokal: '2021-06-05T14:03:02', offset: null } })
+    if (!r.ok) throw new Error(r.code)
+    const g = grundfelderAus(r.roh, { btime: null, mtime: r.mtime })
+    expect(g.aufnahme.lokal).toBe('2021-06-05T14:03:02')
+    expect(g.aufnahme.offset).toBeNull()
+    expect(g.aufnahme.quelle).toBe('exif')
+  })
 
   it('der Zeilenumbruch bleibt Text: kein zweites Argument, nichts gelöscht', async () => {
     const p = await neu()

@@ -9,7 +9,7 @@ import type {
   GespeicherteAnsicht
 } from './gespeicherteAnsicht'
 import type { Gruppe, Gruppierung } from './gruppen'
-import type { MetaAenderung, SchreibBericht } from './metaFields'
+import type { MetaAenderung, MetaWerte, SchreibBericht } from './metaFields'
 import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
   AddFolderResult,
@@ -51,6 +51,7 @@ export const Channels = {
   libraryChanged: 'library:changed', // Event: LibraryState (Ordner, Anzahl, Einlesen)
   libraryViewsChanged: 'library:viewsChanged', // Event: GespeicherteAnsicht[]
 
+  metaRead: 'meta:read',
   metaWrite: 'meta:write',
   metaUndo: 'meta:undo'
 } as const
@@ -127,6 +128,8 @@ export interface GalerieApi {
     onViewsChanged(cb: (views: GespeicherteAnsicht[]) => void): () => void
   }
   meta: {
+    /** Bearbeitbare Felder, frisch aus der Datei; `grund`, wenn das nicht geht */
+    read(id: number): Promise<{ werte: MetaWerte } | { grund: string }>
     /** Felder in die Dateien schreiben – je Datei für sich, Ablauf im Skill metadaten-schreiben */
     write(ids: number[], aenderung: MetaAenderung): Promise<SchreibBericht<ImageInfo>>
     /** Einen Auftrag zurücknehmen (Kennungen aus `journal` des Berichts) */

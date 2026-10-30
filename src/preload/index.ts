@@ -55,6 +55,7 @@ const api: GalerieApi = {
     onViewsChanged: (cb) => subscribe(Channels.libraryViewsChanged, (v) => cb(v as never))
   },
   meta: {
+    read: (id) => ipcRenderer.invoke(Channels.metaRead, id),
     write: (ids, aenderung) => ipcRenderer.invoke(Channels.metaWrite, ids, aenderung),
     undo: (journal) => ipcRenderer.invoke(Channels.metaUndo, journal)
   }

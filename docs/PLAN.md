@@ -376,19 +376,21 @@ GIF nur XMP, also weder EXIF-Datum noch GPS; BMP nichts. Die Pixel blieben in al
 Der Windows-Explorer zeigte Titel, Stichwörter, Bewertung (75 = 4 Sterne), Aufnahmedatum (außer PNG),
 Urheber und Copyright; GIF zeigt er gar nicht. Ein roher Zeilenumbruch in einem Wert wäre ein neues
 Argument (Gegenprobe: er schrieb wirklich in einen anderen Tag), darum jeder Wert als `#[CSTR]`.
-Die XP-Felder speichern keine Emoji, ExifTool lässt sie stillschweigend weg (fiel bei der Nachprüfung auf).
+Die XP-Felder speichern keine Emoji, ExifTool lässt sie stillschweigend weg (fiel bei der Nachprüfung
+auf); ein Stichwort mit Emoji fehlt dort ganz, gekürzt käme es beim Lesen als zweites zurück. Alle Felder
+kommen in allen sechs Formaten so heraus, wie sie hineingingen (`schreiben.lab.test.ts`).
 
 | Feld | Schreibt in (Mess-Stand; digiKam und Lightroom prüft die Abnahme) |
 |---|---|
 | Titel | `XMP-dc:Title`, `IPTC:ObjectName` (nur bis 64 Bytes), `XPTitle` |
 | Beschreibung | `XMP-dc:Description`, IPTC `Caption-Abstract`, EXIF `ImageDescription`, `XPComment` (nur dieses zeigt der Explorer als Kommentar, außer bei PNG) |
-| Stichwörter | MWG `Keywords` (IPTC `Keywords`, `XMP-dc:Subject`) und `XPKeywords` |
+| Stichwörter | `XMP-dc:Subject`, IPTC `Keywords` (je bis 64 Bytes), `XPKeywords` – Ersetzen schreibt alle drei, sonst käme ein entferntes Wort beim Zusammenführen zurück |
 | Bewertung (0–5, 0 entfernt die Tags) | `XMP-xmp:Rating` und EXIF `Rating`/`RatingPercent` (Explorer: 1, 25, 50, 75, 99) |
 | Farblabel | `XMP-xmp:Label` |
-| Aufnahmedatum | `DateTimeOriginal`, `CreateDate`, `OffsetTime*`, `XMP-photoshop:DateCreated` |
-| Standort | `GPSLatitude/Ref`, `GPSLongitude/Ref`, `GPSAltitude/Ref`; entfernen = alle GPS-Tags |
-| Ort (Text) | MWG `City`, `State`, `Country`, `Location` |
-| Urheber, Copyright | MWG `Creator`, MWG `Copyright` |
+| Aufnahmedatum | `DateTimeOriginal`, `CreateDate`, `OffsetTime*`, `XMP-photoshop:DateCreated`; alte `SubSecTime*` gehen weg, die Zone bleibt |
+| Standort | `GPSLatitude/Ref`, `GPSLongitude/Ref`, `XMP-exif:GPSLatitude/Longitude`; die alte Höhe geht weg. Entfernen nimmt den ganzen GPS-Block (32 Tags, auch Zeit, Richtung, Tempo) |
+| Ort (Text) | `XMP-photoshop:City/State/Country`, `XMP-iptcCore:Location`, IPTC `City`, `Province-State`, `Country-PrimaryLocationName`, `Sub-location`; ein alter Ländercode geht mit dem Land weg |
+| Urheber, Copyright | `XMP-dc:Creator`, IPTC `By-line`, EXIF `Artist`; `XMP-dc:Rights`, IPTC `CopyrightNotice`, EXIF `Copyright` |
 
 - **Schreiben** (seit 3.1, Reihenfolge entschieden nach dem Labor): Datei noch wie im Index? Alte
   Werte ins Journal. ExifTool schreibt mit `-o` in eine versteckte Nachbardatei, das Original bleibt
@@ -723,7 +725,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 | Schritt | Inhalt | Nachweis |
 |---|---|---|
 | 3.1 ✅ | **Schreibweg und Schnellbewertung:** Labor; `shared/metaFields.ts` (Felder Bewertung, Farblabel, Titel, Beschreibung, Zuordnung je Format, Prüfung, Nachprüfung), `exiftool/args.ts` (jeder Wert als `#[CSTR]`, nur Tags aus der Zuordnung, nur absolute Pfade), `bilddienst/schreiben.ts` (Ablauf oben), `metadata/schreiben.ts` (Freigabe, Journal, Sicherung, Rückgängig, Aufräumen nach einem Absturz), Migration 8 (`journal`, `sicherungen`), `meta.write`/`meta.undo`; im Betrachter Tasten 0–5 und 6–9, Hinweis mit „Rückgängig“ (auch Strg+Z), Sterne neben der Position. Nach dem Schreiben entsteht das Vorschaubild neu, weil der Cache an Größe und Zeit hängt | `metadaten` (13 Schritte: Werte von ExifTool unabhängig nachgelesen, Pixel gleich, Rückgängig, Sicherung bytegleich und nur einmal, von außen geändert, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen per Zeilenumbruch, Log ohne Werte, keine Nachbardatei; Gegenproben rot: Sicherung bei jedem Schreiben, „nur lesen“ übergangen, ohne Prüfung vor dem Ersetzen); Labor `schreiben.lab.test.ts` (sechs Formate, Emoji, IPTC, Rückgängig mit abweichenden Tags, Kennung der Bilddaten); Unit `metaFields.test.ts`, `args.test.ts`, `metadata/schreiben.test.ts`, `db.test.ts` (Migration 7 → 8) |
-| 3.2 | **Bearbeiten-Panel** für ein Bild: alle Felder, auch Stichwörter, Datum, Standort, Ort, Urheber, Copyright | |
+| 3.2 ✅ | **Bearbeiten-Panel** für ein Bild, im Betrachter (Taste E oder Knopf im Info-Panel; die Werkzeugleiste bleibt): alle Felder, auch Stichwörter, Datum, Standort, Ort, Urheber, Copyright (`galerie/MetaFormular.tsx`, Rechnung rein in `lib/metaFormular.ts`). Gelesen wird frisch aus der Datei (`meta.read`, `werteAus`), nicht aus dem Index – der kennt Urheber und Copyright nicht und fasst Zeilen zusammen. Geschrieben wird nur Geändertes, erst auf Knopfdruck; Rückgängig wie bei der Bewertung. Ungespeichertes hält Blättern und Schließen auf. Ändert sich die Datei beim Tippen: Rückfrage („Neu laden“ / „Eingaben behalten“), ohne Eingaben liest das Panel still neu | `metadaten` (20 Schritte, neu: Werte aus der Datei, Ziffern im Text lösen keine Tasten aus, nur Geändertes geschrieben, Rückgängig über alle Felder, Standort entfernen ohne GPS-Rest, Datum und Standort setzen, Index und Suche folgen, Ungespeichertes, Änderung beim Tippen, „nur lesen“; Gegenproben rot: Tasten im Text, Ungespeichertes hält nicht auf, Neuladen über Eingaben, GPS-Block nur teilweise); Labor: alle Felder in allen sechs Formaten hin und zurück, auch im Index; Unit `metaFields.test.ts`, `metaFormular.test.ts`, `args.test.ts` |
 | 3.3 | **Mehrfachauswahl:** gemischte Werte, Stichwörter hinzufügen/entfernen, Fortschritt, Abbrechen, Bericht | |
 | 3.4 | **Verlustfreies Drehen** über die EXIF-Ausrichtung, im Betrachter und für eine Auswahl | |
 | 3.5 | **Sidecars und Abnahme:** XMP-Sidecar für schreibgeschützte Dateien und BMP, Einstellungen (Sicherung, Dateidatum), Sandbox, Prüfung von Hand in Explorer und digiKam | |
@@ -860,6 +862,7 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **Gespeicherte Ansichten** enthalten den Ordner und stehen in der Seitenleiste; ein entfernter
   Ordner nimmt seine Ansichten mit.
 
+- **Bearbeiten-Panel:** im Betrachter, Taste E; die Werkzeugleiste bleibt, wie sie ist.
 - **Schreiben in Originale (Phase 3):** Schnellbewertung schreibt sofort, mit „Rückgängig“; eine
   Sicherung je Datei, 30 Tage; im Ordner „privat“ keine Kopie; Änderungsdatum wird neu gesetzt.
 

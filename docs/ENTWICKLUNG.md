@@ -207,8 +207,9 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   bauen daraus Zeilen (`lib/zeilen.ts`: Kopfzeile, dann Bildzeilen; jede Gruppe in neuer Zeile).
   Die Höhen für den Virtualisierer und die Geometrie des Rahmens kommen aus demselben Feld der
   oberen Kanten – getrennt gerechnet liefen sie mit jeder Überschrift auseinander.
-- **Metadaten schreiben (3.1):** Neues Feld = `shared/metaFields.ts` (`MetaAenderung`, Prüfung,
-  `tagsFuer`), im Labor messen, dann erst freigeben. Das Schreiben selbst macht nur
+- **Metadaten schreiben (3.1):** Neues Feld = `shared/metaFields.ts` (`MetaAenderung`, `MetaWerte`,
+  Prüfung, `tagsFuer`, `werteAus`) und `lib/metaFormular.ts` samt Eingabe in `MetaFormular.tsx`; in
+  `VOLL` von `schreiben.lab.test.ts` eintragen, dann erst freigeben. Das Schreiben selbst macht nur
   `bilddienst/schreiben.ts`; `metadata/schreiben.ts` entscheidet, ob es darf, und führt Journal
   und Sicherungen. Wer etwas anderes in Nutzerdateien schreibt, nutzt denselben Weg. Der main darf
   `bilddienst/schreiben.ts` nicht importieren (zieht sharp mit), Reines liegt in `shared/`.
