@@ -272,6 +272,10 @@ Aliase: `@shared` (überall), `@renderer` (Renderer und Tests). Zielaufbau aller
   mit `npm test`, sobald ExifTool und ffmpeg geladen sind.
 - **CI** (`.github/workflows/ci.yml`): Prüfungen unter Linux mit Node 22 und 24 (samt
   `npm audit --omit=dev`); unter Windows und Linux Labortests (Werkzeuge im Cache) und E2E.
+  Linux für die App fest auf `ubuntu-24.04`: Unter Ubuntu 26.04 (`ubuntu-latest` seit November
+  2026) stürzt der Bilddienst gleich nach dem Start ab (Code 139, sharp im `utilityProcess` von
+  Electron; sharp in Node läuft dort) – keine Vorschaubilder, `bild://` antwortet 503. Vor einem
+  Wechsel auf 26.04 klären.
 - **Geplante Dateien:** Plan und Skills nennen Dateien späterer Phasen. Sie stehen in
   `scripts/geplante-dateien.json` und gelten für `check:refs` als vorhanden; entsteht eine,
   meldet die Prüfung, dass der Eintrag gestrichen werden soll.

@@ -4,9 +4,10 @@ name: CI
 # Bei jedem Pull Request und auf main:
 # - Linux mit Node 22 und 24: Dateinamen, Verweise, Format, Lint, Typen (App und Tests),
 #   Unit-Tests, Build, npm audit für die Laufzeit-Abhängigkeiten (Schicht F).
-# - Windows (Zielsystem) und Linux: Labortests mit dem gebündelten ExifTool und ffmpeg, Build,
-#   alle E2E-Skripte in der echten App – Pfade, Prozesse und Fenster verhalten sich je
-#   Betriebssystem anders – und die gepackte App (electron-builder --dir, e2e/paket.mjs).
+# - Windows (Zielsystem) und Linux (Ubuntu 24.04, siehe unten): Labortests mit dem gebündelten
+#   ExifTool und ffmpeg, Build, alle E2E-Skripte in der echten App – Pfade, Prozesse und Fenster
+#   verhalten sich je Betriebssystem anders – und die gepackte App (electron-builder --dir,
+#   e2e/paket.mjs).
 # Push nur auf main: Arbeits-Branches laufen über ihren Pull Request, sonst liefe alles doppelt.
 on:
   push:
@@ -60,7 +61,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # Linux fest auf 24.04: Unter ubuntu-26.04 (ubuntu-latest seit November 2026) stürzt der
+        # Bilddienst – sharp im utilityProcess von Electron – gleich nach dem Start ab (Code 139),
+        # sharp in Node (Labortests) läuft dort. Vor einem Wechsel auf 26.04 klären.
+        os: [windows-latest, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

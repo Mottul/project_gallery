@@ -191,6 +191,9 @@ try {
   muss dort scheitern.
 - **Fehlersuche:** `E2E_DEBUG=1` schreibt Ausgabe des main-Prozesses und Fenster-Ereignisse mit.
 - Unter Linux ohne Display `xvfb-run -a …`; der Harness setzt dort `--no-sandbox`.
+- **Linux-CI fest auf `ubuntu-24.04`** (`ci.yml`): Unter Ubuntu 26.04 stürzt der Bilddienst ab
+  (Log: „beendet, Code 139“ in Schleife, davor eine Warnung `SharpElectronLinux`); dann scheitern
+  in `galerie` Vorschaubilder, Cache, Blocksatz und `bild://` (503) gemeinsam – kein Testproblem.
 
 ## Grenzen
 
