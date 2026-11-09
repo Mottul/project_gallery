@@ -1214,6 +1214,17 @@ export function sicherungVorhanden(db: DB, imageId: number): boolean {
   )
 }
 
+/** Welche dieser Bilder schon eine Sicherung haben (Platz vor einem großen Auftrag). */
+export function mitSicherung(db: DB, ids: readonly number[]): Set<number> {
+  const da = db
+    .prepare(
+      'SELECT DISTINCT image_id FROM sicherungen WHERE image_id IN (SELECT value FROM json_each(?))'
+    )
+    .pluck()
+    .all(JSON.stringify(ids)) as number[]
+  return new Set(da)
+}
+
 export function sicherungEintragen(
   db: DB,
   s: { imageId: number; folderId: number; pfad: string; at: number }

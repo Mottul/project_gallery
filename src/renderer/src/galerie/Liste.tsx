@@ -165,7 +165,8 @@ export function Liste({
   details,
   sortierung,
   onSichtbar,
-  onOeffnen
+  onOeffnen,
+  onMetadaten
 }: {
   ids: number[]
   /** Gruppen-Überschriften (leer = keine) */
@@ -177,6 +178,8 @@ export function Liste({
   sortierung: Sortierung
   onSichtbar: (ids: readonly number[]) => void
   onOeffnen: (index: number) => void
+  /** Taste E: „Metadaten bearbeiten“ für die Auswahl (3.3) */
+  onMetadaten?: () => void
 }): JSX.Element {
   const auswahl = useAuswahl()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -234,6 +237,13 @@ export function Liste({
           else if (e.key === 'Enter') {
             const i = ersteGewaehlte(ids)
             if (i >= 0) onOeffnen(i)
+          } else if (
+            e.key.toLowerCase() === 'e' &&
+            !(e.ctrlKey || e.metaKey || e.altKey || e.repeat) &&
+            onMetadaten
+          ) {
+            e.preventDefault()
+            onMetadaten()
           }
         }}
       >

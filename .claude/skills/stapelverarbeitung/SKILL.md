@@ -18,6 +18,12 @@ Nichts läuft, bevor die Vorschau gezeigt wurde und frei von Konflikten ist.
 | Warteschlange und Auftragsliste | `src/main/services/jobs/queue.ts`, `jobList.ts` (aus Mottulbox: von `JobList` erben, nur `run()` schreiben) |
 | Assistent | `src/renderer/src/stapel/` |
 
+**Schon da (3.3):** Metadaten für viele Bilder laufen als Auftrag in `src/main/services/metadata/mehrfach.ts`
+(einer zur Zeit, Fortschritt als Ereignis, Abbrechen nach der laufenden Datei, Bericht je Datei,
+Rückgängig als ein Schritt, Platz für die Sicherungen aller Dateien vorab); der Renderer-Stand in
+`src/renderer/src/lib/metaAuftrag.ts`. Die Stapel-Aktion „Metadaten“ (Phase 4) nutzt diesen Weg,
+statt einen zweiten zu bauen; die gemeinsame Warteschlange (`jobs/`) kann ihn später aufnehmen.
+
 ## Planen (rein, getestet)
 
 - `planBatch(bilder, aktionen, umgebung)` liefert je Datei: Quelle, Ziel(e), Änderungen, Status

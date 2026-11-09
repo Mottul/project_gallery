@@ -65,6 +65,10 @@ export interface SchreibAuftrag {
   zwischen: string
 }
 
+/** Gelesene Tags einer Datei; `code`, wenn die Prüfung oder ExifTool sie nicht lesen ließ */
+export type TagsErgebnis =
+  { werte: Record<string, unknown>; code: null } | { werte: null; code: string }
+
 /** ok: neue Größe und Zeit samt frisch gelesenen Grundfeldern; sonst der Grund als Code */
 export type SchreibErgebnis =
   | { ok: true; size: number; mtime: number; roh: Record<string, unknown> | null }
@@ -96,6 +100,8 @@ export type AnDienst =
   | { typ: 'alle-felder'; auftrag: number; datei: AnzeigeDatei }
   /** Werte bestimmter Tags, vor dem Schreiben fürs Journal */
   | { typ: 'tags-lesen'; auftrag: number; datei: AnzeigeDatei; tags: TagWert[] }
+  /** Dieselben Tags vieler Dateien (Mehrfachauswahl, 3.3): je Datei geprüft, gelesen in Teilen */
+  | { typ: 'tags-lesen-viele'; auftrag: number; dateien: AnzeigeDatei[]; tags: TagWert[] }
   | { typ: 'schreiben'; auftrag: number; schreiben: SchreibAuftrag }
   /** Nachbardateien, die ein Absturz liegen ließ (nur Namen der Form `.*.galerie-tmp-*`) */
   | { typ: 'zwischen-weg'; pfade: string[] }
@@ -118,6 +124,8 @@ export type VomDienst =
       werte: Record<string, unknown> | null
       code: string | null
     }
+  /** je Datei in derselben Reihenfolge: die Werte oder der Code, warum nicht */
+  | { typ: 'tags-viele-ergebnis'; auftrag: number; ergebnisse: TagsErgebnis[] }
   | { typ: 'schreib-ergebnis'; auftrag: number; ergebnis: SchreibErgebnis }
   /** netz = Netzlaufwerk: nicht überwacht, der main gleicht periodisch ab */
   | { typ: 'beobachtet'; auftrag: number; netz: boolean }

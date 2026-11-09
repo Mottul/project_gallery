@@ -1,8 +1,8 @@
 # Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 29. Oktober 2026: Phase 0 und
-Phase 1 sind umgesetzt ([Phase 1](#phase-1--bibliothek-und-galerie-erste-nutzbare-version)), als
-Nächstes kommt Phase 2. Dieser Plan ist die Grundlage für die
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 9. November 2026: Phase 0 bis 2 sind
+umgesetzt, in Phase 3 die Teilschritte 3.1 bis 3.3
+([Phase 3](#phase-3--metadaten-bearbeiten)). Dieser Plan ist die Grundlage für die
 Umsetzung: vor jeder Phase lesen, offene Fragen
 klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
 Windows-PC des Nutzers; die CI prüft zusätzlich jeden Pull Request.
@@ -399,6 +399,23 @@ kommen in allen sechs Formaten so heraus, wie sie hineingingen (`schreiben.lab.t
 - **Sicherung** (entschieden 30.10.2026): eine Kopie je Datei vor der ersten Änderung, 30 Tage, im
   Ordner `%LOCALAPPDATA%\Galeria Beata Sicherungen`; im Ordner „privat“ keine. Das Änderungsdatum der
   Datei wird neu gesetzt, damit Sicherungs- und Sync-Programme die Änderung bemerken.
+- **Mehrfachauswahl** (seit 3.3, entschieden 9.11.2026): eigene Ansicht „Metadaten bearbeiten“
+  (Knopf „Metadaten“ in der Werkzeugleiste, Taste E). Die Änderung sagt, was der Nutzer will – Felder
+  setzen, Stichwörter dazu/weg –, nie, was am Ende in jeder Datei steht: Der main liest jede Datei
+  frisch und bildet daraus ihre eigene Änderung (`shared/metaMehrfach.ts`, `aenderungFuer`). So wird
+  nie die Liste einer Datei auf die anderen kopiert, und eine Datei, die die Werte schon hat, bleibt
+  unberührt (keine Sicherung, kein neues Änderungsdatum). Stichwörter vergleichen ohne Groß/Klein wie
+  beim Lesen; die neue Liste steht danach in allen drei Orten (XMP, IPTC, XP), wie beim Panel. ExifTools
+  `+=`/`-=` taugt dafür nicht (gemessen mit 13.59, `schreiben.lab.test.ts`): `-=` achtet auf
+  Groß/Klein (ein „meer“ bliebe und käme beim Zusammenführen zurück), `+=` legt Doppelte an, und
+  `XPKeywords` ist keine Liste.
+- **Aufträge** (seit 3.3, `metadata/mehrfach.ts`): einer zur Zeit; der Start antwortet sofort,
+  Fortschritt, Ergebnis je Datei und Bericht kommen als Ereignis. Je Datei ein Schritt der
+  Warteschlange – dazwischen kommen andere dran (Schnellbewertung im Betrachter). Abbrechen hält nach
+  der laufenden Datei an, Geschriebenes bleibt (je Datei atomar) und steht im Bericht; „Rückgängig“
+  nimmt den ganzen Auftrag in einem Schritt zurück. Vor dem Schreiben prüft der main den Platz für die
+  Sicherungen aller Dateien zusammen (1 GB bleibt frei); schreibt beim Schließen des Fensters noch ein
+  Auftrag, fragt er und hält nach der laufenden Datei an.
 - Regeln im Skill [`metadaten-schreiben`](../.claude/skills/metadaten-schreiben/SKILL.md).
 
 ### Stapelverarbeitung
@@ -726,7 +743,7 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 |---|---|---|
 | 3.1 ✅ | **Schreibweg und Schnellbewertung:** Labor; `shared/metaFields.ts` (Felder Bewertung, Farblabel, Titel, Beschreibung, Zuordnung je Format, Prüfung, Nachprüfung), `exiftool/args.ts` (jeder Wert als `#[CSTR]`, nur Tags aus der Zuordnung, nur absolute Pfade), `bilddienst/schreiben.ts` (Ablauf oben), `metadata/schreiben.ts` (Freigabe, Journal, Sicherung, Rückgängig, Aufräumen nach einem Absturz), Migration 8 (`journal`, `sicherungen`), `meta.write`/`meta.undo`; im Betrachter Tasten 0–5 und 6–9, Hinweis mit „Rückgängig“ (auch Strg+Z), Sterne neben der Position. Nach dem Schreiben entsteht das Vorschaubild neu, weil der Cache an Größe und Zeit hängt | `metadaten` (13 Schritte: Werte von ExifTool unabhängig nachgelesen, Pixel gleich, Rückgängig, Sicherung bytegleich und nur einmal, von außen geändert, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen per Zeilenumbruch, Log ohne Werte, keine Nachbardatei; Gegenproben rot: Sicherung bei jedem Schreiben, „nur lesen“ übergangen, ohne Prüfung vor dem Ersetzen); Labor `schreiben.lab.test.ts` (sechs Formate, Emoji, IPTC, Rückgängig mit abweichenden Tags, Kennung der Bilddaten); Unit `metaFields.test.ts`, `args.test.ts`, `metadata/schreiben.test.ts`, `db.test.ts` (Migration 7 → 8) |
 | 3.2 ✅ | **Bearbeiten-Panel** für ein Bild, im Betrachter (Taste E oder Knopf im Info-Panel; die Werkzeugleiste bleibt): alle Felder, auch Stichwörter, Datum, Standort, Ort, Urheber, Copyright (`galerie/MetaFormular.tsx`, Rechnung rein in `lib/metaFormular.ts`). Gelesen wird frisch aus der Datei (`meta.read`, `werteAus`), nicht aus dem Index – der kennt Urheber und Copyright nicht und fasst Zeilen zusammen. Geschrieben wird nur Geändertes, erst auf Knopfdruck; Rückgängig wie bei der Bewertung. Ungespeichertes hält Blättern und Schließen auf. Ändert sich die Datei beim Tippen: Rückfrage („Neu laden“ / „Eingaben behalten“), ohne Eingaben liest das Panel still neu; wer währenddessen tippt, behält die Eingabe (das Ergebnis wird verworfen, die Rückfrage bleibt) | `metadaten` (21 Schritte, neu: Werte aus der Datei, Ziffern im Text lösen keine Tasten aus, nur Geändertes geschrieben, Rückgängig über alle Felder, Standort entfernen ohne GPS-Rest, Datum und Standort setzen, Index und Suche folgen, Ungespeichertes, Änderung beim Tippen, Tippen während des stillen Neulesens (Antwort von `meta:read` im Test angehalten), „nur lesen“; Gegenproben rot: Tasten im Text, Ungespeichertes hält nicht auf, Neuladen über Eingaben, Ergebnis des Neulesens über Getipptes, GPS-Block nur teilweise); Labor: alle Felder in allen sechs Formaten hin und zurück, auch im Index; Unit `metaFields.test.ts`, `metaFormular.test.ts`, `args.test.ts` |
-| 3.3 | **Mehrfachauswahl:** gemischte Werte, Stichwörter hinzufügen/entfernen, Fortschritt, Abbrechen, Bericht | |
+| 3.3 ✅ | **Mehrfachauswahl** (entschieden 9.11.2026, siehe unten): eigene Ansicht „Metadaten bearbeiten“ (`galerie/MetaMehrfach.tsx`; Knopf „Metadaten“ in der Werkzeugleiste, Taste E in Raster und Liste) – links die gewählten Bilder, fest, mit Status je Datei; rechts die Felder mit ‹verschieden› (leer lassen behält, „Bei allen entfernen“), Stichwörter als Chips mit n/N (Kreuz = bei allen weg, „+“ = bei allen dazu), Bewertung, Farblabel, Datum (Zeitzone bleibt je Datei), Standort samt „Standort entfernen“, Ort, Urheber, Copyright; „N Felder geändert“, „In N Dateien schreiben“, Bericht mit Konflikten, „Neu lesen und erneut versuchen“ und „Rückgängig“ (Rechnung in `lib/mehrfachFormular.ts`). Die Änderung ist nur Felder plus Stichwörter dazu/weg (`shared/metaMehrfach.ts`); der main liest jede Datei frisch und bildet ihre eigene Änderung (`aenderungFuer`), Unberührtes bleibt ohne Sicherung und Änderungsdatum. Aufträge in `metadata/mehrfach.ts`: einer zur Zeit, der Start antwortet sofort, Fortschritt und Bericht als Ereignis `meta:job`, je Datei ein Schritt der Warteschlange, Abbrechen nach der laufenden Datei, Platz für alle Sicherungen vorab (`platz.ts`), Rückfrage beim Schließen während eines schreibenden Auftrags; die gemischten Werte liest der Bilddienst in Teilen (`tags-lesen-viele`). Ein Konflikt gleicht nur die Datei ab (Teil-Abgleich statt des ganzen Ordners, auch im Panel). Schnellbewertung im Raster (Tasten 0–5, 6–9): ein Bild sofort, ab zwei Rückfrage im main mit Anzahl, Fortschritt mit Abbrechen, „Rückgängig“ für alle (`galerie/Rasterhinweis.tsx`); Farblabel-Farben als Tokens. Offen: Schnellbewertung auch in der Liste (Vorschlag unten) | `metadaten` (30 Schritte, neu 10: gemischte Werte aus den Dateien; Stichwörter dazu/weg je Datei in XMP, IPTC und XP mit ExifTool unabhängig nachgelesen – „urlaub“ klein, „Meer“ nur in IPTC –, Pixel gleich, je Datei eine Sicherung, Suche folgt; Rückgängig als ein Schritt; Unberührtes bytegleich und ohne Sicherung; Konflikt per Hardlink mit „erneut versuchen“; Abbrechen nach der laufenden Datei; „nur lesen“ und „privat“ in der Auswahl (zweiter Ordner); Schnellbewertung im Raster mit Rückfrage; Ablehnungen im main; Log ohne Stichwörter; sechs Gegenproben rot: Stichwörter ohne die eigene Liste der Datei, Unberührtes trotzdem geschrieben, Abbrechen übergangen, „nur lesen“ übergangen, „privat“ mit Sicherung, Schnellbewertung ohne Rückfrage); Labor `schreiben.lab.test.ts` (Stichwörter dazu/weg in allen sechs Formaten; gemessen: ExifTools `-=` achtet auf Groß/Klein, `+=` legt Doppelte an); Unit `metaMehrfach.test.ts`, `mehrfachFormular.test.ts`, `mehrfach.test.ts` (Gegenproben rot: Abbrechen übergangen, Stichwörter ohne eigene Liste), `platz.test.ts`, `metaFields.test.ts` |
 | 3.4 | **Verlustfreies Drehen** über die EXIF-Ausrichtung, im Betrachter und für eine Auswahl | |
 | 3.5 | **Sidecars und Abnahme:** XMP-Sidecar für schreibgeschützte Dateien und BMP, Einstellungen (Sicherung, Dateidatum), Sandbox, Prüfung von Hand in Explorer und digiKam | |
 
@@ -866,7 +883,27 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **Schreiben in Originale (Phase 3):** Schnellbewertung schreibt sofort, mit „Rückgängig“; eine
   Sicherung je Datei, 30 Tage; im Ordner „privat“ keine Kopie; Änderungsdatum wird neu gesetzt.
 
-**Noch offen:** nichts. Neue Fragen hier eintragen.
+**Entschieden (9. November 2026), Mehrfachauswahl (3.3):**
+
+- **Eigene Ansicht „Metadaten bearbeiten“ wie im Entwurf:** Knopf „Metadaten“ in der Werkzeugleiste
+  der Galerie und Taste E, sobald Bilder ausgewählt sind. Links die ausgewählten Bilder mit Status je
+  Datei (nach dem Schreiben „Geschrieben · Sicherung angelegt · geprüft“ bzw. „Inzwischen außerhalb
+  geändert – übersprungen“), rechts die Felder mit ‹verschieden› (leer lassen behält die Werte);
+  Stichwörter als Chips (gestrichelt mit n/N = nur in einem Teil; Hinzufügen/Entfernen gilt für alle,
+  die übrigen bleiben); Bewertung, Farblabel, Datum, Standort (auch „Standort entfernen“), Urheber,
+  Copyright. Unten „N Felder geändert“, Abbrechen, „In N Dateien schreiben“, danach der Bericht mit
+  Konflikten, „Neu lesen und erneut versuchen“ und „Rückgängig“. Die Auswahl bleibt beim Bearbeiten
+  fest. Ein einzelnes Bild im Betrachter behält das Panel aus 3.2 (Taste E); die Werkzeugleiste des
+  Betrachters bleibt unverändert.
+- **Schnellbewertung im Raster:** Tasten 0–5 (Sterne) und 6–9 (Farblabel) gelten für alle
+  ausgewählten Bilder. Ein Bild: sofort wie im Betrachter. Ab 2 Bildern: kurze Rückfrage mit Anzahl
+  („3 Sterne für 12 Bilder schreiben?“), dann Fortschritt mit Abbrechen. Rückgängig nimmt alle auf
+  einmal zurück. Ob die Liste (gleiche Auswahl) dasselbe tut, ist offen (unten).
+
+**Noch offen:**
+
+- **Schnellbewertung auch in der Liste?** Vorschlag aus 3.3: ja, mit derselben Auswahl und denselben
+  Tasten wie im Raster (bisher dort nur Taste E). Entscheidung durch den Nutzer.
 
 ## Skills
 

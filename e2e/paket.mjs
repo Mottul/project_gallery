@@ -43,6 +43,17 @@ const { app, page } = ctx
 /** Im main der gepackten App: Modul aus deren node_modules laden (wie später der Bilddienst). */
 const imMain = (fn, arg) => app.evaluate(fn, arg)
 
+// Welche Abrufe der Seite scheiterten, und wann (DevTools-Protokoll; thumb:// erscheint dort wie
+// http) – ein Konsolenfehler „404“ nennt sonst keine Adresse (gesehen in der Linux-CI zu 3.3)
+const t0 = Date.now()
+const ablauf = []
+const merke = (was) => ablauf.push(`${Date.now() - t0} ms ${was}`)
+const cdp = await page.context().newCDPSession(page)
+cdp.on('Network.responseReceived', ({ response }) => {
+  if (response.status >= 400) merke(`${response.status} ${response.url}`)
+})
+await cdp.send('Network.enable')
+
 try {
   await runSteps('Gepackte App', [
     [
@@ -147,6 +158,7 @@ try {
               : null
           }, 50_000)
           assert.ok(s, 'Bibliothek im Paket nicht fertig')
+          merke('eingelesen, Vorschaubilder fertig')
           const bilder = await page.evaluate(async () =>
             window.api.library.details(
               await window.api.library.query({ feld: 'name', richtung: 'auf' })
@@ -172,6 +184,7 @@ try {
           })
           // Metadaten schreiben: ExifTool und sharp aus dem Paket, Wert steht danach im Index
           const ziel = bilder.find((x) => x.name === 'dubrovnik.jpg')
+          merke('schreiben')
           const r = await page.evaluate(
             (id) => window.api.meta.write([id], { bewertung: 2, titel: 'Fähre 🌞' }),
             ziel.id
@@ -179,13 +192,33 @@ try {
           assert.deepEqual(r.fehler, [])
           assert.equal(r.geschrieben[0].rating, 2)
           assert.equal(r.geschrieben[0].title, 'Fähre 🌞')
+          merke('rückgängig')
           const u = await page.evaluate((j) => window.api.meta.undo(j), r.journal)
           assert.deepEqual(u.fehler, [])
           assert.equal(u.geschrieben[0].rating, ziel.rating)
+          // Erst entfernen, wenn die Seite das neue Vorschaubild hat: Ihr Abruf käme sonst womöglich
+          // erst nach dem Entfernen an und bekäme 404 – ein Konsolenfehler (Linux-CI zu 3.3). Eine
+          // Kachel, die gar nicht gezeichnet ist (kleines Fenster), ruft nichts mehr ab.
+          const ruhig = await waitFor(async () => {
+            const z = await page.evaluate(() => window.api.library.state())
+            if (z.thumbPending !== 0) return false
+            const [d] = await page.evaluate((id) => window.api.library.details([id]), ziel.id)
+            return page.evaluate(
+              ([id, v]) => {
+                const img = document.querySelector(`[data-id="${id}"] img`)
+                return !img || (img.src.endsWith(`?v=${v}`) && img.complete && img.naturalWidth > 0)
+              },
+              [ziel.id, d.mtime]
+            )
+          }, 15_000)
+          assert.ok(ruhig, 'Vorschaubild nach Rückgängig nicht in der Seite')
+          merke('Seite ruhig')
           // Ordner wieder weg, damit das Beenden nichts mehr zu tun hat
           await stubConfirm(app, true)
           const [o] = s.folders
+          merke('Ordner entfernen')
           assert.equal(await page.evaluate((id) => window.api.library.removeFolder(id), o.id), true)
+          merke('Ordner entfernt')
         } finally {
           bib.aufraeumen()
         }
@@ -194,7 +227,11 @@ try {
     [
       'keine Konsolenfehler im Hauptfenster',
       async () => {
-        assert.deepEqual(ctx.errors, [])
+        assert.deepEqual(
+          ctx.errors,
+          [],
+          `Konsolenfehler: ${JSON.stringify(ctx.errors)}\n    Ablauf: ${ablauf.join(' | ')}`
+        )
       }
     ]
   ])

@@ -66,6 +66,7 @@ beforeEach(() => {
     db: () => db,
     details: (ids) => repo.details(db, ids),
     abgleichen: (id) => abgeglichen.push(id),
+    abgleichAbwarten: async () => {},
     geschrieben: async (id, r) => {
       repo.nachSchreiben(db, id, r.size, r.mtime)
       geschrieben.push({ id, size: r.size })

@@ -17,6 +17,8 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 | Argumente bauen (rein, getestet) | `src/main/services/exiftool/args.ts` |
 | Der eigentliche Schreibvorgang: Nachbardatei, Nachprüfung, Sicherung, Ersetzen | `src/main/services/bilddienst/schreiben.ts` + `schreiben.lab.test.ts` |
 | Freigabe, Journal, Sicherungen, Rückgängig, Aufräumen | `src/main/services/metadata/schreiben.ts` + Test |
+| Mehrfachauswahl (3.3): Änderung als Felder + Stichwörter dazu/weg, Prüfung, je Datei ableiten (`aenderungFuer`), gemischte Werte (`zusammenfassen`), Auftragstypen (rein) | `src/shared/metaMehrfach.ts` + Test |
+| Aufträge über viele Dateien: einer zur Zeit, Fortschritt als Ereignis, Abbrechen, Rückfrage, Platz für Sicherungen | `src/main/services/metadata/mehrfach.ts`, `platz.ts` + Tests |
 | IPC | `src/main/ipc/meta.handlers.ts` (Skill `ipc-kanal`) |
 
 ## Felder
@@ -34,8 +36,15 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
   XMP, IPTC und XP und werden beim Lesen zusammengeführt: Ersetzen muss alle drei schreiben.
 - **Neues Feld:** in `VOLL` von `schreiben.lab.test.ts`. Dort muss es in allen Formaten durch den
   Schreibweg und aus `werteAus` und `grundfelderAus` genau so wieder herauskommen.
-- **Mehrfachauswahl:** nur geänderte Felder schreiben; Stichwörter als Hinzufügen/Entfernen
-  (`-Keywords+=`/`-Keywords-=`), nie die Liste der ersten Datei auf alle kopieren.
+- **Mehrfachauswahl** (seit 3.3): Der Renderer schickt eine `MehrfachAenderung` – Felder setzen,
+  Stichwörter als `stichwoerterDazu`/`stichwoerterWeg`, nie eine ganze Liste (`pruefeMehrfachAenderung`
+  lehnt `stichwoerter` ab). Der main liest jede Datei frisch (`WERTE_TAGS`) und bildet mit
+  `aenderungFuer` ihre eigene `MetaAenderung`: nur Felder, die sich dort ändern; die neue
+  Stichwortliste aus ihrer zusammengeführten Liste (ohne Groß/Klein, Schreibweise der Datei bleibt).
+  Nichts zu tun → Datei unberührt (keine Sicherung, kein Journal). Das Ergebnis muss
+  `pruefeMetaAenderung` bestehen (z. B. höchstens 200 Stichwörter) – sonst Fehler für diese Datei.
+  **Nicht** ExifTools `+=`/`-=` (gemessen 13.59, Labortest): `-=` achtet auf Groß/Klein (ein „meer“
+  bliebe und käme beim Zusammenführen zurück), `+=` legt Doppelte an, `XPKeywords` ist keine Liste.
 - **Lesen für den Index** mit `-json -n -G0` (Zahlen statt Text; Tags fest in
   `GRUNDFELD_TAGS`, Prüfung in `grundfelder.ts`, seit 2.1 auch Objektiv, Belichtung, GPS,
   Bewertung, Farblabel, Titel, Beschreibung, Stichwörter); Anzeigetexte macht die Oberfläche
@@ -87,6 +96,19 @@ nächsten Start die Nachbardatei.
 **Rückgängig:** alte Werte je Tag über denselben Weg, nur wenn Größe und Zeit noch die nach dem
 Schreiben sind; eigene Journal-Zeile.
 
+**Aufträge über viele Dateien** (3.3, `metadata/mehrfach.ts`): einer zur Zeit; der Start antwortet
+sofort mit der Kennung (oder einem Grund), Fortschritt, Ergebnis je Datei und Bericht kommen als
+Ereignis `meta:job` – gedrosselt, das Ende immer. Je Datei ein Schritt der Warteschlange
+(`dateiAendern`, `zeileZuruecknehmen`; Lesen in Teilen zu 200, `dateienLesen`): Dazwischen kommen
+andere Aufträge dran, und jeder Schritt sieht den Stand des vorigen. Abbrechen hält nach der
+laufenden Datei an. Vor dem Schreiben: Platz für die Sicherungen **aller** Dateien zusammen
+(`platzFuerSicherungen`, 1 GB Reserve); die Schnellbewertung im Raster fragt im main mit der Anzahl.
+Konflikt (`GEAENDERT`) = Status „konflikt“, nur diese Datei wird abgeglichen; „Neu lesen und erneut
+versuchen“ (`nochmal`) gleicht die Dateien ab und wartet darauf. „Rückgängig“ bekommt alle
+Journal-Zeilen eines Auftrags (samt erneutem Versuch) und nimmt sie in einem Schritt zurück.
+Schreibt beim Schließen des Fensters noch ein Auftrag, fragt die App und schließt erst nach der
+laufenden Datei (`src/main/index.ts`).
+
 ## Sidecars (XMP)
 
 - Name `<bild>.xmp` neben dem Bild (Konvention von Lightroom/darktable prüfen: `bild.CR3.xmp`
@@ -97,8 +119,14 @@ Schreiben sind; eigene Journal-Zeile.
 ## Tests
 
 - Rein: `metaFields` (jede Grenze, Ungültiges), `args` (Injektion per Zeilenumbruch, führendes
-  `-`, Unicode, ab 3.3 Mehrfachauswahl mit `+=`/`-=`).
+  `-`, Unicode), `metaMehrfach` (Prüfung, `aenderungFuer` je Datei, `zusammenfassen`, Rückfrage),
+  `lib/mehrfachFormular` (‹verschieden› leer behält, Chips, nur dazu/weg). Auftrag im main
+  (`mehrfach.test.ts`): nie die Liste einer Datei auf andere, Unberührtes ohne Sicherung, Konflikt,
+  Abbrechen nach der laufenden Datei, einer zur Zeit, Platz, Rückgängig als ein Schritt.
 - Labor (`*.lab.test.ts`, echtes ExifTool): jedes Feld schreiben → lesen → gleich; Pixel-Hash
-  gleich; Rückgängig stellt den alten Stand her; schreibgeschützte Datei → Sidecar.
-- E2E `metadaten`: Bearbeiten-Panel einzeln und mehrfach, Rückfrage bei Konflikt (Datei während
-  der Bearbeitung von außen ändern), Rückgängig.
+  gleich; Rückgängig stellt den alten Stand her; Stichwörter dazu/weg in allen sechs Formaten
+  (XMP, IPTC, XP); schreibgeschützte Datei → Sidecar.
+- E2E `metadaten`: Bearbeiten-Panel einzeln und die Ansicht „Metadaten bearbeiten“ mehrfach (Werte
+  unabhängig mit ExifTool nachgelesen), Rückfrage bei Konflikt (Datei während der Bearbeitung von
+  außen ändern), Abbrechen, Rückgängig, „nur lesen“ und „privat“ in der Auswahl, Schnellbewertung im
+  Raster.

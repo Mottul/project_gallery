@@ -10,6 +10,7 @@ import type {
 } from './gespeicherteAnsicht'
 import type { Gruppe, Gruppierung } from './gruppen'
 import type { MetaAenderung, MetaWerte, SchreibBericht } from './metaFields'
+import type { AuftragStand, AuftragStart, MehrfachAenderung, SchreibOptionen } from './metaMehrfach'
 import type { OrdnerFilter, Sortierung } from './sortFilter'
 import type {
   AddFolderResult,
@@ -53,7 +54,12 @@ export const Channels = {
 
   metaRead: 'meta:read',
   metaWrite: 'meta:write',
-  metaUndo: 'meta:undo'
+  metaUndo: 'meta:undo',
+  metaReadMany: 'meta:readMany',
+  metaWriteMany: 'meta:writeMany',
+  metaUndoMany: 'meta:undoMany',
+  metaCancel: 'meta:cancel', // Renderer -> main, Einweg: laufenden Auftrag anhalten
+  metaJob: 'meta:job' // Event: AuftragStand (Fortschritt und Ende eines Auftrags)
 } as const
 
 export interface GalerieApi {
@@ -134,5 +140,21 @@ export interface GalerieApi {
     write(ids: number[], aenderung: MetaAenderung): Promise<SchreibBericht<ImageInfo>>
     /** Einen Auftrag zurücknehmen (Kennungen aus `journal` des Berichts) */
     undo(journal: number[]): Promise<SchreibBericht<ImageInfo>>
+    // Mehrfachauswahl (3.3): Aufträge über viele Bilder. Der Start antwortet sofort (Kennung oder
+    // Grund); Fortschritt, Ergebnis je Datei und Bericht kommen über onJob. Einer zur Zeit.
+    /** Gemischte Werte der Bilder lesen – frisch aus den Dateien */
+    readMany(ids: number[]): Promise<AuftragStart>
+    /** Eine Änderung in alle Bilder schreiben, je Datei nur, was sich dort ändert */
+    writeMany(
+      ids: number[],
+      aenderung: MehrfachAenderung,
+      optionen?: SchreibOptionen
+    ): Promise<AuftragStart>
+    /** Einen ganzen Auftrag zurücknehmen (`journal` aus seinem Ende) */
+    undoMany(journal: number[]): Promise<AuftragStart>
+    /** Den laufenden Auftrag nach der laufenden Datei anhalten */
+    cancel(auftrag: number): void
+    /** Fortschritt und Ende der Aufträge; Rückgabe = Abmelden */
+    onJob(cb: (stand: AuftragStand) => void): () => void
   }
 }

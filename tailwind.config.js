@@ -40,7 +40,13 @@ module.exports = {
         warning: rgb('gelb'),
         danger: rgb('fehler'),
         // Hintergrund hinter dem Bild im Betrachter
-        buehne: rgb('buehne')
+        buehne: rgb('buehne'),
+        // Farblabels (XMP-Werte als Namen), gleich in Hell und Dunkel
+        'label-red': rgb('label-rot'),
+        'label-yellow': rgb('label-gelb'),
+        'label-green': rgb('label-gruen'),
+        'label-blue': rgb('label-blau'),
+        'label-purple': rgb('label-lila')
       },
       fontFamily: {
         sans: ['"Segoe UI"', 'system-ui', 'sans-serif']

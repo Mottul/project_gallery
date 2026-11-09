@@ -30,7 +30,7 @@ import {
 import { Beobachter, istNetzpfad } from './beobachter'
 import { orteSuchen } from './orte'
 import { scanne, scanneTeile } from './scan'
-import { schreibe, tagsLesen } from './schreiben'
+import { schreibe, tagsLesen, tagsLesenViele } from './schreiben'
 import { anzeigeFuer, vorschauFuer, type Einrichtung } from './vorschau'
 
 // sharp wie im Labor: Datei-Cache aus (Windows sperrte sonst gelesene Bilder), je Bild ein
@@ -217,6 +217,24 @@ async function tagsHolen(auftrag: number, datei: AnzeigeDatei, tags: TagWert[]):
   }
 }
 
+async function tagsVieleHolen(
+  auftrag: number,
+  dateien: AnzeigeDatei[],
+  tags: TagWert[]
+): Promise<void> {
+  try {
+    const p = exifPool()
+    gelesenMerken(dateien)
+    senden({
+      typ: 'tags-viele-ergebnis',
+      auftrag,
+      ergebnisse: await tagsLesenViele(p, dateien, tags)
+    })
+  } catch (err) {
+    fehler(auftrag, err)
+  }
+}
+
 async function schreiben(auftrag: number, a: SchreibAuftrag): Promise<void> {
   try {
     const p = exifPool()
@@ -274,6 +292,7 @@ port.on('message', (e: { data: AnDienst }) => {
   else if (n.typ === 'anzeige') void anzeige(n.auftrag, n.datei)
   else if (n.typ === 'alle-felder') void alleFelder(n.auftrag, n.datei)
   else if (n.typ === 'tags-lesen') void tagsHolen(n.auftrag, n.datei, n.tags)
+  else if (n.typ === 'tags-lesen-viele') void tagsVieleHolen(n.auftrag, n.dateien, n.tags)
   else if (n.typ === 'schreiben') void schreiben(n.auftrag, n.schreiben)
   else if (n.typ === 'zwischen-weg') void zwischenWeg(n.pfade)
   else if (n.typ === 'orte') void orte(n.auftrag, n.punkte)

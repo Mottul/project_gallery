@@ -19,7 +19,7 @@ import { abweichend, type TagWert } from '@shared/metaFields'
 import { mitZeitlimit, pruefeDatei } from '../dateien/pruefeDatei'
 import { schreibArgumente } from '../exiftool/args'
 import { leseTags, type ExifToolPool } from '../exiftool/exiftool'
-import type { SchreibAuftrag, SchreibErgebnis } from './protokoll'
+import type { SchreibAuftrag, SchreibErgebnis, TagsErgebnis } from './protokoll'
 
 /** So lange darf die Prüfung einer Datei dauern (hängendes Netzlaufwerk) */
 const PRUEF_MS = 5000
@@ -72,6 +72,37 @@ export async function tagsLesen(
     tags.map((t) => `-${t.tag}`)
   )
   return r.get(datei.pfad) ?? null
+}
+
+/**
+ * Dieselben Tags vieler Dateien (Mehrfachauswahl): jede Datei erst geprüft wie vor jedem Lesen –
+ * alle zugleich, damit ein hängendes Netzlaufwerk nur einmal das Zeitlimit kostet –, die übrigen
+ * dann in Teilen über den Pool gelesen. Ergebnis je Datei in derselben Reihenfolge.
+ */
+export async function tagsLesenViele(
+  pool: ExifToolPool,
+  dateien: readonly SchreibAuftrag['datei'][],
+  tags: readonly TagWert[]
+): Promise<TagsErgebnis[]> {
+  const codes = await Promise.all(
+    dateien.map((d) =>
+      mitZeitlimit(pruefeDatei(d.pfad, d.ordner, d.size, d.mtime), PRUEF_MS).then(
+        () => null,
+        (err: NodeJS.ErrnoException) => err?.code ?? 'UNBEKANNT'
+      )
+    )
+  )
+  const r = await leseTags(
+    pool,
+    dateien.filter((_, i) => codes[i] === null).map((d) => d.pfad),
+    tags.map((t) => `-${t.tag}`)
+  )
+  return dateien.map((d, i): TagsErgebnis => {
+    const code = codes[i]
+    if (code !== null) return { werte: null, code }
+    const werte = r.get(d.pfad)
+    return werte ? { werte, code: null } : { werte: null, code: 'UNLESBAR' }
+  })
 }
 
 export async function schreibe(

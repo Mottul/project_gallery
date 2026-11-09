@@ -3,6 +3,9 @@
 // Stand her. Das Bearbeiten-Panel liest aus der Datei und schreibt nur, was geändert wurde. Sicherung einmal je Datei, im Ordner „privat“ keine. Abgelehnt: „nur lesen“, BMP,
 // schreibgeschützt, von außen geänderte Datei – die Dateien bleiben dann unverändert. Fremde Werte
 // werden nie zu Argumenten, Ungültiges lehnt der main ab; keine Nachbardatei bleibt liegen.
+// Mehrfachauswahl (3.3): Ansicht „Metadaten bearbeiten“ mit gemischten Werten, Stichwörter dazu/weg
+// je Datei aus ihrer eigenen Liste, nur Geändertes, Konflikt mit „erneut versuchen“, Abbrechen,
+// Rückgängig als ein Schritt, „nur lesen“ und „privat“ in der Auswahl, Schnellbewertung im Raster.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -10,6 +13,7 @@ import { createHash } from 'node:crypto'
 import {
   appendFileSync,
   chmodSync,
+  copyFileSync,
   existsSync,
   linkSync,
   mkdtempSync,
@@ -19,7 +23,7 @@ import {
   statSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import sharp from 'sharp'
 import { werkzeug } from '../scripts/testbilder.mjs'
 import {
@@ -27,6 +31,7 @@ import {
   kachel,
   launchApp,
   runSteps,
+  stubConfirm,
   stubOrdnerDialog,
   testbibliothek,
   waitFor
@@ -178,6 +183,101 @@ const leseSperreAus = () =>
 
 const NAME = 'dubrovnik.jpg'
 const NAME2 = 'paris.jpg'
+
+// ── Mehrfachauswahl (3.3) ─────────────────────────────────────────────────────────────────────
+// Drei Dateien mit je eigener Stichwortliste, bevor die App sie liest: „urlaub“ klein, „Meer“ in
+// Bild 2 nur in IPTC – so zählen Groß/Klein und alle Orte der Stichwörter
+const M1 = 'bild 1.jpg'
+const M2 = 'Bild 2.jpg'
+const M3 = 'Bild 10.jpg'
+vonAussen(pfadVon(M1), [
+  '-XMP-dc:Subject=Urlaub',
+  '-XMP-dc:Subject=Meer',
+  '-XMP-xmp:Rating=4',
+  '-XMP-dc:Creator=Testperson'
+])
+vonAussen(pfadVon(M2), [
+  '-XMP-dc:Subject=urlaub',
+  '-XMP-dc:Subject=Kroatien',
+  '-IPTC:Keywords=Meer',
+  '-XMP-xmp:Rating=2',
+  '-XMP-dc:Creator=Testperson'
+])
+vonAussen(pfadVon(M3), [
+  '-XMP-dc:Subject=Kroatien',
+  '-XMP-dc:Subject=Altstadt',
+  '-XMP-dc:Creator=Testperson'
+])
+
+const ansicht = () => page.getByRole('dialog', { name: 'Metadaten bearbeiten' })
+const ansichtFeld = (n) => ansicht().getByLabel(n, { exact: true })
+const mehrfachSchreiben = () =>
+  ansicht().getByRole('button', { name: /^In \d+ (Datei|Dateien) schreiben$/ })
+const bericht = () => ansicht().getByRole('status')
+const rasterHinweis = () => page.getByRole('main').getByRole('status')
+/** ExifTool gibt eine Liste mit einem Wert als Text aus */
+const liste = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]).map(String)
+/** Stichwörter einer Datei in allen drei Orten, unabhängig von der App gelesen */
+function stichwortOrte(p) {
+  const t = alleTags(p)
+  return {
+    xmp: liste(t['XMP:Subject']),
+    iptc: liste(t['IPTC:Keywords']),
+    xp: t['EXIF:XPKeywords'] ?? null
+  }
+}
+/** Status-Zeile einer Datei in der Liste links */
+const statusVon = async (name) =>
+  (
+    await ansicht()
+      .getByRole('list', { name: 'Ausgewählte Bilder' })
+      .getByRole('listitem')
+      .filter({ hasText: name })
+      .first()
+      .innerText()
+  )
+    .split('\n')
+    .at(-1)
+/** In „Alle Bilder“ (nach Name) genau diese Kacheln wählen – die erste per Klick, dann mit Strg */
+async function waehlen(namen) {
+  // eine offen gebliebene Ansicht (gescheiterter Schritt) läge über der Galerie
+  if (await ansicht().count()) await ansichtZu()
+  await page
+    .getByRole('navigation', { name: 'Bibliothek und Ordner' })
+    .getByRole('button', { name: /^Alle Bilder/ })
+    .click()
+  for (const [i, n] of namen.entries()) {
+    await (await kachel(page, n)).click(i ? { modifiers: ['Control'] } : {})
+  }
+}
+/** Die Ansicht für diese Bilder öffnen (Taste E oder Knopf) und warten, bis gelesen ist */
+async function ansichtOeffnen(namen, ueber = 'taste') {
+  if (await ansicht().count()) await ansichtZu()
+  await waehlen(namen)
+  if (ueber === 'knopf') {
+    await page.getByRole('button', { name: 'Metadaten', exact: true }).click()
+  } else await page.keyboard.press('e')
+  await ansicht().waitFor({ timeout: 5_000 })
+  await ansichtFeld('Urheber').waitFor({ timeout: 15_000 })
+}
+/** Ansicht schließen (verwirft Eingaben) */
+async function ansichtZu() {
+  const knopf = ansicht().getByRole('button', { name: /^(Abbrechen|Schließen)$/ })
+  if (await knopf.count()) await knopf.click()
+  await waitFor(async () => (await ansicht().count()) === 0, 5_000)
+}
+/** Dialoge des main ersetzen und ihre Fragen mitschreiben (Antworten der Reihe nach) */
+const fragen = (antworten) =>
+  app.evaluate(({ dialog }, a) => {
+    globalThis.__fragen = []
+    globalThis.__antworten = [...a]
+    dialog.showMessageBox = async (...args) => {
+      const o = args.find((x) => x && typeof x === 'object' && 'message' in x)
+      globalThis.__fragen.push(o?.message)
+      return { response: globalThis.__antworten.shift() ?? 1, checkboxChecked: false }
+    }
+  }, antworten)
+const gestellt = () => app.evaluate(() => globalThis.__fragen)
 
 try {
   await runSteps('Metadaten schreiben', [
@@ -675,11 +775,385 @@ try {
       }
     ],
     [
+      'Mehrfach: Taste E öffnet die Ansicht mit gemischten Werten aus den Dateien',
+      async () => {
+        await ansichtOeffnen([M1, M2, M3])
+        await ansicht().getByText('3 Bilder ausgewählt').waitFor({ timeout: 3_000 })
+        // Stichwörter ohne Groß/Klein gezählt, über XMP und IPTC; gestrichelt mit n/N
+        const chips = ansicht().getByRole('list', { name: 'Stichwörter' }).getByRole('listitem')
+        const gesehen = await chips.evaluateAll((l) =>
+          l.map((e) => `${e.firstElementChild?.textContent} ${e.dataset.anzahl}`)
+        )
+        assert.deepEqual(gesehen.sort(), ['Altstadt 1/3', 'Kroatien 2/3', 'Meer 2/3', 'Urlaub 2/3'])
+        assert.equal(await ansichtFeld('Urheber').inputValue(), 'Testperson', 'gleicher Wert fehlt')
+        assert.equal(await ansichtFeld('Titel').inputValue(), '')
+        await ansicht().getByText('‹verschieden› (0–5 Sterne)').waitFor({ timeout: 3_000 })
+        assert.ok((await mehrfachSchreiben().count()) === 0, 'ohne Änderung schreibbar')
+      }
+    ],
+    [
+      'Mehrfach: Stichwörter dazu/weg je Datei in XMP, IPTC und Windows; nur Geändertes; je Datei eine Sicherung',
+      async () => {
+        const pfade = [M1, M2, M3].map(pfadVon)
+        const vorherPixel = await Promise.all(pfade.map(pixel))
+        const sicherungenVorher = sicherungen().length
+        await ansicht().getByRole('button', { name: '„Meer“ bei allen entfernen' }).click()
+        await ansichtFeld('Stichwort für alle hinzufügen').fill('Größe')
+        await ansichtFeld('Stichwort für alle hinzufügen').press('Enter')
+        await ansicht().getByRole('button', { name: '„Altstadt“ bei allen hinzufügen' }).click()
+        await ansicht().getByRole('button', { name: 'Alle auf 3 Sterne' }).click()
+        await ansicht().getByText('2 Felder geändert').waitFor({ timeout: 3_000 })
+        await mehrfachSchreiben().click()
+        await bericht().getByText('3 Dateien geschrieben und geprüft').waitFor({ timeout: 20_000 })
+        // je Datei aus ihrer eigenen Liste – nie die der ersten auf alle kopiert
+        const erwartet = [
+          ['Urlaub', 'Größe', 'Altstadt'],
+          ['urlaub', 'Kroatien', 'Größe', 'Altstadt'],
+          ['Kroatien', 'Altstadt', 'Größe']
+        ]
+        for (const [i, p] of pfade.entries()) {
+          const o = stichwortOrte(p)
+          assert.deepEqual(o.xmp, erwartet[i], `XMP ${p}`)
+          assert.deepEqual(o.iptc, erwartet[i], `IPTC ${p}`)
+          assert.equal(o.xp, erwartet[i].join(';'), `XP ${p}`)
+          const t = alleTags(p)
+          assert.equal(t['XMP:Rating'], 3)
+          assert.equal(t['EXIF:Rating'], 3)
+          // nicht angefasst
+          assert.equal(t['XMP:Creator'], 'Testperson')
+          assert.equal(t['XMP:Title'], undefined)
+          assert.equal(await pixel(p), vorherPixel[i], `Pixel ${p}`)
+        }
+        for (const n of [M1, M2, M3]) {
+          assert.equal(await statusVon(n), 'Geschrieben · Sicherung angelegt · geprüft', n)
+        }
+        assert.equal(sicherungen().length, sicherungenVorher + 3, 'nicht je Datei eine Sicherung')
+        assert.deepEqual(reste(), [])
+        // Index und Suche folgen
+        const q = await page.evaluate(() =>
+          window.api.library.queryGroups(
+            { feld: 'name', richtung: 'auf' },
+            undefined,
+            'aus',
+            false,
+            {
+              suche: 'größe'
+            }
+          )
+        )
+        assert.equal(q.ids.length, 3, 'Suchindex folgt nicht')
+        // danach liest die Ansicht neu: alle drei haben jetzt „Größe“ und „Altstadt“
+        await ansicht()
+          .getByRole('list', { name: 'Stichwörter' })
+          .getByRole('listitem')
+          .filter({ hasText: 'Altstadt' })
+          .and(ansicht().locator('[data-anzahl="3/3"]'))
+          .waitFor({ timeout: 10_000 })
+      }
+    ],
+    [
+      'Mehrfach: Rückgängig nimmt den ganzen Auftrag in einem Schritt zurück',
+      async () => {
+        await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+        await bericht().getByText('Rückgängig gemacht: 3 Dateien').waitFor({ timeout: 20_000 })
+        const vorher = [
+          { xmp: ['Urlaub', 'Meer'], iptc: [], xp: null, r: 4 },
+          { xmp: ['urlaub', 'Kroatien'], iptc: ['Meer'], xp: null, r: 2 },
+          { xmp: ['Kroatien', 'Altstadt'], iptc: [], xp: null, r: undefined }
+        ]
+        for (const [i, n] of [M1, M2, M3].entries()) {
+          const o = stichwortOrte(pfadVon(n))
+          assert.deepEqual(o, { xmp: vorher[i].xmp, iptc: vorher[i].iptc, xp: null }, n)
+          assert.equal(alleTags(pfadVon(n))['XMP:Rating'], vorher[i].r, n)
+          assert.equal(await statusVon(n), 'Zurückgenommen · geprüft', n)
+        }
+        assert.deepEqual(reste(), [])
+        await ansichtZu()
+      }
+    ],
+    [
+      'Mehrfach: Wer die Werte schon hat, bleibt unberührt (Knopf „Metadaten“)',
+      async () => {
+        const sonne = 'Sonne 🌞.jpg'
+        const vorher = inhalt(pfadVon(sonne))
+        const sicherungenVorher = sicherungen().length
+        await ansichtOeffnen([M1, sonne], 'knopf')
+        await ansichtFeld('Titel').fill('Grüße aus Köln 🌞')
+        await mehrfachSchreiben().click()
+        await bericht().getByText('1 Datei geschrieben und geprüft').waitFor({ timeout: 20_000 })
+        await bericht().getByText('1 Datei hatte die Werte schon.').waitFor({ timeout: 3_000 })
+        assert.equal(inhalt(pfadVon(sonne)), vorher, 'unberührte Datei geändert')
+        assert.equal(alleTags(pfadVon(M1))['XMP:Title'], 'Grüße aus Köln 🌞')
+        assert.equal(await statusVon(sonne), 'Hatte die Werte schon – nicht geschrieben')
+        // M1 hatte schon eine Sicherung, die unberührte bekommt keine
+        assert.equal(await statusVon(M1), 'Geschrieben · Sicherung vorhanden · geprüft')
+        assert.equal(sicherungen().length, sicherungenVorher)
+        await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+        await bericht().getByText('Rückgängig gemacht: 1 Datei').waitFor({ timeout: 20_000 })
+        assert.equal(alleTags(pfadVon(M1))['XMP:Title'], undefined)
+        await ansichtZu()
+      }
+    ],
+    [
+      'Mehrfach: von außen geändert wird übersprungen; „Neu lesen und erneut versuchen“ schreibt danach',
+      async () => {
+        await ansichtOeffnen([M1, M2, M3])
+        // nach dem Lesen über einen Hardlink außerhalb ändern: fs.watch meldet das nicht
+        const p = pfadVon(M2)
+        const link = join(userData, 'link-mehrfach.jpg')
+        linkSync(p, link)
+        appendFileSync(link, Buffer.alloc(16))
+        rmSync(link)
+        const geaendert = inhalt(p)
+        await ansicht().getByRole('button', { name: 'Alle auf 1 Stern' }).click()
+        await mehrfachSchreiben().click()
+        await bericht().getByText('2 Dateien geschrieben und geprüft').waitFor({ timeout: 20_000 })
+        await bericht()
+          .getByText(`${M2} wurde inzwischen von einem anderen Programm geändert`)
+          .waitFor({ timeout: 3_000 })
+        assert.equal(inhalt(p), geaendert, 'geänderte Datei trotzdem geschrieben')
+        assert.equal(await statusVon(M2), 'Inzwischen außerhalb geändert – übersprungen.')
+        assert.equal(alleTags(pfadVon(M1))['XMP:Rating'], 1)
+        await bericht().getByRole('button', { name: 'Neu lesen und erneut versuchen' }).click()
+        await bericht().getByText('3 Dateien geschrieben und geprüft').waitFor({ timeout: 30_000 })
+        assert.equal(await bericht().getByText('anderen Programm').count(), 0, 'Konflikt bleibt')
+        assert.equal(alleTags(p)['XMP:Rating'], 1)
+        assert.equal(await statusVon(M2), 'Geschrieben · Sicherung vorhanden · geprüft')
+        // Rückgängig nimmt beides zurück: den Auftrag und das erneute Versuchen
+        await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+        await bericht().getByText('Rückgängig gemacht: 3 Dateien').waitFor({ timeout: 20_000 })
+        assert.equal(alleTags(pfadVon(M1))['XMP:Rating'], 4)
+        assert.equal(alleTags(p)['XMP:Rating'], 2)
+        assert.equal(alleTags(pfadVon(M3))['XMP:Rating'], undefined)
+        assert.deepEqual(reste(), [])
+        await ansichtZu()
+      }
+    ],
+    [
+      'Mehrfach: Abbrechen hält nach der laufenden Datei an; Geschriebenes bleibt und steht im Bericht',
+      async () => {
+        await page
+          .getByRole('tree', { name: 'Ordner' })
+          .getByRole('button', { name: 'ausrichtung', exact: true })
+          .click()
+        await (await kachel(page, 'ausrichtung-1.jpg')).click()
+        await page.keyboard.press('Control+a')
+        await page.keyboard.press('e')
+        await ansichtFeld('Urheber').waitFor({ timeout: 15_000 })
+        await ansicht().getByText('8 Bilder ausgewählt').waitFor({ timeout: 3_000 })
+        const namen = Array.from({ length: 8 }, (_, i) => `ausrichtung-${i + 1}.jpg`)
+        const vorher = new Map(namen.map((n) => [n, inhalt(pfadVon(n))]))
+        await ansicht().getByRole('button', { name: 'Alle auf 5 Sterne' }).click()
+        await mehrfachSchreiben().click()
+        // anhalten, sobald die erste Datei fertig ist
+        await ansicht()
+          .getByText(/Schreibt … [1-7] von 8/)
+          .waitFor({ timeout: 20_000 })
+        await ansicht().getByRole('button', { name: 'Abbrechen', exact: true }).click()
+        await bericht()
+          .getByText(/Abgebrochen – \d von 8 bearbeitet/)
+          .waitFor({ timeout: 20_000 })
+        const geschrieben = namen.filter((n) => inhalt(pfadVon(n)) !== vorher.get(n))
+        assert.ok(geschrieben.length >= 1 && geschrieben.length < 8, `${geschrieben.length} von 8`)
+        for (const n of namen) {
+          const ja = geschrieben.includes(n)
+          assert.equal(alleTags(pfadVon(n))['XMP:Rating'], ja ? 5 : undefined, n)
+          assert.match(
+            await statusVon(n),
+            ja ? /^Geschrieben · Sicherung angelegt/ : /^Nicht bearbeitet – abgebrochen$/,
+            n
+          )
+        }
+        await bericht()
+          .getByText(
+            `${geschrieben.length === 1 ? '1 Datei' : `${geschrieben.length} Dateien`} geschrieben`
+          )
+          .waitFor({ timeout: 3_000 })
+        assert.deepEqual(reste(), [])
+        // Rückgängig nimmt das Geschriebene zurück
+        await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+        await bericht()
+          .getByText(/^Rückgängig gemacht/)
+          .waitFor({ timeout: 20_000 })
+        for (const n of namen) assert.equal(alleTags(pfadVon(n))['XMP:Rating'], undefined, n)
+        await ansichtZu()
+      }
+    ],
+    [
+      'Mehrfach: „nur lesen“ und „privat“ in der Auswahl',
+      async () => {
+        // ein zweiter Bibliotheksordner mit Kopien
+        const zweit = mkdtempSync(join(tmpdir(), 'galeria-zweit-'))
+        const za = join(zweit, 'zweit-a.jpg')
+        const zb = join(zweit, 'zweit-b.jpg')
+        copyFileSync(pfadVon(M3), za)
+        copyFileSync(pfadVon('Übersicht äöü ß.jpg'), zb)
+        await stubOrdnerDialog(app, zweit)
+        await page.evaluate(() => window.api.library.addFolder())
+        const z = await waitFor(async () => {
+          const s = await zustand()
+          const o = s.folders.find((f) => f.name === basename(zweit))
+          return o?.status === 'bereit' && o.count === 2 && s.metaPending === 0 ? o : null
+        }, 30_000)
+        assert.ok(z, 'zweiter Ordner nicht eingelesen')
+        try {
+          await page.evaluate((id) => window.api.library.setFolderMode(id, 'nur-lesen'), z.id)
+          const vorher = [inhalt(za), inhalt(zb)]
+          await ansichtOeffnen(['zweit-a.jpg', 'zweit-b.jpg', M1])
+          await ansicht().getByText('2 lassen sich nicht beschreiben').waitFor({ timeout: 3_000 })
+          assert.equal(await statusVon('zweit-a.jpg'), 'Der Ordner steht auf „nur lesen“.')
+          await ansicht().getByRole('button', { name: 'Alle auf 2 Sterne' }).click()
+          assert.equal(await mehrfachSchreiben().innerText(), 'In 1 Datei schreiben')
+          await mehrfachSchreiben().click()
+          await bericht().getByText('1 Datei geschrieben und geprüft').waitFor({ timeout: 20_000 })
+          assert.deepEqual([inhalt(za), inhalt(zb)], vorher, '„nur lesen“ geschrieben')
+          assert.equal(alleTags(pfadVon(M1))['XMP:Rating'], 2)
+          await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+          await bericht().getByText('Rückgängig gemacht: 1 Datei').waitFor({ timeout: 20_000 })
+          assert.equal(alleTags(pfadVon(M1))['XMP:Rating'], 4)
+          await ansichtZu()
+
+          // „privat“: geschrieben, aber ohne Sicherung
+          await page.evaluate((id) => window.api.library.setFolderMode(id, 'privat'), z.id)
+          await ansichtOeffnen(['zweit-a.jpg', 'zweit-b.jpg', M1])
+          // 5 Sterne hat noch keine (M1 hat 4 – sie bliebe sonst als „hatte die Werte schon“ stehen)
+          await ansicht().getByRole('button', { name: 'Alle auf 5 Sterne' }).click()
+          await mehrfachSchreiben().click()
+          await bericht()
+            .getByText('3 Dateien geschrieben und geprüft')
+            .waitFor({ timeout: 20_000 })
+          assert.equal(
+            await statusVon('zweit-a.jpg'),
+            'Geschrieben · ohne Sicherung (privat) · geprüft'
+          )
+          assert.equal(await statusVon(M1), 'Geschrieben · Sicherung vorhanden · geprüft')
+          assert.equal(alleTags(za)['XMP:Rating'], 5)
+          assert.equal(alleTags(zb)['XMP:Rating'], 5)
+          assert.equal(
+            sicherungen().filter((n) => n.includes('zweit-')).length,
+            0,
+            '„privat“ legte eine Sicherung an'
+          )
+          assert.deepEqual(
+            readdirSync(zweit).filter((n) => n.includes('galerie-tmp')),
+            [],
+            'Nachbardatei im zweiten Ordner'
+          )
+          await bericht().getByRole('button', { name: 'Rückgängig' }).click()
+          await bericht().getByText('Rückgängig gemacht: 3 Dateien').waitFor({ timeout: 20_000 })
+          await ansichtZu()
+        } finally {
+          await stubConfirm(app, true)
+          await page.evaluate((id) => window.api.library.removeFolder(id), z.id)
+          rmSync(zweit, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+        }
+      }
+    ],
+    [
+      'Schnellbewertung im Raster: ein Bild sofort, ab zwei nach Rückfrage, Rückgängig für alle',
+      async () => {
+        // ein Bild: sofort, wie im Betrachter
+        await waehlen([M3])
+        await page.keyboard.press('4')
+        await rasterHinweis().getByText('4 Sterne gespeichert').waitFor({ timeout: 10_000 })
+        assert.equal(tags(pfadVon(M3))['XMP:Rating'], 4)
+        await page.keyboard.press('Control+z')
+        assert.ok(
+          await waitFor(async () => tags(pfadVon(M3))['XMP:Rating'] === undefined, 5_000),
+          'Strg+Z wirkt nicht'
+        )
+        // drei Bilder: Rückfrage mit der Zahl; „Abbrechen“ schreibt nichts
+        const pfade = [M1, M2, M3].map(pfadVon)
+        const vorher = pfade.map(inhalt)
+        await fragen([1, 0, 0])
+        await waehlen([M1, M2, M3])
+        await page.keyboard.press('5')
+        await waitFor(async () => (await gestellt()).length === 1, 5_000)
+        assert.deepEqual(await gestellt(), ['5 Sterne für 3 Bilder schreiben?'])
+        assert.deepEqual(pfade.map(inhalt), vorher, 'nach „Abbrechen“ geschrieben')
+        // zugesagt: Fortschritt, dann das Ergebnis mit „Rückgängig“ für alle
+        await page.keyboard.press('5')
+        await rasterHinweis()
+          .getByText('5 Sterne: 3 Dateien geschrieben')
+          .waitFor({ timeout: 20_000 })
+        for (const p of pfade) assert.equal(tags(p)['XMP:Rating'], 5, p)
+        await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+        await rasterHinweis()
+          .getByText('Rückgängig gemacht: 3 Dateien')
+          .waitFor({ timeout: 20_000 })
+        assert.deepEqual(
+          pfade.map((p) => tags(p)['XMP:Rating']),
+          [4, 2, undefined],
+          'nicht alle zurück'
+        )
+        // Farblabel für alle
+        await waehlen([M1, M2, M3])
+        await page.keyboard.press('7')
+        await rasterHinweis()
+          .getByText('Farblabel Gelb: 3 Dateien geschrieben')
+          .waitFor({ timeout: 20_000 })
+        assert.deepEqual(await gestellt(), [
+          '5 Sterne für 3 Bilder schreiben?',
+          '5 Sterne für 3 Bilder schreiben?',
+          'Farblabel Gelb für 3 Bilder schreiben?'
+        ])
+        for (const p of pfade) assert.equal(tags(p)['XMP:Label'], 'Yellow', p)
+        await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+        await rasterHinweis()
+          .getByText('Rückgängig gemacht: 3 Dateien')
+          .waitFor({ timeout: 20_000 })
+        for (const p of pfade) assert.equal(tags(p)['XMP:Label'], undefined, p)
+      }
+    ],
+    [
+      'Mehrfach im main abgelehnt: ganze Listen, Widerspruch, Tag-Namen, Optionen, Kennungen, zweiter Auftrag',
+      async () => {
+        const b = await kennung(M1)
+        const roh = (ids, a, o) =>
+          page.evaluate(
+            ([i, x, y]) =>
+              window.api.meta.writeMany(i, x, y).then(
+                (r) => r,
+                (e) => ({ abgelehnt: String(e.message) })
+              ),
+            [ids, a, o]
+          )
+        for (const a of [
+          {},
+          { stichwoerter: ['a'] },
+          { stichwoerterDazu: ['Meer'], stichwoerterWeg: ['meer'] },
+          { stichwoerterDazu: ['a;b'] },
+          { 'XMP-dc:Subject': 'x' },
+          { aufnahme: { lokal: '2020-01-02T03:04:05', offset: '+01:00' } }
+        ]) {
+          assert.match(
+            (await roh([b.id], a)).abgelehnt ?? '',
+            /Ungültige Änderung/,
+            JSON.stringify(a)
+          )
+        }
+        assert.match(
+          (await roh([b.id], { bewertung: 1 }, { rueckfrage: 'ja' })).abgelehnt ?? '',
+          /Ungültige Optionen/
+        )
+        const viele = Array.from({ length: 10_001 }, (_, i) => i + 1)
+        assert.match((await roh(viele, { bewertung: 1 })).abgelehnt ?? '', /Ungültige Kennungen/)
+        // einer zur Zeit: der zweite Start bekommt einen Grund, der erste läuft zu Ende
+        const [erster, zweiter] = await page.evaluate(
+          (id) => Promise.all([window.api.meta.readMany([id]), window.api.meta.readMany([id])]),
+          b.id
+        )
+        assert.ok('auftrag' in erster, JSON.stringify(erster))
+        assert.match(zweiter.grund ?? '', /läuft schon/)
+      }
+    ],
+    [
       'Log ohne Werte; keine Nachbardatei; keine Konsolenfehler',
       async () => {
         const log = readFileSync(join(userData, 'galeria-debug.log'), 'utf8')
         assert.ok(log.includes('[metadaten]'), 'Log enthält den Lauf nicht')
-        for (const w of ['eingeschleust', 'delete_original', 'Yellow']) {
+        assert.ok(log.includes('(schreiben)'), 'Log enthält keinen Mehrfach-Auftrag')
+        for (const w of ['eingeschleust', 'delete_original', 'Yellow', 'Kroatien', 'Größe']) {
           assert.ok(!log.includes(w), `im Log: ${w}`)
         }
         assert.deepEqual(reste(), [])

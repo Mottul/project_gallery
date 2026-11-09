@@ -20,11 +20,13 @@ import { grundfelderAus } from '@shared/grundfelder'
 import {
   abweichend,
   alteWerte,
+  pruefeMetaAenderung,
   tagsFuer,
   werteAus,
   WERTE_TAGS,
   type MetaAenderung
 } from '@shared/metaFields'
+import { aenderungFuer } from '@shared/metaMehrfach'
 import { zwischenName } from '@shared/scanRegeln'
 import { ExifToolPool, leseTags } from '../exiftool/exiftool'
 import type { SchreibErgebnis } from './protokoll'
@@ -228,6 +230,91 @@ describe.skipIf(!existsSync(BIN))('Schreibweg (Labor)', () => {
     expect(ist['EXIF:XPKeywords']).toBe('bleibt')
     expect(await schreiben(p, { stichwoerter: [] })).toMatchObject({ ok: true })
     expect(await lesen(p, { stichwoerter: ['x'] })).toEqual({ SourceFile: p.replaceAll('\\', '/') })
+  })
+
+  // Mehrfachauswahl (3.3): Stichwörter dazu/weg je Datei aus ihrer eigenen, zusammengeführten Liste
+  const MIT_IPTC = new Set(['jpeg', 'tiff'])
+  const MIT_EXIF = new Set(['jpeg', 'tiff', 'png', 'webp', 'avif'])
+  it.each(Object.keys(FORMATE))(
+    '%s: Mehrfach – Stichwörter dazu/weg in XMP, IPTC und XP, ohne Groß/Klein',
+    async (f) => {
+      const p = await neu(f)
+      // Ausgangslage wie von anderen Programmen: die drei Orte verschieden, „meer“ klein
+      await schreibe(
+        {
+          datei: datei(p),
+          tags: [
+            { tag: 'XMP-dc:Subject', wert: ['Urlaub', 'Meer'] },
+            ...(MIT_IPTC.has(f) ? [{ tag: 'IPTC:Keywords', wert: ['meer', 'Kroatien'] }] : []),
+            ...(MIT_EXIF.has(f) ? [{ tag: 'EXIF:XPKeywords', wert: 'Altstadt;Süden' }] : [])
+          ],
+          sicherung: null,
+          zwischen: zwischenName(p, ++nr)
+        },
+        pool
+      )
+      const lesenAlle = async (): Promise<Record<string, unknown>> =>
+        (
+          await leseTags(
+            pool,
+            [p],
+            WERTE_TAGS.map((t) => `-${t.tag}`)
+          )
+        ).get(p) as Record<string, unknown>
+      const vorher = werteAus(await lesenAlle()).stichwoerter
+      const pix = await pixel(p)
+      const m = { stichwoerterDazu: ['Größe 🌞', 'urlaub'], stichwoerterWeg: ['MEER', 'süden'] }
+      const a = aenderungFuer(werteAus(await lesenAlle()), m)
+      expect(a && pruefeMetaAenderung(a)).toBeTruthy()
+      const erwartet = vorher
+        .filter((w) => !['meer', 'süden'].includes(w.toLowerCase()))
+        .concat('Größe 🌞')
+      expect(a?.stichwoerter).toEqual(erwartet)
+      const r = await schreibe(
+        {
+          datei: datei(p),
+          tags: tagsFuer(a as MetaAenderung, f),
+          sicherung: null,
+          zwischen: zwischenName(p, ++nr)
+        },
+        pool
+      )
+      expect(r).toMatchObject({ ok: true })
+      const ist = await lesenAlle()
+      // jeder Ort trägt die neue Liste (soweit das Format ihn hat): kein entferntes Wort kommt zurück
+      expect(werteAus(ist).stichwoerter).toEqual(erwartet)
+      const liste = (v: unknown): string[] =>
+        v === undefined ? [] : (Array.isArray(v) ? v : [v]).map(String)
+      expect(liste(ist['XMP:Subject'])).toEqual(erwartet)
+      expect(liste(ist['IPTC:Keywords'])).toEqual(MIT_IPTC.has(f) ? erwartet : [])
+      // XP speichert keine Emoji: das Wort fehlt dort ganz
+      expect(ist['EXIF:XPKeywords']).toBe(
+        MIT_EXIF.has(f) ? erwartet.filter((w) => !w.includes('🌞')).join(';') : undefined
+      )
+      if (r.ok) {
+        expect(grundfelderAus(r.roh, { btime: null, mtime: r.mtime }).stichwoerter).toEqual(
+          erwartet
+        )
+      }
+      expect(await pixel(p)).toBe(pix)
+      // ein zweites Mal ist nichts mehr zu tun
+      expect(aenderungFuer(werteAus(ist), m)).toBeNull()
+      expect(reste()).toEqual([])
+    }
+  )
+
+  it('gemessen: ExifTools -= achtet auf Groß/Klein, += legt Doppelte an – darum rechnet der main', async () => {
+    const p = await neu()
+    await schreiben(p, { stichwoerter: ['Meer', 'Urlaub'] })
+    const a = await pool.ausfuehren([
+      '-overwrite_original',
+      '-XMP-dc:Subject-=meer',
+      '-XMP-dc:Subject+=Urlaub',
+      p
+    ])
+    expect(a.ausgabe).toMatch(/1 image files updated/)
+    const ist = await lesen(p, { stichwoerter: ['x'] })
+    expect(ist['XMP:Subject']).toEqual(['Meer', 'Urlaub', 'Urlaub'])
   })
 
   it('Datum ohne Zone und alte Sekundenbruchteile', async () => {
