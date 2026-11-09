@@ -26,7 +26,7 @@ Mottulbox (`launchApp`, `openRoute`, `waitFor`, `stubConfirm`, `stubConfirmSeque
 | `sortieren.mjs` | Reihenfolgen exakt nach bekannten Testbildern (Datum, Name natürlich, Ort A–Z, Kamera, Bewertung, Ordner), fehlende Werte am Ende – „Ohne Standort“ auch absteigend; Gruppen (Monat/Jahr/Tag, Ort) und der Schalter „Gruppen“ in Raster und Liste |
 | `filter.mjs` | Filter und Suche exakt gegen die Testbilder, Ungültiges abgelehnt, Suchfeld, Filterleiste (Liste ganz sichtbar), Chips, „N von M“, Filter über Ordner/Ansichten/Betrachter, nach Neuladen weg, Suchindex folgt den Dateien, Log ohne Suchbegriffe |
 | `ansichten.mjs` | Speichern über die Filterleiste, Öffnen stellt Ordner, Darstellung, Sortierung, Gruppen, Größe, Filter und Suche wieder her, Ersetzen nur ausdrücklich, Ungültiges abgelehnt, nach dem Neustart nicht aktiv, Löschen mit Rückfrage, entfernter Ordner nimmt seine Ansichten mit, Log ohne Namen |
-| `metadaten.mjs` | Schnellbewertung und Bearbeiten-Panel: Werte unabhängig von der App mit ExifTool nachgelesen, Pixel gleich, nur Geändertes geschrieben, Rückgängig, Sicherung einmal und bytegleich, Konflikt bei Änderung von außen, Ungespeichertes, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen, Log ohne Werte, keine Nachbardatei; ab 3.3 mehrfach |
+| `metadaten.mjs` | Schnellbewertung und Bearbeiten-Panel: Werte unabhängig von der App mit ExifTool nachgelesen, Pixel gleich, nur Geändertes geschrieben, Rückgängig, Sicherung einmal und bytegleich, Konflikt bei Änderung von außen, Ungespeichertes, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen, Log ohne Werte, keine Nachbardatei; seit 3.3 die Ansicht „Metadaten bearbeiten“ (gemischte Werte, Stichwörter je Datei in XMP/IPTC/XP, Unberührtes ohne Sicherung, Konflikt mit „erneut versuchen“, Abbrechen, Rückgängig als ein Schritt, „nur lesen“ und „privat“ in der Auswahl) und die Schnellbewertung im Raster mit Rückfrage |
 | `stapel.mjs` | Vorschau = Ergebnis, Konflikte blockieren, Abbrechen ohne Reste, Rückgängig |
 | `editor.mjs` | Rezept, Als Kopie speichern, Original ersetzen mit Sicherung |
 | `paket.mjs` | gepackte App: Start aus `app.asar`, sharp aus `app.asar.unpacked`, ExifTool aus `resources/` |
@@ -117,6 +117,15 @@ try {
   erst auf ein Zeichen, und der Test handelt genau in der Lücke. Danach `removeHandler` im
   `finally` (Muster `leseSperre` in `metadaten.mjs`). Vorbedingung erwarten: Der Test wartet, bis
   die Sperre einen Aufruf gezählt hat.
+- **Mehrfachauswahl** (3.3, `metadaten.mjs`): Die Ausgangslage (je Datei andere Stichwörter, „urlaub“
+  klein, eines nur in IPTC) setzt das Skript mit ExifTool, **bevor** die App den Ordner liest – dann
+  liest sie es frisch. Zielwerte wählen, die noch keine Datei hat: Sonst bleibt sie „hatte die Werte
+  schon“ stehen, und „3 Dateien geschrieben“ wird rot (so passiert). ExifTool gibt eine Liste mit einem
+  Wert als Text aus – vor dem Vergleich zur Liste machen. Abbrechen: erst auf „Schreibt … 1 von N“
+  warten, dann klicken – vorher heißt der Knopf ebenso „Abbrechen“ und verwirft die Eingaben. Die
+  Rückfrage im main per Stub ersetzen, der die Nachrichten mitschreibt (`fragen`/`gestellt`). Eine
+  offen gebliebene Ansicht (gescheiterter Schritt) liegt über der Galerie und fängt jeden Klick ab:
+  Die Helfer schließen sie zuerst.
 - **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
   Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
 - **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter

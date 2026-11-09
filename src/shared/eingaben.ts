@@ -6,6 +6,12 @@ import { pruefeAnsichtName, pruefeAnsichtStand, type AnsichtStand } from './gesp
 import { pruefeGruppierung, type Gruppierung } from './gruppen'
 import { pruefeMetaAenderung, type MetaAenderung } from './metaFields'
 import {
+  pruefeMehrfachAenderung,
+  pruefeSchreibOptionen,
+  type MehrfachAenderung,
+  type SchreibOptionen
+} from './metaMehrfach'
+import {
   pruefeOrdnerFilter,
   pruefeSortierung,
   type OrdnerFilter,
@@ -49,6 +55,18 @@ export function pruefeMetaAenderungStreng(v: unknown): MetaAenderung {
   const a = pruefeMetaAenderung(v)
   if (!a) throw new Error('Ungültige Änderung')
   return a
+}
+
+export function pruefeMehrfachAenderungStreng(v: unknown): MehrfachAenderung {
+  const a = pruefeMehrfachAenderung(v)
+  if (!a) throw new Error('Ungültige Änderung')
+  return a
+}
+
+export function pruefeSchreibOptionenStreng(v: unknown): SchreibOptionen {
+  const o = pruefeSchreibOptionen(v)
+  if (!o) throw new Error('Ungültige Optionen')
+  return o
 }
 
 export function pruefeAnsichtNameStreng(v: unknown): string {

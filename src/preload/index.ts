@@ -57,7 +57,13 @@ const api: GalerieApi = {
   meta: {
     read: (id) => ipcRenderer.invoke(Channels.metaRead, id),
     write: (ids, aenderung) => ipcRenderer.invoke(Channels.metaWrite, ids, aenderung),
-    undo: (journal) => ipcRenderer.invoke(Channels.metaUndo, journal)
+    undo: (journal) => ipcRenderer.invoke(Channels.metaUndo, journal),
+    readMany: (ids) => ipcRenderer.invoke(Channels.metaReadMany, ids),
+    writeMany: (ids, aenderung, optionen) =>
+      ipcRenderer.invoke(Channels.metaWriteMany, ids, aenderung, optionen),
+    undoMany: (journal) => ipcRenderer.invoke(Channels.metaUndoMany, journal),
+    cancel: (auftrag) => ipcRenderer.send(Channels.metaCancel, auftrag),
+    onJob: (cb) => subscribe(Channels.metaJob, (s) => cb(s as never))
   }
 }
 

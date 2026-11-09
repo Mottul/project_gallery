@@ -357,7 +357,7 @@ function text(v: unknown, max: number, zeilen = false): string | null | undefine
 }
 
 /** Stichwörter: ohne Doppelte; „;“ trennt sie in den XP-Feldern und kann nicht vorkommen. */
-function stichwoerter(v: unknown): string[] | undefined {
+export function pruefeStichwoerter(v: unknown): string[] | undefined {
   if (!Array.isArray(v) || v.length > STICHWORT_MAX) return undefined
   const out: string[] = []
   const gesehen = new Set<string>()
@@ -396,51 +396,49 @@ function standort(v: unknown): Standort | null | undefined {
   return { breite, laenge }
 }
 
+/** Textfelder mit Höchstlänge; Zeilenumbrüche nur in der Beschreibung */
+const TEXT_FELDER: Record<string, [number, boolean?]> = {
+  titel: [TITEL_MAX],
+  beschreibung: [BESCHREIBUNG_MAX, true],
+  ort: [ORT_MAX],
+  region: [ORT_MAX],
+  land: [ORT_MAX],
+  ortsteil: [ORT_MAX],
+  urheber: [URHEBER_MAX],
+  copyright: [COPYRIGHT_MAX]
+}
+
+/**
+ * Den Wert eines Feldes aus dem Renderer prüfen (Allowlist, Typ, Grenzen); undefined = ungültig
+ * oder kein bekanntes Feld. Gilt für das Panel (3.2) wie für die Mehrfachauswahl (3.3).
+ */
+export function pruefeFeld(k: string, v: unknown): unknown {
+  if (k === 'bewertung') {
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 5 ? v : undefined
+  }
+  if (k === 'farblabel') return v === null || FARBLABELS.includes(v as Farblabel) ? v : undefined
+  if (k === 'stichwoerter') return pruefeStichwoerter(v)
+  if (k === 'aufnahme') return aufnahme(v)
+  if (k === 'standort') return standort(v)
+  if (Object.hasOwn(TEXT_FELDER, k)) {
+    const [max, zeilen] = TEXT_FELDER[k]
+    return text(v, max, zeilen)
+  }
+  return undefined
+}
+
 /** Änderung aus dem Renderer prüfen; null = ungültig (unbekanntes Feld, Grenzen, leer). */
 export function pruefeMetaAenderung(v: unknown): MetaAenderung | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
   const e = v as Record<string, unknown>
-  const out: MetaAenderung = {}
-  const textFelder: Record<string, [keyof MetaAenderung, number, boolean?]> = {
-    titel: ['titel', TITEL_MAX],
-    beschreibung: ['beschreibung', BESCHREIBUNG_MAX, true],
-    ort: ['ort', ORT_MAX],
-    region: ['region', ORT_MAX],
-    land: ['land', ORT_MAX],
-    ortsteil: ['ortsteil', ORT_MAX],
-    urheber: ['urheber', URHEBER_MAX],
-    copyright: ['copyright', COPYRIGHT_MAX]
-  }
+  const out: Record<string, unknown> = {}
   for (const k of Object.keys(e)) {
     if (e[k] === undefined) continue
-    if (k === 'bewertung') {
-      const n = e[k]
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 5) return null
-      out.bewertung = n
-    } else if (k === 'farblabel') {
-      const l = e[k]
-      if (l !== null && !FARBLABELS.includes(l as Farblabel)) return null
-      out.farblabel = l as Farblabel | null
-    } else if (k === 'stichwoerter') {
-      const l = stichwoerter(e[k])
-      if (!l) return null
-      out.stichwoerter = l
-    } else if (k === 'aufnahme') {
-      const a = aufnahme(e[k])
-      if (a === undefined) return null
-      out.aufnahme = a
-    } else if (k === 'standort') {
-      const s = standort(e[k])
-      if (s === undefined) return null
-      out.standort = s
-    } else if (Object.hasOwn(textFelder, k)) {
-      const [feld, max, zeilen] = textFelder[k]
-      const t = text(e[k], max, zeilen)
-      if (t === undefined) return null
-      ;(out as Record<string, unknown>)[feld] = t
-    } else return null
+    const w = pruefeFeld(k, e[k])
+    if (w === undefined) return null
+    out[k] = w
   }
-  return Object.keys(out).length ? out : null
+  return Object.keys(out).length ? (out as MetaAenderung) : null
 }
 
 /** Ergebnis eines Schreibauftrags */

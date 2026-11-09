@@ -52,7 +52,10 @@ export function Raster({
   onGroesse,
   onSichtbar,
   onOeffnen,
-  fokusId
+  fokusId,
+  onMetadaten,
+  onSchnell,
+  onRueckgaengig
 }: {
   ids: number[]
   /** Gruppen-Überschriften (leer = keine) */
@@ -70,6 +73,12 @@ export function Raster({
   onOeffnen: (index: number) => void
   /** dorthin scrollen (nach dem Betrachter: das zuletzt gezeigte Bild) */
   fokusId: number | null
+  /** Taste E: „Metadaten bearbeiten“ für die Auswahl (3.3) */
+  onMetadaten?: () => void
+  /** Tasten 0–5 und 6–9: Schnellbewertung der Auswahl (3.3) */
+  onSchnell?: (taste: string) => void
+  /** Strg+Z: den letzten Hinweis zurücknehmen */
+  onRueckgaengig?: () => void
 }): JSX.Element {
   const auswahl = useAuswahl()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -229,13 +238,24 @@ export function Raster({
       className="relative min-h-0 flex-1 select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onMouseDown={rahmenStart}
       onKeyDown={(e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        const strg = e.ctrlKey || e.metaKey
+        if (strg && e.key.toLowerCase() === 'a') {
           e.preventDefault()
           auswahlAlle(ids)
+        } else if (strg && e.key.toLowerCase() === 'z' && onRueckgaengig) {
+          e.preventDefault()
+          onRueckgaengig()
         } else if (e.key === 'Escape') auswahlLeeren()
         else if (e.key === 'Enter') {
           const i = ersteGewaehlte(ids)
           if (i >= 0) onOeffnen(i)
+        } else if (strg || e.altKey || e.repeat) return
+        else if (e.key.toLowerCase() === 'e' && onMetadaten) {
+          e.preventDefault()
+          onMetadaten()
+        } else if (/^[0-9]$/.test(e.key) && onSchnell) {
+          e.preventDefault()
+          onSchnell(e.key)
         }
       }}
     >

@@ -42,7 +42,15 @@ Vollständigkeit – `npm run typecheck` zeigt vergessene Stellen.
 - Logik aus dem Handler in einen Dienst (`src/main/services/<bereich>/`) oder in `src/shared/`
   ziehen und dort testen; der Handler bleibt eine dünne Hülle.
 - **Schreibende Aufrufe** (Metadaten, Stapel, Bearbeitung speichern) laufen als Auftrag in der
-  Warteschlange und melden Fortschritt per Event – nie lange in einem `invoke` warten.
+  Warteschlange und melden Fortschritt per Event – nie lange in einem `invoke` warten. Muster seit
+  3.3 (`meta.writeMany`, `services/metadata/mehrfach.ts`, Renderer `lib/metaAuftrag.ts`): Der Start
+  prüft und antwortet sofort mit `{ auftrag }` oder `{ grund }`; die Arbeit beginnt erst danach
+  (`setImmediate`). Meldungen tragen die Kennung, sind gedrosselt (höchstens alle 100 ms, das Ende
+  immer) und enthalten nur neue Ergebnisse je Datei (Kennung, Status, Grund – keine Objektlisten).
+  Der Renderer hebt Meldungen auf, die vor der Start-Antwort ankommen, und merkt sich „Abbrechen“,
+  bis die Kennung da ist. Der main gibt „läuft“ frei, **bevor** er das Ende meldet – wer darauf den
+  nächsten Auftrag startet, wird sonst abgewiesen. Einer zur Zeit; ein zweiter Start bekommt einen
+  Grund, keinen Fehler.
 - Rückfragen (`api.confirm`/`api.choose`) im main über `dialog.showMessageBox` des
   auslösenden Fensters.
 

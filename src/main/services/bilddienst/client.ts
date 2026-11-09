@@ -27,6 +27,7 @@ import {
   type AnzeigeErgebnis,
   type SchreibAuftrag,
   type SchreibErgebnis,
+  type TagsErgebnis,
   type VomDienst,
   type VorschauDatei,
   type VorschauErgebnis
@@ -156,7 +157,8 @@ class Bilddienst {
     else if (n.typ === 'tags-ergebnis') {
       if (n.code) l.reject(fehler(n.code, n.code))
       else l.resolve(n.werte)
-    } else if (n.typ === 'schreib-ergebnis') l.resolve(n.ergebnis)
+    } else if (n.typ === 'tags-viele-ergebnis') l.resolve(n.ergebnisse)
+    else if (n.typ === 'schreib-ergebnis') l.resolve(n.ergebnis)
     else if (n.typ === 'orte-ergebnis') l.resolve(n.orte)
     else if (n.typ === 'beobachtet') l.resolve({ netz: n.netz })
     else l.reject(fehler(n.code, n.meldung))
@@ -234,6 +236,16 @@ class Bilddienst {
       typ: 'tags-lesen',
       auftrag: a,
       datei,
+      tags
+    })).antwort
+  }
+
+  /** Dieselben Tags vieler Dateien (Mehrfachauswahl); je Datei die Werte oder ein Code. */
+  tagsLesenViele(dateien: AnzeigeDatei[], tags: TagWert[]): Promise<TagsErgebnis[]> {
+    return this.auftrag<TagsErgebnis[]>((a) => ({
+      typ: 'tags-lesen-viele',
+      auftrag: a,
+      dateien,
       tags
     })).antwort
   }

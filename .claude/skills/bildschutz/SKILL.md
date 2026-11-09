@@ -40,6 +40,11 @@ weiterhin grün. Schichten und Begründung: `docs/PLAN.md`, „Schutzkonzept fü
       Vorschau genannt, Ordner-Modus „nur lesen“ beachtet, Sicherung (im Ordner „privat“ keine),
       nachgeprüft VOR dem atomaren Ersetzen, Journal für Rückgängig (Skills `metadaten-schreiben`,
       `stapelverarbeitung`).
+- [ ] Viele Dateien auf einmal (seit 3.3)? Vorher Platz für die Sicherungen **aller** zusammen;
+      je Datei nur, was sich dort ändert (Unberührtes ohne Sicherung und ohne neues
+      Änderungsdatum); Abbrechen nie mitten in einer Datei; Schließen des Fensters während eines
+      schreibenden Auftrags fragt und wartet die laufende Datei ab; der Bericht nennt jede Datei, die
+      nicht geschrieben wurde.
 - [ ] Löschen nur über `shell.trashItem` (`inPapierkorb` in `library.ts`): Rückfrage im main mit
       Namen, Vorgabe „Abbrechen“; nie in Ordnern „nur lesen“ – nach der Rückfrage frisch aus dem
       Index lesen (der Modus kann inzwischen gewechselt haben); je Datei vorher `pruefeDatei` mit

@@ -111,7 +111,9 @@ vorschauenEinrichten({
 schreibenEinrichten({
   db: () => db(),
   details: (ids) => repo.details(db(), ids),
-  abgleichen: (folderId) => einreihen(folderId),
+  // nur die Datei: Ein Abgleich des ganzen Ordners dauerte bei großen Ordnern unnötig lange
+  abgleichen: (folderId, relPfad) => teilEinreihen(folderId, [], [relPfad]),
+  abgleichAbwarten: (ordner, ms) => abgleichAbwarten(ordner, ms),
   geschrieben: async (id, { size, mtime, roh }) => {
     repo.nachSchreiben(db(), id, size, mtime)
     const z = repo.metaZeile(db(), id)
@@ -322,7 +324,39 @@ async function abarbeiten(): Promise<void> {
       logLine('[bibliothek] Fehler beim Einlesen:', String(err))
     }
     aktiv = null
+    wartendePruefen()
   }
+}
+
+/** Wer auf den Abgleich bestimmter Ordner wartet („Neu lesen und erneut versuchen“, 3.3) */
+const abgleichWarten: { ordner: ReadonlySet<number>; fertig: () => void }[] = []
+
+/** Ist für diesen Ordner nichts mehr eingereiht oder in Arbeit? */
+const abgeglichen = (id: number): boolean =>
+  aktiv !== id && !warteschlange.includes(id) && !teile.has(id)
+
+function wartendePruefen(): void {
+  for (const w of [...abgleichWarten]) {
+    if ([...w.ordner].every(abgeglichen)) w.fertig()
+  }
+}
+
+/** Bis die eingereihten Abgleiche dieser Ordner durch sind, höchstens `ms`. */
+function abgleichAbwarten(ordner: readonly number[], ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const w = {
+      ordner: new Set(ordner),
+      fertig: () => {
+        clearTimeout(uhr)
+        const i = abgleichWarten.indexOf(w)
+        if (i >= 0) abgleichWarten.splice(i, 1)
+        resolve()
+      }
+    }
+    const uhr = setTimeout(() => w.fertig(), ms)
+    abgleichWarten.push(w)
+    wartendePruefen()
+  })
 }
 
 function einreihen(id: number): void {

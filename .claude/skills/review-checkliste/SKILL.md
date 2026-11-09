@@ -10,6 +10,11 @@ Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
 
 ## Zustand nach `await` (aus der Mottulbox)
 
+- **Aufträge mit Fortschritt** (3.3): Der main gibt „läuft“ frei, **bevor** er das Ende meldet –
+  sonst wird ein Start, der auf das Ende folgt, als „läuft schon“ abgewiesen (aufgefallen beim
+  Schreiben von `mehrfach.test.ts`). Der Renderer hebt Meldungen auf, die vor der Antwort auf den
+  Start ankommen, und merkt sich „Abbrechen“ bis dahin.
+
 - **Nach einer Rückfrage oder jedem `await` nicht mit dem Stand vom Klick weiterarbeiten.**
   Frischen Stand holen; Listen in Einstellungen werden ersetzt, nicht gemergt.
 - **Ein Start mit `await` kann von einem Stopp oder zweiten Start überholt werden.** Generation

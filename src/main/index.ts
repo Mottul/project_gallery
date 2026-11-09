@@ -1,9 +1,14 @@
 // Lebenszyklus der App. Reihenfolge beim Start: eigene Protokolle anmelden (vor ready), dann
 // Netzsperre und Wächter vor dem ersten Fenster, dann IPC, dann das Hauptfenster.
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { registerIpcHandlers } from './ipc/registry'
 import { beiFokus, bibliothekBeenden, bibliothekStarten } from './services/library/library'
 import { logLine } from './services/log'
+import {
+  auftragAbbrechen,
+  schreibAuftragLaeuft,
+  wennKeinAuftrag
+} from './services/metadata/mehrfach'
 import { installNetzsperre } from './services/netzsperre'
 import { bildProtokollBedienen } from './services/protocols/bild'
 import { EIGENE_PROTOKOLLE, eigeneSchemataAnmelden } from './services/protocols/schemata'
@@ -38,6 +43,34 @@ if (!app.requestSingleInstanceLock()) {
     mainWin = win
     win.on('closed', () => {
       if (mainWin === win) mainWin = null
+    })
+    // Schreibt ein Auftrag der Mehrfachauswahl (3.3) noch, erst fragen; dann nach der laufenden
+    // Datei anhalten und erst danach schließen – nie mitten in einer Datei (Review-Checkliste)
+    let schliessenFrei = false
+    win.on('close', (e) => {
+      if (schliessenFrei || !schreibAuftragLaeuft()) return
+      e.preventDefault()
+      void dialog
+        .showMessageBox(win, {
+          type: 'warning',
+          title: 'Metadaten werden geschrieben',
+          message: 'Es werden noch Metadaten geschrieben.',
+          detail:
+            'Beenden hält nach der laufenden Datei an. Was schon geschrieben ist, bleibt so – ' +
+            'jede Datei hat ihre Sicherung.',
+          buttons: ['Anhalten und beenden', 'Weiter schreiben'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true
+        })
+        .then(({ response }) => {
+          if (response !== 0) return
+          auftragAbbrechen()
+          wennKeinAuftrag(() => {
+            schliessenFrei = true
+            if (!win.isDestroyed()) win.close()
+          })
+        })
     })
   }
 
