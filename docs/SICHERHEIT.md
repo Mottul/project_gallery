@@ -53,14 +53,15 @@ Verhalten macht den E2E-Schritt rot.
 - **Electron-Binary** per `scripts/fetch-electron-bin.mjs` aus dem GitHub-Release, geprüft gegen
   `electron/checksums.json` aus dem npm-Paket.
 
-### Stand der bekannten Lücken (25. Oktober 2026)
+### Stand der bekannten Lücken (9. November 2026)
 
 `npm audit --omit=dev`: keine. `npm audit` (mit Entwicklungswerkzeugen):
 
 | Paket | Meldung | Bewertung |
 |---|---|---|
-| `electron` 44.8.0 | GHSA-jr5w-w6x2-84p9: Zertifikate einer kompromittierten Zwischenstelle (eMudhra) noch vertrauenswürdig, behoben in 44.9.1 | betrifft nur TLS-Verbindungen, die die App nicht aufbaut; 44.9.x ist erst ab 28.10.2026 sieben Tage alt – dann per Dependabot. Bis zum ersten Release (Phase 5) erledigt. |
+| `electron` 44.9.0 | GHSA-jr5w-w6x2-84p9: Zertifikate einer kompromittierten Zwischenstelle (eMudhra) noch vertrauenswürdig, behoben in 44.9.1 | betrifft nur TLS-Verbindungen, die die App nicht aufbaut; Dependabot schlägt 45.2.1 vor (Prüfung der Hauptversion offen). Bis zum ersten Release (Phase 5) erledigt. |
 | `tailwindcss` 3 (über `postcss-selector-parser`) | GHSA-rj75-hqrm-r3gf: quadratischer Aufwand beim Parsen von Selektoren | nur beim Bauen, nur mit eigenem CSS; in Tailwind 3 gibt es keine Korrektur – erledigt sich mit dem Umstieg auf Tailwind 4 (gemeinsam mit der Mottulbox) |
+| `minimatch` 10 (über `eslint` 10 und `typescript-eslint`) | GHSA-g3hv-75wg-m249: Überlast durch präparierte Glob-Muster, behoben erst in 11.0.1 | nur beim Prüfen (Lint) mit den festen Mustern des Repositorys; eslint 10 verlangt minimatch 10 – erledigt sich mit einem eslint-Update auf minimatch 11 |
 
 Beim Einrichten mit `--before` eingespielt: `electron` 44.7.0 → 44.8.0, `vitest` 4.1.11 → 4.1.12
 (behebt GHSA-qxg6-89mg-rqv8 und GHSA-xp26-3454-mjgp), `undici` und `zod` (transitiv) per
