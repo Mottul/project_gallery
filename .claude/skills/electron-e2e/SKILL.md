@@ -74,6 +74,11 @@ try {
 - **Eigene Protokolle und die Konsole:** Jede 4xx-Antwort auf ein `<img>` erscheint in der Seite
   als Konsolenfehler (gemessen 1.3), 204 nicht. Erwartete Lücken (defektes Bild) also mit 204
   beantworten, sonst wird „keine Konsolenfehler“ zufällig rot – je nachdem, ob die Zeile sichtbar war.
+  Ebenso: einen Ordner erst entfernen, wenn die Seite fertig geladen hat – nach Schreiben oder
+  Rückgängig entsteht das Vorschaubild neu, und ein Abruf, der erst nach dem Entfernen ankommt, bekommt
+  404 (Linux-CI zu 3.3, `paket.mjs`: einmal rot, im Neulauf grün). Die Konsolenmeldung nennt keine
+  Adresse; `paket.mjs` schreibt darum gescheiterte Abrufe mit Zeit aus dem DevTools-Protokoll
+  (`Network.responseReceived`) in die Fehlermeldung.
 - **Betrachter (1.5):** `shell.trashItem` per `app.evaluate` durch einen Stub ersetzen, der die
   Datei in einen Temp-Ordner verschiebt (nie den echten Papierkorb). Chromium zeigt ein schon
   geladenes `bild://`-Bild weiter, auch wenn die Datei inzwischen anders ist – „geändert“ mit
