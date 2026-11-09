@@ -8,6 +8,8 @@ ohne Administratorrechte, ohne Fragen, ohne Downloads beim ersten Start.
 > kommt mit Phase 1; dann folgt hier die Anleitung mit Bildern
 > ([PLAN.md, „Installation und Auslieferung“](PLAN.md#installation-und-auslieferung)).
 
+- **Voraussetzungen:** Windows 10 oder 11, 64 Bit. Ältere Windows-Versionen und 32-Bit-Windows
+  unterstützt die zugrunde liegende Electron-Version 45 nicht.
 - **Installieren:** Doppelklick auf `Galeria-Beata-<Version>-setup.exe` – ohne Fragen und ohne
   Administratorrechte. Die App landet unter `%LOCALAPPDATA%\Programs\`, mit Verknüpfung im
   Startmenü und auf dem Desktop, und startet danach.

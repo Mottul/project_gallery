@@ -52,6 +52,8 @@ Verhalten macht den E2E-Schritt rot.
 - **7 Tage Abstand** für jede neue Version (Skill `abhaengigkeiten`, Dependabot mit `cooldown`).
 - **Electron-Binary** per `scripts/fetch-electron-bin.mjs` aus dem GitHub-Release, geprüft gegen
   `electron/checksums.json` aus dem npm-Paket.
+- **Electron-Hauptversionen** kommen erst nach der Prüfung im Skill `abhaengigkeiten` auf `main`
+  (Breaking Changes, Backports, native Module, E2E samt Paket), nicht schon nach grüner CI.
 
 ### Stand der bekannten Lücken (9. November 2026)
 
@@ -59,9 +61,24 @@ Verhalten macht den E2E-Schritt rot.
 
 | Paket | Meldung | Bewertung |
 |---|---|---|
-| `electron` 44.9.0 | GHSA-jr5w-w6x2-84p9: Zertifikate einer kompromittierten Zwischenstelle (eMudhra) noch vertrauenswürdig, behoben in 44.9.1 | betrifft nur TLS-Verbindungen, die die App nicht aufbaut; Dependabot schlägt 45.2.1 vor (Prüfung der Hauptversion offen). Bis zum ersten Release (Phase 5) erledigt. |
 | `tailwindcss` 3 (über `postcss-selector-parser`) | GHSA-rj75-hqrm-r3gf: quadratischer Aufwand beim Parsen von Selektoren | nur beim Bauen, nur mit eigenem CSS; in Tailwind 3 gibt es keine Korrektur – erledigt sich mit dem Umstieg auf Tailwind 4 (gemeinsam mit der Mottulbox) |
 | `minimatch` 10 (über `eslint` 10 und `typescript-eslint`) | GHSA-g3hv-75wg-m249: Überlast durch präparierte Glob-Muster, behoben erst in 11.0.1 | nur beim Prüfen (Lint) mit den festen Mustern des Repositorys; eslint 10 verlangt minimatch 10 – erledigt sich mit einem eslint-Update auf minimatch 11 |
+
+**Electron 45.2.1** (Chromium 156, Node 24.22; seit dem 9. November 2026, vorher 44.9.0) enthält
+die Sperre der kompromittierten eMudhra-Zwischenzertifikate (GHSA-jr5w-w6x2-84p9, ab 45.0.0-beta.6
+bzw. 44.9.1). Abgleich der Sicherheits-Backports mit der 44er-Linie (Skill `abhaengigkeiten`): Von
+den Korrekturen aus 44.9.3 fehlen in 45 bis 45.2.1 vier (Service Worker, iframes im Top-Layer,
+`content-visibility`, PDFium-Formulare; ermittelt bei der Mottulbox am 2. November 2026), aus
+44.10.1 eine („Harden Element attribute mutation methods against re-entrant changes“, kommt mit
+45.2.3). Die App nutzt nichts davon: Ihre Fenster zeigen nur die eigene Seite, ohne Service Worker,
+iframes und `content-visibility` und ohne PDFs; Texte aus Metadaten erscheinen nur als Text. Die
+bisherige 44.9.0 hatte keine dieser Korrekturen.
+
+**`safeStorage` (Cache-Schlüssel, Schicht D):** Electron 45 erklärt die synchronen Methoden
+(`isEncryptionAvailable`, `encryptString`, `decryptString`) für veraltet, Electron 46 entfernt sie.
+`services/cache/schluessel.ts` nutzt sie noch und muss vor Electron 46 auf die asynchronen umgestellt
+werden. Geprüft: Ein unter 44.9.0 verschlüsselter Schlüssel lässt sich unter 45.2.1 synchron und
+asynchron entschlüsseln, ohne Neuverschlüsseln – der Vorschau-Cache übersteht das Update.
 
 Beim Einrichten mit `--before` eingespielt: `electron` 44.7.0 → 44.8.0, `vitest` 4.1.11 → 4.1.12
 (behebt GHSA-qxg6-89mg-rqv8 und GHSA-xp26-3454-mjgp), `undici` und `zod` (transitiv) per
