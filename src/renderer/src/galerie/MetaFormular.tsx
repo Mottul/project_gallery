@@ -145,15 +145,23 @@ export function MetaFormular({
   fassungRef.current = fassung
   const [gelesen, setGelesen] = useState<string | null>(null)
   const [ladung, setLadung] = useState(0)
+  /** zählt jede Eingabe – ein Leseergebnis, das erst danach ankommt, ersetzt sie nicht */
+  const eingaben = useRef(0)
+  /** Leseergebnisse, die deshalb verworfen wurden: Danach prüft der Konflikt-Effekt neu */
+  const [verworfen, setVerworfen] = useState(0)
 
   useEffect(() => {
     let vorbei = false
     const f = fassungRef.current
+    const start = eingaben.current
     api.meta.read(bild.id).then(
       (r) => {
         if (vorbei) return
         if ('grund' in r) setFehler(r.grund)
-        else {
+        else if (eingaben.current !== start) {
+          // Während des Lesens getippt: Die Eingaben bleiben, der Konflikt auch – das Panel fragt
+          setVerworfen((n) => n + 1)
+        } else {
           setWerte(r.werte)
           setForm(formAus(r.werte))
           setEntwurf('')
@@ -180,11 +188,12 @@ export function MetaFormular({
   const geaendert = typeof aenderung === 'string' || Object.keys(aenderung).length > 0
 
   // Die Datei hat sich von außen geändert: ohne Eingaben einfach neu lesen, sonst fragen – nie
-  // still über Getipptes oder eine fremde Fassung hinweg
+  // still über Getipptes oder eine fremde Fassung hinweg. Auch nach einem verworfenen Ergebnis:
+  // Hat die Eingabe am Ende nichts geändert, wird noch einmal gelesen.
   const konflikt = gelesen !== null && gelesen !== fassung
   useEffect(() => {
     if (konflikt && !geaendert) setLadung((n) => n + 1)
-  }, [konflikt, geaendert])
+  }, [konflikt, geaendert, verworfen])
 
   useEffect(() => {
     onGeaendert(geaendert)
@@ -196,8 +205,14 @@ export function MetaFormular({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!form])
 
-  const setze = <K extends keyof FormWerte>(k: K, v: FormWerte[K]): void =>
+  const setze = <K extends keyof FormWerte>(k: K, v: FormWerte[K]): void => {
+    eingaben.current += 1
     setForm((f) => f && { ...f, [k]: v })
+  }
+  const entwerfen = (t: string): void => {
+    if (t !== entwurf) eingaben.current += 1
+    setEntwurf(t)
+  }
 
   async function speichern(): Promise<void> {
     if (typeof aenderung === 'string' || !geaendert || speichert || konflikt) return
@@ -272,7 +287,7 @@ export function MetaFormular({
               werte={form.stichwoerter}
               onChange={(l) => setze('stichwoerter', l)}
               entwurf={entwurf}
-              onEntwurf={setEntwurf}
+              onEntwurf={entwerfen}
             />
             <div className="space-y-0.5">
               <span className="text-xs text-muted-foreground">Bewertung</span>

@@ -108,6 +108,15 @@ try {
   { name })` schon. `datetime-local` lässt volle Sekunden im Wert weg. Ändert ein Test eine Datei
   von außen, antwortet ein Abruf in der Lücke bis zum Abgleich 409 – das ist ein Konsolenfehler, also
   gezielt ausnehmen, nicht alle.
+- **Erst handeln, wenn die Oberfläche den Stand zeigt** (Nachtrag 3.2): Der Index (Brücke) kennt
+  eine Änderung von außen früher als das Panel. Ein Test, der dann schon tippte, traf das stille
+  Neulesen und wackelte in der Linux-CI. Darum ändert er sichtbar (Titel per `vonAussen`) und wartet,
+  bis das Feld ihn zeigt.
+- **Antwort im main anhalten statt auf Zeit setzen:** `webContents.ipc.handle(kanal, …)` per
+  `app.evaluate` geht vor dem Handler der App in `ipcMain` (öffentliche API). So kommt die Antwort
+  erst auf ein Zeichen, und der Test handelt genau in der Lücke. Danach `removeHandler` im
+  `finally` (Muster `leseSperre` in `metadaten.mjs`). Vorbedingung erwarten: Der Test wartet, bis
+  die Sperre einen Aufruf gezählt hat.
 - **Knopf-Namen mit Zahlen exakt:** `getByRole('button', { name: '100 %', exact: true })` – die
   Zoomstufe heißt „Zoomstufe 100 %“ und träfe sonst mit.
 - **Änderungszeit zurücksetzen:** `utimesSync(p, a, st.mtime)` mit einem `Date` landet unter
