@@ -74,6 +74,9 @@ Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
 - **Farbraum:** Vorschaubild und Export in sRGB; ein P3-Testbild sieht im Raster wie im Betrachter aus.
 - **Metadaten:** Mehrfachauswahl schreibt nur Geändertes; Stichwörter hinzufügen/entfernen statt
   ersetzen; Datum ohne Zeitzone bleibt lokal (keine Verschiebung um die UTC-Differenz).
+- **Formulare, die neu lesen:** Ein Leseergebnis, das erst nach einer Eingabe ankommt, ersetzt
+  die Eingabe nicht. Es wird verworfen, die Rückfrage bleibt (3.2: Das Bearbeiten-Panel
+  überschrieb Getipptes beim stillen Neulesen, `MetaFormular` zählt jetzt die Eingaben).
 - **Groß/Klein unter Windows:** Pfadvergleiche, Konflikte und Duplikate ohne Groß/Klein und mit
   Unicode-Normalisierung (NFC).
 - **Große Bibliotheken:** keine Schleife über alle Bilder im Renderer, keine Objektlisten über

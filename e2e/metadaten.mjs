@@ -104,6 +104,9 @@ const inhalt = (p) => createHash('sha256').update(readFileSync(p)).digest('hex')
 
 /** Bild im Betrachter öffnen (kommt die Kachel nicht, ist der Name falsch) */
 async function oeffnen(name) {
+  // Ein gescheiterter Schritt kann das Panel mit Eingaben offen lassen; es hielte den Betrachter
+  // offen und der nächste Schritt schiene mit rot. Abbrechen verwirft die Eingaben.
+  if (await panel().count()) await panel().getByRole('button', { name: 'Abbrechen' }).click()
   if (await betrachter().count()) await page.keyboard.press('Escape')
   await waitFor(async () => (await betrachter().count()) === 0, 3_000)
   await (await kachel(page, name)).dblclick()
@@ -140,6 +143,38 @@ const reste = () =>
   readdirSync(bib.dir, { recursive: true })
     .map(String)
     .filter((n) => n.includes('galerie-tmp'))
+/**
+ * Ein anderes Programm schreibt in die Datei (ExifTool an der App vorbei, an Ort und Stelle). Werte
+ * nur ASCII: Unter Windows kommen Argumente der Befehlszeile in der Codepage an, nicht als UTF-8.
+ */
+function vonAussen(p, args) {
+  const r = spawnSync(EXIFTOOL, ['-overwrite_original_in_place', ...args, p], { encoding: 'utf8' })
+  assert.match(r.stdout, /1 image files updated/, r.stderr)
+}
+/**
+ * Hält `meta:read` (Channels.metaRead) für dieses Fenster an: `webContents.ipc.handle` geht vor dem
+ * Handler der App in `ipcMain`. Die Antwort `antwort` kommt erst nach `frei()` – so lässt sich
+ * zwischen Start und Ergebnis des Lesens tippen, ohne auf Zeit zu setzen.
+ */
+const leseSperre = (antwort) =>
+  app.evaluate(({ BrowserWindow }, a) => {
+    let frei
+    const offen = new Promise((r) => (frei = r))
+    globalThis.__leseSperre = { aufrufe: 0, frei }
+    BrowserWindow.getAllWindows()[0].webContents.ipc.handle('meta:read', async () => {
+      globalThis.__leseSperre.aufrufe++
+      await offen
+      return a
+    })
+  }, antwort)
+const leseSperreAufrufe = () => app.evaluate(() => globalThis.__leseSperre.aufrufe).catch(() => 0)
+const leseSperreFrei = () => app.evaluate(() => globalThis.__leseSperre.frei())
+/** Danach antwortet wieder die App */
+const leseSperreAus = () =>
+  app.evaluate(({ BrowserWindow }) => {
+    globalThis.__leseSperre?.frei()
+    BrowserWindow.getAllWindows()[0].webContents.ipc.removeHandler('meta:read')
+  })
 
 const NAME = 'dubrovnik.jpg'
 const NAME2 = 'paris.jpg'
@@ -536,17 +571,70 @@ try {
           await waitFor(async () => (await feld('Titel').inputValue()) === '', 5_000),
           'nicht neu geladen'
         )
-        // ohne Eingaben liest das Panel still neu
-        appendFileSync(p, Buffer.alloc(16))
-        const groesse = statSync(p).size
+        // Ohne Eingaben liest das Panel still neu. Erst tippen, wenn es den neuen Stand zeigt: Der
+        // Index weiß es früher als das Panel – wer dann tippt, bekommt die Rückfrage (so wackelte
+        // dieser Schritt in der Linux-CI)
+        vonAussen(p, ['-XMP:Title=Anderes Programm'])
         assert.ok(
-          await waitFor(async () => (await kennung(name)).size === groesse, 15_000),
-          'nicht neu eingelesen'
+          await waitFor(
+            async () => (await feld('Titel').inputValue()) === 'Anderes Programm',
+            15_000
+          ),
+          `nicht still neu gelesen: ${await feld('Titel').inputValue()}`
+        )
+        assert.equal(
+          await panel().getByText('von außen geändert').count(),
+          0,
+          'Rückfrage ohne Eingabe'
         )
         await feld('Titel').fill('Danach geht es')
         await schreibKnopf().click()
         await rueckmeldung().getByText('In die Datei geschrieben').waitFor({ timeout: 10_000 })
         assert.equal(feldwerte(p)['XMP:Title'], 'Danach geht es')
+      }
+    ],
+    [
+      'Getippt, während das Panel still neu liest: Eingabe bleibt, Rückfrage statt Überschreiben',
+      async () => {
+        const name = 'muenchen.jpg'
+        const p = pfadVon(name)
+        await oeffnen(name)
+        await bearbeiten()
+        const { id } = await kennung(name)
+        // Antwort mit einem Titel, den die Datei nicht hat: Steht er im Feld, hat das Ergebnis die
+        // Eingabe überschrieben
+        const echt = await page.evaluate((i) => window.api.meta.read(i), id)
+        assert.ok(echt.werte, JSON.stringify(echt))
+        await leseSperre({ werte: { ...echt.werte, titel: 'Aus dem Neulesen' } })
+        try {
+          appendFileSync(p, Buffer.alloc(8))
+          assert.ok(
+            await waitFor(async () => (await leseSperreAufrufe()) > 0, 15_000),
+            'Panel liest nicht neu'
+          )
+          await feld('Titel').fill('Während des Lesens')
+          await panel().getByText('von außen geändert').waitFor({ timeout: 5_000 })
+          await leseSperreFrei()
+          // Die Antwort ist in Millisekunden da – überschreibt sie, sieht man es in dieser Zeit
+          const ueberschrieben = await waitFor(
+            async () => (await feld('Titel').inputValue()) !== 'Während des Lesens',
+            2_000
+          )
+          assert.equal(
+            ueberschrieben,
+            null,
+            `Eingabe überschrieben: ${await feld('Titel').inputValue()}`
+          )
+          assert.ok(await panel().getByText('von außen geändert').isVisible(), 'Rückfrage weg')
+          assert.ok(await schreibKnopf().isDisabled(), 'Schreiben trotz Konflikt möglich')
+        } finally {
+          await leseSperreAus()
+        }
+        // „Eingaben behalten“ schreibt die Eingabe in die geänderte Datei
+        await panel().getByRole('button', { name: 'Eingaben behalten' }).click()
+        await schreibKnopf().click()
+        await rueckmeldung().getByText('In die Datei geschrieben').waitFor({ timeout: 10_000 })
+        assert.equal(feldwerte(p)['XMP:Title'], 'Während des Lesens')
       }
     ],
     [
