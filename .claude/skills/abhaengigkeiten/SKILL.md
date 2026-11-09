@@ -55,18 +55,48 @@ Selbst-Update in der App).
 
 ## Neue Electron-Hauptversion
 
-Electron pflegt nur die drei neuesten Hauptversionen (etwa alle 8 Wochen eine neue).
+Electron pflegt nur die drei neuesten Hauptversionen (etwa alle 8 Wochen eine neue). Dependabot
+schickt sie als eigenen PR. Grüne CI allein reicht nicht: erst die Schritte hier, dann mergen (bei
+45 kam ein eigener PR auf Dependabots Commit, mit Doku – Muster für die nächste).
 
-1. **Breaking Changes lesen** für jede übersprungene Version und gegen den Code prüfen (`Grep`).
+1. **Breaking Changes lesen** für jede übersprungene Version und gegen den Code prüfen (`Grep`):
+   `gh api "repos/electron/electron/contents/docs/breaking-changes.md?ref=v<version>" --jq .content | base64 -d`.
    Aus der Mottulbox bekannt: Datei-Dialoge starten ohne Startpfad in „Downloads“
-   (→ `services/fileDialogs.ts`), `NativeImage.toBitmap()` rechnet nach sRGB um.
+   (→ `services/fileDialogs.ts`), `NativeImage.toBitmap()` rechnet nach sRGB um. Aus 44 → 45: Der
+   Preload in der Sandbox hat kein `Buffer`, `setImmediate` und `require('events'|'url'|'timers')`
+   mehr – im gebauten Preload (index.js unter out/preload) darf nur `require("electron")` stehen; Bildschirmaufnahme
+   fragt als `display-capture` (die Allowlist in `windowPolicy.ts` lehnt sie ab); Datei-Deskriptoren
+   aus dem `app.asar` taugen nur noch für `fs`; **`safeStorage` synchron ist veraltet und fällt mit
+   46 weg** – `services/cache/schluessel.ts` vorher auf die asynchronen Methoden umstellen.
 2. **Sicherheits-Backports vergleichen:** Die gewählte Version darf keine Korrektur verlieren,
-   die die alte Patch-Linie schon hat.
-3. **Prüfen:** `/abschluss-check` inkl. `npm run e2e` und `paket`; besonders `utilityProcess`
+   die die alte Patch-Linie schon hat. Release-Notes beider Linien
+   (`gh api repos/electron/electron/releases/tags/v<version> --jq .body`) nennen je Release einen
+   Backport-PR; dessen Liste (`gh api repos/electron/electron/pulls/<nr> --jq .body`) mit der des
+   Gegenstücks der anderen Linie vergleichen. Was nur in der alten Linie steht, ist vielleicht
+   schon im neueren Chromium: `Cr-Commit-Position` des Commits
+   (`https://chromium.googlesource.com/chromium/src/+/<hash>?format=JSON`, erste 4 Zeichen
+   abschneiden) gegen die Abzweig-Position des Meilensteins
+   (`https://chromiumdash.appspot.com/fetch_milestones?mstone=<N>`, `chromium_main_branch_position`);
+   sonst nach `cherry-pick-<hash>.patch` in `patches/chromium` des Tags suchen. Was übrig bleibt,
+   gegen die App bewerten und in `docs/SICHERHEIT.md` festhalten (45.2.1: fünf, alle ohne Bezug).
+3. **Native Module, Node und Schlüssel:** better-sqlite3 und sharp nutzen die N-API (kein Rebuild).
+   Laden ohne App im Electron-Prozess: `ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/electron.exe
+   <skript>.cjs` (Skript im Scratchpad: `new (require('better-sqlite3'))(':memory:')`, sharp ein
+   Bild erzeugen lassen; `process.versions` nennt Node und ABI). `safeStorage` über den Wechsel: mit
+   der alten Binary verschlüsseln, mit der neuen entschlüsseln – gleicher `userData`-Ordner
+   (`app.setPath`), denn der Schlüssel dafür liegt in dessen `Local State`. Node-Vorgabe:
+   `engine-strict` prüft jedes Paket im Baum, die Untergrenze in `engines` ist die höchste aller
+   Pakete, nicht die von Electron (45: Electron 22.12, ESLint 22.13).
+4. **Prüfen:** `/abschluss-check` inkl. `npm run e2e` und `paket`; besonders `utilityProcess`
    (Bilddienst), Protokolle (`protocol.handle`) und `safeStorage` (Cache-Schlüssel – ein
    Schlüssel, der nach dem Update nicht mehr entschlüsselt, heißt: Cache neu aufbauen, nie
-   Daten verlieren).
-4. **Doku:** Version in `docs/ENTWICKLUNG.md`, Systemvoraussetzungen in `docs/INSTALL.md`.
-5. **Ausliefern:** Ein Electron-Upgrade (Chromium-Sicherheit) erreicht die Anwender erst mit
+   Daten verlieren). `format:check` meldet Dateien unter `.claude/worktrees/` (Worktrees anderer
+   Sitzungen im Ordner) – dann nur die eigenen prüfen:
+   `git ls-files -z | xargs -0 npx prettier --check --ignore-unknown`.
+5. **Doku:** Version und Node-Vorgabe in `docs/ENTWICKLUNG.md`, Systemvoraussetzungen in
+   `docs/INSTALL.md`, „Stand der bekannten Lücken“ in `docs/SICHERHEIT.md`; ändert sich die
+   Node-Vorgabe, auch `engines` in `package.json` und `package-lock.json` und der Kommentar zu
+   `@types/node` in `.github/dependabot.yml`.
+6. **Ausliefern:** Ein Electron-Upgrade (Chromium-Sicherheit) erreicht die Anwender erst mit
    einem neuen Release – nach dem Merge eins vorschlagen und als **wichtig** markieren (Skill
    `windows-paket`, App-Aktualisierung), damit die App darauf hinweist.

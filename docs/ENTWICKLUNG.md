@@ -6,8 +6,11 @@ Wie man Galeria Beata einrichtet, startet, prüft und erweitert. Plan, Entscheid
 ## Voraussetzungen
 
 - Windows 10/11 x64 (Zielsystem); Linux läuft in der CI mit.
-- Git und Node.js ≥ 22.12 (`engines` in `package.json`, `engine-strict`). Kein C++-Compiler,
-  kein Python: Install-Skripte laufen nie (`.npmrc`).
+- Git und Node.js ≥ 22.13 (`engines` in `package.json`, `engine-strict`). `engine-strict` prüft
+  jedes Paket im Baum, die Untergrenze ist also die höchste aller Pakete: Electron 45 verlangt
+  22.12, ESLint 10 22.13. Kein C++-Compiler, kein Python: Install-Skripte laufen nie (`.npmrc`).
+- Die App selbst läuft auf Electron 45 (Chromium 156, Node 24.22); neue Hauptversionen nach
+  Skill `abhaengigkeiten`.
 - Für die Abnahme eines Installers die **Windows-Sandbox** (Windows-Feature, einmalig als
   Administrator einschalten, danach Neustart):
   `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All`.
