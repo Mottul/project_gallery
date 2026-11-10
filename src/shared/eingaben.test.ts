@@ -3,6 +3,7 @@ import {
   pruefeAnsichtNameStreng,
   pruefeAnsichtStandStreng,
   pruefeBildFilterStreng,
+  pruefeDrehungStreng,
   pruefeGruppierungStreng,
   pruefeKennung,
   pruefeKennungen,
@@ -92,6 +93,16 @@ describe('pruefeSchalterStreng', () => {
     expect(pruefeSchalterStreng(false)).toBe(false)
     for (const v of [1, 0, 'true', null, {}, []]) {
       expect(() => pruefeSchalterStreng(v), String(v)).toThrow(/Schalter/)
+    }
+  })
+})
+
+describe('pruefeDrehungStreng', () => {
+  it('nur rechts und links; kein Winkel, keine Ausrichtung', () => {
+    expect(pruefeDrehungStreng('rechts')).toBe('rechts')
+    expect(pruefeDrehungStreng('links')).toBe('links')
+    for (const v of [90, 6, 'RECHTS', '', null, undefined, { richtung: 'rechts' }]) {
+      expect(() => pruefeDrehungStreng(v), JSON.stringify(v)).toThrow('Ungültige Drehung')
     }
   })
 })

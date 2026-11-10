@@ -64,7 +64,10 @@ Vor dem Start erkennen, in der Vorschau markieren:
   Nachprüfen); ExifTool kann mehrere Dateien je Befehl – Stapel bilden, aber Fehler je Datei
   auswerten.
 - **Drehen** ab Werk verlustfrei über die EXIF-Ausrichtung; pixelweise nur auf ausdrücklichen
-  Wunsch (dann neu kodiert, Hinweis in der Vorschau).
+  Wunsch (dann neu kodiert, Hinweis in der Vorschau). Seit 3.4 gibt es das verlustfreie Drehen um
+  90° schon (`shared/ausrichtung.ts`: Rechnung samt Spiegelung, drehbar nur JPEG und TIFF – gemessen,
+  Plan „Metadaten bearbeiten“; Auftrag über `writeMany` mit `drehen`): Der Stapel nimmt es wieder,
+  ergänzt Spiegeln und für die übrigen Formate (PNG verlustfrei, sonst neu kodiert) das pixelweise.
 - **Export:** Datenschutz-Vorgabe „ohne Standort“ (Skill `bildschutz`, Schicht E), Farbraum sRGB.
 - Index und Oberfläche erst nach Erfolg je Datei aktualisieren; der Watcher meldet die eigenen
   Änderungen ebenfalls – nicht doppelt verarbeiten (eigene Pfade kurz vormerken).

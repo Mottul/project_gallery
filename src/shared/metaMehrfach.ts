@@ -6,8 +6,10 @@
 // neues Änderungsdatum). Stichwörter vergleichen ohne Groß/Klein wie beim Lesen (`stichwoerterAus`).
 // ExifTools `+=`/`-=` taugt dafür nicht (gemessen mit 13.59): `-=` achtet auf Groß/Klein (ein
 // „meer“ bliebe in der Datei und käme beim Zusammenführen zurück), `+=` legt Doppelte an, und die
-// XP-Stichwörter sind gar keine Liste.
+// XP-Stichwörter sind gar keine Liste. Drehen (3.4) ist genauso eine Absicht: „um 90° nach rechts“
+// wird erst mit der Ausrichtung der Datei zu einem Wert – jede dreht von ihrer eigenen aus weiter.
 
+import { drehungText, gedreht, pruefeDrehung, type Drehung } from './ausrichtung'
 import {
   pruefeFeld,
   pruefeStichwoerter,
@@ -40,6 +42,8 @@ export interface MehrfachAenderung {
   stichwoerterDazu?: string[]
   /** gehen aus jeder Datei weg, auch in anderer Schreibweise */
   stichwoerterWeg?: string[]
+  /** das angezeigte Bild um 90° drehen (3.4) – über die Ausrichtung, nur JPEG und TIFF */
+  drehen?: Drehung
 }
 
 export const TEXT_FELDER = [
@@ -80,6 +84,10 @@ export function pruefeMehrfachAenderung(v: unknown): MehrfachAenderung | null {
       }
     } else if (k === 'stichwoerter') {
       return null // ganze Listen gibt es nur für ein Bild – hier hieße das: auf alle kopieren
+    } else if (k === 'drehen') {
+      const d = pruefeDrehung(w)
+      if (!d) return null
+      out.drehen = d
     } else {
       const g = pruefeFeld(k, w)
       if (g === undefined) return null
@@ -138,6 +146,10 @@ export function aenderungFuer(w: MetaWerte, m: MehrfachAenderung): MetaAenderung
   if (m.stichwoerterDazu?.length || m.stichwoerterWeg?.length) {
     const neu = stichwoerterNeu(w.stichwoerter, m.stichwoerterDazu, m.stichwoerterWeg)
     if (JSON.stringify(neu) !== JSON.stringify(w.stichwoerter)) a.stichwoerter = neu
+  }
+  // eine Drehung ändert die Ausrichtung immer (keine bleibt bei 90° gleich)
+  if (m.drehen) {
+    a.ausrichtung = { wert: gedreht(w.ausrichtung.wert, m.drehen), xmp: w.ausrichtung.xmp }
   }
   return Object.keys(a).length ? a : null
 }
@@ -305,9 +317,10 @@ const FARBEN: Record<Farblabel, string> = {
   Purple: 'Lila'
 }
 
-/** Rückfrage vor einer Schnellbewertung vieler Bilder (im main, mit der Zahl der Bilder) */
+/** Rückfrage vor einer Schnellbewertung oder Drehung vieler Bilder (im main, mit der Zahl der Bilder) */
 export function rueckfrageText(m: MehrfachAenderung, n: number): string {
   const felder = Object.keys(m)
+  if (felder.length === 1 && m.drehen) return `${BILDER(n)} ${drehungText(m.drehen)} drehen?`
   if (felder.length === 1 && m.bewertung !== undefined) {
     if (m.bewertung === 0) return `Bewertung bei ${BILDERN(n)} entfernen?`
     const s = m.bewertung === 1 ? '1 Stern' : `${m.bewertung} Sterne`
@@ -318,4 +331,18 @@ export function rueckfrageText(m: MehrfachAenderung, n: number): string {
     return `Farblabel ${FARBEN[m.farblabel]} für ${BILDER(n)} schreiben?`
   }
   return `Änderungen in ${BILDER(n)} schreiben?`
+}
+
+/** Titel und Erklärung der Rückfrage */
+export function rueckfrageKasten(m: MehrfachAenderung): { titel: string; detail: string } {
+  const danach =
+    'Vorher bekommt jede Datei eine Sicherung (außer im Ordner „privat“). ' +
+    '„Rückgängig“ nimmt danach alle auf einmal zurück.'
+  if (!m.drehen) return { titel: 'Metadaten schreiben', detail: danach }
+  return {
+    titel: 'Bilder drehen',
+    detail:
+      'Gedreht wird verlustfrei über die Ausrichtung in den Metadaten, die Bilddaten bleiben ' +
+      `unverändert – das geht nur bei JPEG und TIFF. ${danach}`
+  }
 }

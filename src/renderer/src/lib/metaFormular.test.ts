@@ -15,7 +15,8 @@ const LEER: MetaWerte = {
   land: null,
   ortsteil: null,
   urheber: null,
-  copyright: null
+  copyright: null,
+  ausrichtung: { wert: 1, xmp: false }
 }
 const VOLL: MetaWerte = {
   bewertung: 3,
@@ -30,7 +31,8 @@ const VOLL: MetaWerte = {
   land: 'Kroatien',
   ortsteil: 'Altstadt',
   urheber: 'Ich',
-  copyright: '© Ich'
+  copyright: '© Ich',
+  ausrichtung: { wert: 6, xmp: false }
 }
 
 describe('aenderungAus', () => {

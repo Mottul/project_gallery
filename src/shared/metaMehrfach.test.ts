@@ -4,6 +4,7 @@ import {
   aenderungFuer,
   pruefeMehrfachAenderung,
   pruefeSchreibOptionen,
+  rueckfrageKasten,
   rueckfrageText,
   stichwoerterNeu,
   zusammenfassen
@@ -22,7 +23,8 @@ const LEER: MetaWerte = {
   land: null,
   ortsteil: null,
   urheber: null,
-  copyright: null
+  copyright: null,
+  ausrichtung: { wert: 1, xmp: false }
 }
 const A: MetaWerte = {
   ...LEER,
@@ -91,7 +93,10 @@ describe('pruefeMehrfachAenderung', () => {
     ['Datum ungültig', { aufnahme: { lokal: '2020-02-30T03:04:05' } }],
     ['Bewertung', { bewertung: 6 }],
     ['Text mit Zeilenumbruch', { titel: 'a\nb' }],
-    ['Standort 0/0', { standort: { breite: 0, laenge: 0 } }]
+    ['Standort 0/0', { standort: { breite: 0, laenge: 0 } }],
+    ['Drehung als Winkel', { drehen: 90 }],
+    ['Drehung unbekannt', { drehen: 'oben' }],
+    ['Ausrichtung als Wert', { ausrichtung: { wert: 6, xmp: false } }]
   ])('lehnt ab: %s', (_n, a) => {
     expect(pruefeMehrfachAenderung(a)).toBeNull()
   })
@@ -162,6 +167,24 @@ describe('aenderungFuer', () => {
     expect(aenderungFuer(A, { titel: null })).toEqual({ titel: null })
     expect(aenderungFuer(LEER, { titel: null })).toBeNull()
   })
+
+  it('Drehen: jede Datei von ihrer eigenen Ausrichtung aus, auch gespiegelt; XMP zieht nur mit, wo es eine gibt', () => {
+    expect(pruefeMehrfachAenderung({ drehen: 'rechts' })).toEqual({ drehen: 'rechts' })
+    const m = { drehen: 'rechts' as const }
+    expect(aenderungFuer(LEER, m)).toEqual({ ausrichtung: { wert: 6, xmp: false } })
+    expect(aenderungFuer({ ...A, ausrichtung: { wert: 6, xmp: true } }, m)).toEqual({
+      ausrichtung: { wert: 3, xmp: true }
+    })
+    // gespiegelt (2) bleibt gespiegelt und dreht weiter (7)
+    expect(aenderungFuer({ ...B, ausrichtung: { wert: 2, xmp: false } }, m)).toEqual({
+      ausrichtung: { wert: 7, xmp: false }
+    })
+    expect(
+      aenderungFuer({ ...B, ausrichtung: { wert: 5, xmp: false } }, { drehen: 'links' })
+    ).toEqual({
+      ausrichtung: { wert: 4, xmp: false }
+    })
+  })
 })
 
 describe('zusammenfassen', () => {
@@ -222,9 +245,20 @@ describe('rueckfrageText', () => {
     [{ bewertung: 0 }, 1234, 'Bewertung bei 1.234 Bildern entfernen?'],
     [{ farblabel: 'Yellow' as const }, 3, 'Farblabel Gelb für 3 Bilder schreiben?'],
     [{ farblabel: null }, 3, 'Farblabel bei 3 Bildern entfernen?'],
-    [{ titel: 'x', bewertung: 2 }, 3, 'Änderungen in 3 Bilder schreiben?']
+    [{ titel: 'x', bewertung: 2 }, 3, 'Änderungen in 3 Bilder schreiben?'],
+    [{ drehen: 'rechts' as const }, 12, '12 Bilder um 90° nach rechts drehen?'],
+    [{ drehen: 'links' as const }, 1, '1 Bild um 90° nach links drehen?']
   ])('%j bei %i', (m, n, text) => {
     expect(rueckfrageText(m, n)).toBe(text)
+  })
+
+  it('Titel und Erklärung: beim Drehen verlustfrei, nur JPEG und TIFF', () => {
+    expect(rueckfrageKasten({ bewertung: 3 }).titel).toBe('Metadaten schreiben')
+    const k = rueckfrageKasten({ drehen: 'rechts' })
+    expect(k.titel).toBe('Bilder drehen')
+    expect(k.detail).toMatch(
+      /verlustfrei.*Bilddaten bleiben.*nur bei JPEG und TIFF.*Sicherung.*Rückgängig/
+    )
   })
 })
 

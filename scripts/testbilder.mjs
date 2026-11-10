@@ -37,7 +37,7 @@ export const QUADRANTEN = {
   untenLinks: [40, 70, 220],
   untenRechts: [235, 210, 40]
 }
-const MOTIV = { breite: 300, hoehe: 200 }
+export const MOTIV = { breite: 300, hoehe: 200 }
 
 /** Quer-Motiv mit vier farbigen Vierteln als rohe RGB-Pixel. */
 function quadrantenMotiv() {
@@ -76,13 +76,20 @@ const GESPEICHERT = {
   8: [['rotate', 90]]
 }
 
-async function ausrichtungsBild(n) {
+/** Gespeicherte Pixel (PNG) für Ausrichtung n – auch für Labortests des Drehens (3.4). */
+export async function ausrichtungsPixel(n) {
   let buf = await quadrantenMotiv().png().toBuffer()
   for (const schritt of GESPEICHERT[n]) {
     const s = sharp(buf)
     buf = await (Array.isArray(schritt) ? s.rotate(schritt[1]) : s[schritt]()).png().toBuffer()
   }
-  return sharp(buf).jpeg({ quality: 92 }).toBuffer()
+  return buf
+}
+
+async function ausrichtungsBild(n) {
+  return sharp(await ausrichtungsPixel(n))
+    .jpeg({ quality: 92 })
+    .toBuffer()
 }
 
 /** Einfarbiges Bild mit leichtem Verlauf (gut komprimierbar, aber kein reiner Block). */

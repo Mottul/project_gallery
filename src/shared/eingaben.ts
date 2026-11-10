@@ -1,6 +1,7 @@
 // Eingaben aus dem Renderer prüfen – rein, getestet in eingaben.test.ts. Auch der eigene Renderer
 // gilt als fremde Eingabe (Skill ipc-kanal): Ungültiges ist ein Fehler, nie still „korrigiert“.
 
+import { pruefeDrehung, type Drehung } from './ausrichtung'
 import { pruefeBildFilter, type BildFilter } from './bildFilter'
 import { pruefeAnsichtName, pruefeAnsichtStand, type AnsichtStand } from './gespeicherteAnsicht'
 import { pruefeGruppierung, type Gruppierung } from './gruppen'
@@ -67,6 +68,13 @@ export function pruefeSchreibOptionenStreng(v: unknown): SchreibOptionen {
   const o = pruefeSchreibOptionen(v)
   if (!o) throw new Error('Ungültige Optionen')
   return o
+}
+
+/** Richtung einer Drehung (3.4): nur „rechts“ oder „links“, nie ein Winkel oder eine Ausrichtung */
+export function pruefeDrehungStreng(v: unknown): Drehung {
+  const d = pruefeDrehung(v)
+  if (!d) throw new Error('Ungültige Drehung')
+  return d
 }
 
 export function pruefeAnsichtNameStreng(v: unknown): string {

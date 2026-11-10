@@ -14,8 +14,11 @@ const ZEICHEN = new Map([
   ['\t', '\\t']
 ])
 
-/** Tag-Namen der Zuordnung; alles andere ist ein Fehler im Programm, kein Eingabefehler */
-const TAG = /^[A-Za-z0-9-]+:[A-Za-z0-9-]+$/
+/**
+ * Tag-Namen der Zuordnung; alles andere ist ein Fehler im Programm, kein Eingabefehler. Ein „#“ am
+ * Ende schreibt die Zahl statt des Textes (Ausrichtung, 3.4) – es kann nichts einschleusen.
+ */
+const TAG = /^[A-Za-z0-9-]+:[A-Za-z0-9-]+#?$/
 
 function wertArgument(tag: string, wert: string | number | null): string {
   const w = wert === null ? '' : String(wert)

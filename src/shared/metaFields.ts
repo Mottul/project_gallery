@@ -4,6 +4,7 @@
 // bearbeiten“). Bewusst einzelne Tags statt der MWG-Gruppe: So kennt das Journal je Tag den alten
 // Wert, und die Nachprüfung vergleicht genau, was geschrieben wurde.
 
+import { ausrichtungAus, drehbar, istAusrichtung } from './ausrichtung'
 import { leseDatum, zoneNormal } from './dates'
 import { gpsAus, stichwoerterAus, STICHWORT_LAENGE, STICHWORT_MAX } from './grundfelder'
 
@@ -30,8 +31,19 @@ export interface Standort {
   laenge: number
 }
 
+/** EXIF-Ausrichtung 1–8 (fehlt sie, gilt 1); `xmp`: die Datei hat auch eine in XMP (tiff:Orientation) */
+export interface DateiAusrichtung {
+  wert: number
+  xmp: boolean
+}
+
 /** Was geändert wird; ein Feld, das fehlt, bleibt unberührt. null entfernt den Wert. */
 export interface MetaAenderung {
+  /**
+   * Neue Ausrichtung (3.4) – nie vom Renderer: Der schickt eine Drehung, der main bildet daraus mit der
+   * frisch gelesenen Ausrichtung der Datei die neue (`aenderungFuer` in metaMehrfach.ts).
+   */
+  ausrichtung?: DateiAusrichtung
   /** 1–5, 0 = keine Bewertung */
   bewertung?: number
   farblabel?: Farblabel | null
@@ -67,6 +79,8 @@ export interface MetaWerte {
   ortsteil: string | null
   urheber: string | null
   copyright: string | null
+  /** wie Chromium und sharp sie anwenden (3.4) */
+  ausrichtung: DateiAusrichtung
 }
 
 /** Ein Tag mit neuem Wert; null = Tag entfernen, Liste = Tag mit mehreren Werten */
@@ -250,11 +264,20 @@ export function tagsFuer(a: MetaAenderung, format: string): TagWert[] {
     setze(k.iptc, 'IPTC:CopyrightNotice', iptc(a.copyright, IPTC_MAX.copyright))
     setze(k.exif, 'EXIF:Copyright', a.copyright)
   }
+  // nur, wo die Ausrichtung auch beachtet wird (gemessen, ausrichtung.ts); „#“ = als Zahl schreiben –
+  // ohne lehnt ExifTool die Zahl ab („not in PrintConv“) und kopiert die Datei nur (gemessen)
+  if (a.ausrichtung !== undefined && drehbar(format)) {
+    setze(k.exif, 'EXIF:Orientation#', a.ausrichtung.wert)
+    // eine vorhandene XMP-Ausrichtung zieht mit, sonst widerspräche sie der neuen – Windows nimmt sie,
+    // wenn EXIF fehlt (gemessen); eine neue legt die App nicht an
+    if (a.ausrichtung.xmp) setze(k.xmp, 'XMP-tiff:Orientation#', a.ausrichtung.wert)
+  }
   return out
 }
 
-/** Schlüssel eines Tags in der Ausgabe von `-json -G0` */
-export const leseSchluessel = (tag: string): string => tag.replace(/^XMP-[^:]+:/, 'XMP:')
+/** Schlüssel eines Tags in der Ausgabe von `-json -G0` (das „#“ für Zahlen gehört nicht dazu) */
+export const leseSchluessel = (tag: string): string =>
+  tag.replace(/^XMP-[^:]+:/, 'XMP:').replace(/#$/, '')
 
 /** Alle Tags, aus denen `werteAus` liest (samt den berechneten GPS-Werten) */
 export const WERTE_TAGS: readonly TagWert[] = [
@@ -272,7 +295,8 @@ export const WERTE_TAGS: readonly TagWert[] = [
       land: 'x',
       ortsteil: 'x',
       urheber: 'x',
-      copyright: 'x'
+      copyright: 'x',
+      ausrichtung: { wert: 1, xmp: true }
     },
     'jpeg'
   ).map(({ tag }) => ({ tag, wert: null })),
@@ -319,7 +343,12 @@ export function werteAus(r: Record<string, unknown>, jetzt = Date.now()): MetaWe
     land: ersterText(r['XMP:Country'], r['IPTC:Country-PrimaryLocationName']),
     ortsteil: ersterText(r['XMP:Location'], r['IPTC:Sub-location']),
     urheber: ersterText(r['XMP:Creator'], r['IPTC:By-line'], r['EXIF:Artist']),
-    copyright: ersterText(r['XMP:Rights'], r['IPTC:CopyrightNotice'], r['EXIF:Copyright'])
+    copyright: ersterText(r['XMP:Rights'], r['IPTC:CopyrightNotice'], r['EXIF:Copyright']),
+    // gilt die EXIF-Ausrichtung – die XMP-Ausrichtung beachten Chromium und sharp nicht (gemessen)
+    ausrichtung: {
+      wert: ausrichtungAus(r['EXIF:Orientation']),
+      xmp: r['XMP:Orientation'] !== undefined && r['XMP:Orientation'] !== null
+    }
   }
 }
 
@@ -410,7 +439,8 @@ const TEXT_FELDER: Record<string, [number, boolean?]> = {
 
 /**
  * Den Wert eines Feldes aus dem Renderer prüfen (Allowlist, Typ, Grenzen); undefined = ungültig
- * oder kein bekanntes Feld. Gilt für das Panel (3.2) wie für die Mehrfachauswahl (3.3).
+ * oder kein bekanntes Feld. Gilt für das Panel (3.2) wie für die Mehrfachauswahl (3.3). Die
+ * Ausrichtung gehört nicht dazu: Der Renderer schickt eine Drehung (3.4), nie einen Wert.
  */
 export function pruefeFeld(k: string, v: unknown): unknown {
   if (k === 'bewertung') {
@@ -439,6 +469,19 @@ export function pruefeMetaAenderung(v: unknown): MetaAenderung | null {
     out[k] = w
   }
   return Object.keys(out).length ? (out as MetaAenderung) : null
+}
+
+/**
+ * Eine im main gebildete Änderung (Mehrfachauswahl, Drehen) prüfen: was aus der Datei kommt, muss
+ * dieselbe Prüfung bestehen wie eine Eingabe; dazu die Ausrichtung, die nur so entsteht.
+ */
+export function pruefeAbgeleitet(a: MetaAenderung): boolean {
+  const { ausrichtung, ...rest } = a
+  if (ausrichtung !== undefined) {
+    if (!istAusrichtung(ausrichtung.wert) || typeof ausrichtung.xmp !== 'boolean') return false
+    if (!Object.keys(rest).length) return true
+  }
+  return pruefeMetaAenderung(rest) !== null
 }
 
 /** Ergebnis eines Schreibauftrags */

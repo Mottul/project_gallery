@@ -1,20 +1,17 @@
 // Liste/Details der Galerie: virtualisierte Tabelle mit kleinem Vorschaubild, wählbaren Spalten
 // (gemerkt) und Sortieren per Klick auf die Spaltenüberschrift; Auswahl wie im Raster,
-// Gruppen-Überschriften (2.3) als eigene Zeilen.
+// Gruppen-Überschriften (2.3) als eigene Zeilen. Seit 3.4 dieselben Tasten wie im Raster
+// (entschieden 9.11.2026): Schnellbewertung 0–5 und 6–9, Drehen R und L, Rückgängig Strg+Z.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Columns3 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ansichtAendern } from '@renderer/lib/ansicht'
-import {
-  auswahlAlle,
-  auswahlKlick,
-  auswahlLeeren,
-  ersteGewaehlte,
-  useAuswahl
-} from '@renderer/lib/auswahl'
+import { auswahlKlick, useAuswahl } from '@renderer/lib/auswahl'
 import { datumText, groesseText, zahl } from '@renderer/lib/format'
+import { galerieTaste } from '@renderer/lib/tasten'
 import { cn } from '@renderer/lib/utils'
 import { zeilenBilden } from '@renderer/lib/zeilen'
+import type { Drehung } from '@shared/ausrichtung'
 import type { Gruppe } from '@shared/gruppen'
 import type { SortFeld, Sortierung } from '@shared/sortFilter'
 import type { ImageInfo } from '@shared/types'
@@ -166,7 +163,10 @@ export function Liste({
   sortierung,
   onSichtbar,
   onOeffnen,
-  onMetadaten
+  onMetadaten,
+  onSchnell,
+  onDrehen,
+  onRueckgaengig
 }: {
   ids: number[]
   /** Gruppen-Überschriften (leer = keine) */
@@ -180,6 +180,12 @@ export function Liste({
   onOeffnen: (index: number) => void
   /** Taste E: „Metadaten bearbeiten“ für die Auswahl (3.3) */
   onMetadaten?: () => void
+  /** Tasten 0–5 und 6–9: Schnellbewertung der Auswahl, wie im Raster */
+  onSchnell?: (taste: string) => void
+  /** Tasten R und L: die Auswahl um 90° drehen (3.4) */
+  onDrehen?: (d: Drehung) => void
+  /** Strg+Z: den letzten Hinweis zurücknehmen */
+  onRueckgaengig?: () => void
 }): JSX.Element {
   const auswahl = useAuswahl()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -229,23 +235,9 @@ export function Liste({
         aria-rowcount={zeilen.length + 1}
         tabIndex={0}
         className="min-h-0 flex-1 select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-            e.preventDefault()
-            auswahlAlle(ids)
-          } else if (e.key === 'Escape') auswahlLeeren()
-          else if (e.key === 'Enter') {
-            const i = ersteGewaehlte(ids)
-            if (i >= 0) onOeffnen(i)
-          } else if (
-            e.key.toLowerCase() === 'e' &&
-            !(e.ctrlKey || e.metaKey || e.altKey || e.repeat) &&
-            onMetadaten
-          ) {
-            e.preventDefault()
-            onMetadaten()
-          }
-        }}
+        onKeyDown={(e) =>
+          galerieTaste(e, { ids, onOeffnen, onMetadaten, onSchnell, onDrehen, onRueckgaengig })
+        }
       >
         <div
           role="row"

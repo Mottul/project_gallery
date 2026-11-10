@@ -36,9 +36,16 @@ describe('tagArgumente', () => {
   })
 
   it('verweigert Tag-Namen, die nicht aus der Zuordnung kommen können', () => {
-    for (const tag of ['Title', '-all', 'XMP-dc:Title=x', 'a:b c', '']) {
+    for (const tag of ['Title', '-all', 'XMP-dc:Title=x', 'a:b c', '', 'a:b##', 'a#:b', '#a:b']) {
       expect(() => eins({ tag, wert: 'x' })).toThrow('Tag-Name')
     }
+  })
+
+  it('„#“ am Ende schreibt eine Zahl ohne Umrechnung (Ausrichtung), auch zum Entfernen', () => {
+    expect(eins({ tag: 'EXIF:Orientation#', wert: 6 })).toBe('#[CSTR]-EXIF:Orientation#=6')
+    expect(eins({ tag: 'XMP-tiff:Orientation#', wert: null })).toBe(
+      '#[CSTR]-XMP-tiff:Orientation#='
+    )
   })
 
   it('verweigert Steuerzeichen im Wert', () => {

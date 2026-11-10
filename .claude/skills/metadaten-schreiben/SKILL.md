@@ -19,6 +19,8 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
 | Freigabe, Journal, Sicherungen, Rückgängig, Aufräumen | `src/main/services/metadata/schreiben.ts` + Test |
 | Mehrfachauswahl (3.3): Änderung als Felder + Stichwörter dazu/weg, Prüfung, je Datei ableiten (`aenderungFuer`), gemischte Werte (`zusammenfassen`), Auftragstypen (rein) | `src/shared/metaMehrfach.ts` + Test |
 | Aufträge über viele Dateien: einer zur Zeit, Fortschritt als Ereignis, Abbrechen, Rückfrage, Platz für Sicherungen | `src/main/services/metadata/mehrfach.ts`, `platz.ts` + Tests |
+| Drehen (3.4): Rechnung mit Spiegelung, drehbare Formate, Texte (rein) | `src/shared/ausrichtung.ts` + Test |
+| Ein Bild drehen (`metaDrehen`, sofort) – derselbe Schritt wie `dateiAendern` | `src/main/services/metadata/schreiben.ts` |
 | IPC | `src/main/ipc/meta.handlers.ts` (Skill `ipc-kanal`) |
 
 ## Felder
@@ -45,6 +47,14 @@ Schicht B des Schutzkonzepts (`docs/PLAN.md`, Skill `bildschutz`).
   `pruefeMetaAenderung` bestehen (z. B. höchstens 200 Stichwörter) – sonst Fehler für diese Datei.
   **Nicht** ExifTools `+=`/`-=` (gemessen 13.59, Labortest): `-=` achtet auf Groß/Klein (ein „meer“
   bliebe und käme beim Zusammenführen zurück), `+=` legt Doppelte an, `XPKeywords` ist keine Liste.
+- **Ausrichtung** (seit 3.4): nie ein Wert aus dem Renderer, nur eine Drehung (`rechts`/`links`,
+  `pruefeDrehung`); der main liest die Datei frisch und bildet mit `aenderungFuer` die neue
+  (`gedreht`, die Spiegelung bleibt). Tag `EXIF:Orientation#` – das `#` schreibt die Zahl; ohne lehnt
+  ExifTool sie ab und kopiert die Datei nur (gemessen). `args.ts` erlaubt das `#` am Tag-Namen,
+  `leseSchluessel` streicht es (Ausgabe ohne `#`). Nur in drehbaren Formaten (`drehbar`: JPEG, TIFF –
+  Labor 3.4); `verweigert(z, true)` lehnt die übrigen ab, ohne die Datei zu lesen. Eine vorhandene
+  `XMP-tiff:Orientation` zieht mit (`ausrichtung.xmp`), eine neue entsteht nicht. Eine im main
+  gebildete Änderung prüft `pruefeAbgeleitet` (wie eine Eingabe, dazu die Ausrichtung).
 - **Lesen für den Index** mit `-json -n -G0` (Zahlen statt Text; Tags fest in
   `GRUNDFELD_TAGS`, Prüfung in `grundfelder.ts`, seit 2.1 auch Objektiv, Belichtung, GPS,
   Bewertung, Farblabel, Titel, Beschreibung, Stichwörter); Anzeigetexte macht die Oberfläche
@@ -125,8 +135,14 @@ laufenden Datei (`src/main/index.ts`).
   Abbrechen nach der laufenden Datei, einer zur Zeit, Platz, Rückgängig als ein Schritt.
 - Labor (`*.lab.test.ts`, echtes ExifTool): jedes Feld schreiben → lesen → gleich; Pixel-Hash
   gleich; Rückgängig stellt den alten Stand her; Stichwörter dazu/weg in allen sechs Formaten
-  (XMP, IPTC, XP); schreibgeschützte Datei → Sidecar.
+  (XMP, IPTC, XP); Drehen in JPEG und TIFF für alle acht Ausrichtungen (Lage des Vierfarb-Motivs per
+  sharp, Bilddaten gleich, Maße im Index getauscht, Rückgängig), XMP-Ausrichtung zieht mit, AVIF
+  beachtet die EXIF-Ausrichtung nicht; schreibgeschützte Datei → Sidecar.
+- Rein seit 3.4: `ausrichtung.test.ts` (jede Ausrichtung gegen Matrizen aus der EXIF-Norm, auch
+  gespiegelt), `metaFields`/`metaMehrfach` (Tags, `pruefeAbgeleitet`, Drehung je Datei), `mehrfach.test.ts`
+  (je Datei von der eigenen Ausrichtung, PNG ungelesen abgelehnt, Platz nur für Drehbare, `metaDrehen`).
 - E2E `metadaten`: Bearbeiten-Panel einzeln und die Ansicht „Metadaten bearbeiten“ mehrfach (Werte
   unabhängig mit ExifTool nachgelesen), Rückfrage bei Konflikt (Datei während der Bearbeitung von
-  außen ändern), Abbrechen, Rückgängig, „nur lesen“ und „privat“ in der Auswahl, Schnellbewertung im
-  Raster.
+  außen ändern), Abbrechen, Rückgängig, „nur lesen“ und „privat“ in der Auswahl, Schnellbewertung in
+  Raster und Liste; Drehen im Betrachter und für eine Auswahl (Ausrichtung nachgelesen, Anzeige und
+  Vorschaubild per Lage des Motivs, nicht drehbare Formate bytegleich).

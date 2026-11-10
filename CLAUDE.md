@@ -19,8 +19,9 @@ Fehlende entfernen), 2.2 (Orte offline, Sortieren nach Ort A–Z) und 2.3 (weite
 Gruppen-Überschriften in Raster und Liste), 2.3b (Blocksatz), 2.4 (Filterleiste, Volltextsuche),
 2.4b (gespeicherte Ansichten) und 2.5 (Diashow mit Überblenden und Ken Burns). **Phase 3 läuft**
 (Metadaten bearbeiten; Teilschritte 3.1–3.5 im Plan); 3.1 (Schreibweg, Schnellbewertung), 3.2
-(Bearbeiten-Panel) und 3.3 (Mehrfachauswahl: Ansicht „Metadaten bearbeiten“, Schnellbewertung im
-Raster) sind umgesetzt. Grundlage ist
+(Bearbeiten-Panel), 3.3 (Mehrfachauswahl: Ansicht „Metadaten bearbeiten“, Schnellbewertung im
+Raster) und 3.4 (verlustfreies Drehen mit R/L über die EXIF-Ausrichtung, nur JPEG und TIFF;
+Schnellbewertung auch in der Liste) sind umgesetzt. Grundlage ist
 [`docs/PLAN.md`](docs/PLAN.md): vor jeder Arbeit lesen, offene Fragen dort klären, Erledigtes nach
 der Umsetzung in die Doku überführen. Klickbare Entwürfe der Oberfläche: Abschnitt „Vorschau der
 Oberfläche“ im Plan.
@@ -112,7 +113,10 @@ und Grundmuster: [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Sicherheitsstand:
   `galerie/MetaMehrfach.tsx` (Rechnung in `lib/mehrfachFormular.ts`), Änderung als Felder und
   Stichwörter dazu/weg (`shared/metaMehrfach.ts`, je Datei gebildet von `aenderungFuer`), Aufträge
   mit Fortschritt-Ereignis, Abbrechen und Platzprüfung in `metadata/mehrfach.ts`, Stand im Renderer
-  `lib/metaAuftrag.ts`. Skill `metadaten-schreiben`.
+  `lib/metaAuftrag.ts`. Drehen (3.4): Rechnung und drehbare Formate in `shared/ausrichtung.ts`, der
+  Renderer schickt nur die Richtung (`meta.rotate` für ein Bild → `metaDrehen`, viele über
+  `writeMany` mit `drehen`), Tasten von Raster und Liste in `lib/tasten.ts`. Skill
+  `metadaten-schreiben`.
 - **Farben:** nur Tailwind-Tokens (`tailwind.config.js` → Variablen in `assets/main.css`),
   Hell = `.light` am `<html>`, Standard „wie Windows“.
 

@@ -1,4 +1,5 @@
 import {
+  pruefeDrehungStreng,
   pruefeKennung,
   pruefeKennungen,
   pruefeMehrfachAenderungStreng,
@@ -15,7 +16,12 @@ import {
   rueckgaengigStarten,
   schreibenStarten
 } from '../services/metadata/mehrfach'
-import { metaAendern, metaLesen, metaRueckgaengig } from '../services/metadata/schreiben'
+import {
+  metaAendern,
+  metaDrehen,
+  metaLesen,
+  metaRueckgaengig
+} from '../services/metadata/schreiben'
 import { handle, on } from './handle'
 
 /** Höchstens so viele Bilder bzw. Journal-Zeilen je Auftrag */
@@ -29,6 +35,10 @@ export function registerMetaHandlers(): void {
   // Felder und Werte aus der Allowlist (metaFields.ts) – nie Tag-Namen aus dem Renderer
   handle(Channels.metaWrite, (_e, ids, aenderung) =>
     metaAendern(pruefeKennungen(ids, AUFTRAG_MAX), pruefeMetaAenderungStreng(aenderung))
+  )
+  // nur die Richtung (3.4); die neue Ausrichtung bildet der main aus der Datei
+  handle(Channels.metaRotate, (_e, id, richtung) =>
+    metaDrehen(pruefeKennung(id), pruefeDrehungStreng(richtung))
   )
   handle(Channels.metaUndo, (_e, journal) =>
     metaRueckgaengig(pruefeKennungen(journal, AUFTRAG_MAX))

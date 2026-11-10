@@ -3,8 +3,9 @@
 // Gruppen, Suche, Filter, Größe, Metadaten) über Raster oder Liste. Ordner lassen sich aus dem
 // Explorer hineinziehen – die Seite gibt dabei nur die Datei-Objekte weiter, den Pfad liest der
 // Preload (Schicht C). Mehrfachauswahl (3.3; entschieden 9.11.2026): „Metadaten“ bzw. Taste E öffnet
-// die Ansicht für die gewählten Bilder; im Raster schreiben 0–5 und 6–9 für alle gewählten – eines
-// sofort wie im Betrachter, ab zwei nach einer Rückfrage im main, mit Fortschritt und Abbrechen.
+// die Ansicht für die gewählten Bilder; in Raster und Liste schreiben 0–5 und 6–9 für alle gewählten –
+// eines sofort wie im Betrachter, ab zwei nach einer Rückfrage im main, mit Fortschritt und Abbrechen.
+// Genauso drehen R und L die gewählten um 90° (3.4, über die Ausrichtung; kein eigener Knopf).
 import { BrickWall, FolderInput, FolderPlus, Images, LayoutGrid, List, Tag } from 'lucide-react'
 import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import { Button } from '@renderer/components/ui/button'
@@ -20,10 +21,18 @@ import {
 import { api } from '@renderer/lib/api'
 import { auswahlAbgleichen, auswahlNur, useAuswahl } from '@renderer/lib/auswahl'
 import { zahl } from '@renderer/lib/format'
-import { auftragLaeuft, auftragStarten, LAEUFT_SCHON, useAuftrag } from '@renderer/lib/metaAuftrag'
+import {
+  auftragLaeuft,
+  auftragStarten,
+  auftragVergessen,
+  LAEUFT_SCHON,
+  useAuftrag
+} from '@renderer/lib/metaAuftrag'
 import { errorText } from '@renderer/lib/utils'
-import type { Farblabel, MetaAenderung } from '@shared/metaFields'
-import { MEHRFACH_MAX } from '@shared/metaMehrfach'
+import { drehungText, gedrehtText, type Drehung } from '@shared/ausrichtung'
+import type { Farblabel, MetaAenderung, SchreibBericht } from '@shared/metaFields'
+import { MEHRFACH_MAX, type AuftragStart } from '@shared/metaMehrfach'
+import type { ImageInfo } from '@shared/types'
 import {
   angezeigtMelden,
   useDetails,
@@ -177,36 +186,66 @@ export function Galerie(): JSX.Element | null {
     setMehrfach(ids)
   }, [gewaehlt])
 
-  /** Schnellbewertung im Raster: Tasten 0–5 und 6–9 für alle gewählten Bilder */
+  /**
+   * Ein Bild sofort wie im Betrachter (Hinweis mit „Rückgängig“), ab zwei ein Auftrag nach der
+   * Rückfrage im main („3 Sterne für 12 Bilder schreiben?“), dann Fortschritt mit Abbrechen.
+   */
+  const fuerAuswahl = useCallback(
+    async (
+      ids: number[],
+      eines: () => Promise<SchreibBericht<ImageInfo>>,
+      fertig: string,
+      viele: { text: string; start: () => Promise<AuftragStart> }
+    ) => {
+      if (auftragLaeuft()) return setHinweis(LAEUFT_SCHON)
+      setHinweis(null)
+      setRueck(null)
+      if (ids.length === 1) {
+        // das Ergebnis eines früheren Auftrags verdeckte sonst den neuen Hinweis samt „Rückgängig“
+        auftragVergessen()
+        try {
+          const r = await eines()
+          details.setzen(r.geschrieben)
+          const f = r.fehler[0]
+          if (f) setHinweis(f.grund)
+          else setRueck({ text: fertig, journal: r.journal })
+        } catch (err) {
+          setHinweis(errorText(err))
+        }
+        return
+      }
+      const r = await auftragStarten('raster', 'schreiben', ids.length, viele.text, viele.start)
+      if ('grund' in r) setHinweis(r.grund)
+    },
+    [details]
+  )
+
+  /** Schnellbewertung in Raster und Liste: Tasten 0–5 und 6–9 für alle gewählten Bilder */
   const schnell = useCallback(
     async (taste: string) => {
       const ids = gewaehlt()
       if (!ids.length) return
       const t = tastenAenderung(taste, ids.length === 1 ? details.get(ids[0])?.colorLabel : null)
       if (!t) return
-      if (auftragLaeuft()) return setHinweis(LAEUFT_SCHON)
-      setHinweis(null)
-      setRueck(null)
-      if (ids.length === 1) {
-        // ein Bild: sofort wie im Betrachter
-        try {
-          const r = await api.meta.write(ids, t.a)
-          details.setzen(r.geschrieben)
-          const f = r.fehler[0]
-          if (f) setHinweis(f.grund)
-          else setRueck({ text: t.fertig, journal: r.journal })
-        } catch (err) {
-          setHinweis(errorText(err))
-        }
-        return
-      }
-      // ab zwei: Rückfrage im main („3 Sterne für 12 Bilder schreiben?“), dann Fortschritt
-      const r = await auftragStarten('raster', 'schreiben', ids.length, t.text, () =>
-        api.meta.writeMany(ids, t.a, { rueckfrage: true })
-      )
-      if ('grund' in r) setHinweis(r.grund)
+      await fuerAuswahl(ids, () => api.meta.write(ids, t.a), t.fertig, {
+        text: t.text,
+        start: () => api.meta.writeMany(ids, t.a, { rueckfrage: true })
+      })
     },
-    [gewaehlt, details]
+    [gewaehlt, details, fuerAuswahl]
+  )
+
+  /** Drehen in Raster und Liste (3.4): Tasten R und L für alle gewählten Bilder */
+  const drehen = useCallback(
+    async (richtung: Drehung) => {
+      const ids = gewaehlt()
+      if (!ids.length) return
+      await fuerAuswahl(ids, () => api.meta.rotate(ids[0], richtung), gedrehtText(richtung), {
+        text: `Drehung ${drehungText(richtung)}`,
+        start: () => api.meta.writeMany(ids, { drehen: richtung }, { rueckfrage: true })
+      })
+    },
+    [gewaehlt, fuerAuswahl]
   )
 
   /** „Rückgängig“ (auch Strg+Z) für den letzten Hinweis im Raster – ein Bild oder ein ganzer Auftrag */
@@ -400,6 +439,7 @@ export function Galerie(): JSX.Element | null {
               fokusId={fokusId}
               onMetadaten={tastenFrei ? metadatenOeffnen : undefined}
               onSchnell={tastenFrei ? (t) => void schnell(t) : undefined}
+              onDrehen={tastenFrei ? (d) => void drehen(d) : undefined}
               onRueckgaengig={tastenFrei ? () => void rueckgaengig() : undefined}
             />
           )
@@ -413,6 +453,9 @@ export function Galerie(): JSX.Element | null {
             onSichtbar={sichtbarMelden}
             onOeffnen={setBetrachter}
             onMetadaten={tastenFrei ? metadatenOeffnen : undefined}
+            onSchnell={tastenFrei ? (t) => void schnell(t) : undefined}
+            onDrehen={tastenFrei ? (d) => void drehen(d) : undefined}
+            onRueckgaengig={tastenFrei ? () => void rueckgaengig() : undefined}
           />
         ))}
       {ablage}

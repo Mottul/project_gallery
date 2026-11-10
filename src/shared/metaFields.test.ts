@@ -6,6 +6,8 @@ import {
   COPYRIGHT_MAX,
   leseSchluessel,
   ORT_MAX,
+  pruefeAbgeleitet,
+  pruefeFeld,
   pruefeMetaAenderung,
   schreibbar,
   tagsFuer,
@@ -135,6 +137,67 @@ describe('tagsFuer: weitere Felder', () => {
   })
 })
 
+describe('Ausrichtung (3.4)', () => {
+  it('als Zahl in EXIF – nur in JPEG und TIFF, wo sie beachtet wird', () => {
+    for (const f of ['jpeg', 'tiff']) {
+      expect(tagsFuer({ ausrichtung: { wert: 6, xmp: false } }, f)).toEqual([
+        { tag: 'EXIF:Orientation#', wert: 6 }
+      ])
+    }
+    // gemessen: PNG beachtet Windows nicht, WebP Chromium nicht, AVIF niemand; GIF hat kein EXIF
+    for (const f of ['png', 'webp', 'avif', 'gif', 'bmp']) {
+      expect(tagsFuer({ ausrichtung: { wert: 6, xmp: true } }, f)).toEqual([])
+    }
+  })
+
+  it('eine vorhandene XMP-Ausrichtung zieht mit; eine neue entsteht nicht', () => {
+    expect(tagsFuer({ ausrichtung: { wert: 3, xmp: true } }, 'jpeg')).toEqual([
+      { tag: 'EXIF:Orientation#', wert: 3 },
+      { tag: 'XMP-tiff:Orientation#', wert: 3 }
+    ])
+    expect(namen(tagsFuer({ ausrichtung: { wert: 3, xmp: false } }, 'tiff'))).not.toContain(
+      'XMP-tiff:Orientation#'
+    )
+  })
+
+  it('gelesen wird die EXIF-Ausrichtung, wie Chromium und sharp; das „#“ gehört nicht zum Schlüssel', () => {
+    expect(leseSchluessel('EXIF:Orientation#')).toBe('EXIF:Orientation')
+    expect(leseSchluessel('XMP-tiff:Orientation#')).toBe('XMP:Orientation')
+    expect(werteAus({ 'EXIF:Orientation': 5 }).ausrichtung).toEqual({ wert: 5, xmp: false })
+    // die XMP-Ausrichtung zählt nicht, nur ob es sie gibt
+    expect(werteAus({ 'XMP:Orientation': 6 }).ausrichtung).toEqual({ wert: 1, xmp: true })
+    expect(werteAus({ 'EXIF:Orientation': 0 }).ausrichtung.wert).toBe(1)
+    const tags = WERTE_TAGS.map((t) => t.tag)
+    expect(tags).toContain('EXIF:Orientation#')
+    expect(tags).toContain('XMP-tiff:Orientation#')
+  })
+
+  it('Nachprüfung und Journal vergleichen die Zahl', () => {
+    const soll = [{ tag: 'EXIF:Orientation#', wert: 8 }]
+    expect(abweichend(soll, { 'EXIF:Orientation': 8 })).toEqual([])
+    expect(abweichend(soll, { 'EXIF:Orientation': 6 })).toEqual(['EXIF:Orientation#'])
+    expect(abweichend([{ tag: 'XMP-tiff:Orientation#', wert: null }], {})).toEqual([])
+    expect(alteWerte(soll, { 'EXIF:Orientation': 6 })).toEqual([
+      { tag: 'EXIF:Orientation#', wert: 6 }
+    ])
+    expect(alteWerte(soll, {})).toEqual([{ tag: 'EXIF:Orientation#', wert: null }])
+  })
+
+  it('vom Renderer nie als Wert – nur der main bildet sie (pruefeAbgeleitet)', () => {
+    expect(pruefeFeld('ausrichtung', { wert: 6, xmp: false })).toBeUndefined()
+    expect(pruefeMetaAenderung({ ausrichtung: { wert: 6, xmp: false } })).toBeNull()
+    expect(pruefeMetaAenderung({ bewertung: 3, ausrichtung: { wert: 6, xmp: false } })).toBeNull()
+    expect(pruefeAbgeleitet({ ausrichtung: { wert: 6, xmp: false } })).toBe(true)
+    expect(pruefeAbgeleitet({ ausrichtung: { wert: 6, xmp: true }, bewertung: 2 })).toBe(true)
+    for (const wert of [0, 9, 6.5, '6']) {
+      expect(pruefeAbgeleitet({ ausrichtung: { wert: wert as number, xmp: false } })).toBe(false)
+    }
+    // was sonst darin steht, prüft dieselbe Regel wie für Eingaben
+    expect(pruefeAbgeleitet({ ausrichtung: { wert: 6, xmp: false }, bewertung: 9 })).toBe(false)
+    expect(pruefeAbgeleitet({})).toBe(false)
+  })
+})
+
 describe('WERTE_TAGS', () => {
   it('liest alles, was geschrieben werden kann, und den berechneten Standort', () => {
     const tags = WERTE_TAGS.map((t) => t.tag)
@@ -176,7 +239,8 @@ describe('werteAus', () => {
       land: null,
       ortsteil: null,
       urheber: 'Eine; Andere',
-      copyright: '© x'
+      copyright: '© x',
+      ausrichtung: { wert: 1, xmp: false }
     })
   })
 
