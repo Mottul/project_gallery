@@ -84,6 +84,7 @@ Electrons eigener Node-Laufzeit (`ELECTRON_RUN_AS_NODE`), also wie später Bildd
 | `scripts/labor/sharp-durchsatz.mjs` | Vorschaubilder je Sekunde und Spitzenspeicher (24 MP, Gleichzeitigkeit, sehr große Bilder) |
 | `scripts/labor/exiftool-durchsatz.mjs` | ExifTool `-stay_open`: Lesen, Schreiben, parallele Prozesse, Unicode, lange Pfade |
 | `scripts/labor/formate.mjs` | Formatmatrix: sharp, Chromium in der gebauten App, ExifTool schreibt (vorher bauen) |
+| `scripts/labor/ausrichtung.mjs` | EXIF-Ausrichtung je Format: ExifTool schreibt, Bilddaten gleich, wer sie beachtet (sharp, Chromium in der gebauten App, Windows-Shell); AVIF mit `irot`, alle acht weitergedreht, XMP daneben (vorher bauen) |
 | `scripts/labor/sqlite-index.mjs` | 50.000 Zeilen einfügen (Blockierzeit je Stapel), Sortier- und Filterabfragen |
 
 Ergebnisse stehen in [PLAN.md, Phase 0](PLAN.md#phase-0--fundament-und-labor).

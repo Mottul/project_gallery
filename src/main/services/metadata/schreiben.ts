@@ -5,14 +5,16 @@
 // keine, Frist 30 Tage (entschieden 30.10.2026). Ins Log nur Kennungen und Codes (Schicht D).
 // Für die Mehrfachauswahl (3.3) gibt es dieselben Schritte je Datei (`dateiAendern`, `dateienLesen`,
 // `zeileZuruecknehmen`): Der Auftrag in mehrfach.ts reiht sie einzeln ein, so kommen andere Aufträge
-// dazwischen dran, und Abbrechen hält nach der laufenden Datei an.
+// dazwischen dran, und Abbrechen hält nach der laufenden Datei an. Drehen (3.4) ist ein solcher
+// Schritt mit der Drehung als Änderung – für ein Bild sofort (`metaDrehen`), für viele als Auftrag.
 
 import { rm, rmdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { drehbar, nichtDrehbarText, type Drehung } from '@shared/ausrichtung'
 import { STICHWORT_MAX } from '@shared/grundfelder'
 import {
   alteWerte,
-  pruefeMetaAenderung,
+  pruefeAbgeleitet,
   schreibbar,
   tagsFuer,
   werteAus,
@@ -94,11 +96,13 @@ function nacheinander<T>(f: () => Promise<T>): Promise<T> {
   return lauf
 }
 
-/** Warum diese Datei nicht geschrieben werden darf; null = sie darf. */
-function verweigert(z: repo.VorschauZeile): string | null {
+/** Warum diese Datei nicht geschrieben (mit `drehen`: nicht gedreht) werden darf; null = sie darf. */
+function verweigert(z: repo.VorschauZeile, drehen = false): string | null {
   if (z.mode === 'nur-lesen') return 'Der Ordner steht auf „nur lesen“.'
   if (z.status !== 'ok') return 'Die Datei ist defekt.'
   if (z.format === null) return 'Die Metadaten der Datei werden noch gelesen.'
+  // vor „nichts schreiben“: Bei BMP und GIF sagt das, was der Nutzer wissen will
+  if (drehen && !drehbar(z.format)) return nichtDrehbarText(z.format)
   if (!schreibbar(z.format))
     return `In ${z.format.toUpperCase()}-Dateien lässt sich nichts schreiben.`
   return null
@@ -299,7 +303,7 @@ export function dateiAendern(
   return nacheinander(async () => {
     const [z] = repo.vorschauZeilen(env().db(), [id])
     if (!z) return { ergebnis: { id, status: 'fehler', grund: grundZu('ENOENT') } }
-    const nein = verweigert(z)
+    const nein = verweigert(z, m.drehen !== undefined)
     if (nein) return { ergebnis: { id, status: 'abgelehnt', name: z.name, grund: nein } }
     let ist: Record<string, unknown> | null
     try {
@@ -314,7 +318,7 @@ export function dateiAendern(
     const a = aenderungFuer(werteAus(ist), m)
     if (!a) return { ergebnis: { id, status: 'unveraendert' } }
     // was aus der Datei kommt, muss dieselbe Prüfung bestehen wie eine Eingabe
-    if (!pruefeMetaAenderung(a)) {
+    if (!pruefeAbgeleitet(a)) {
       const zuViele = (a.stichwoerter?.length ?? 0) > STICHWORT_MAX
       const grund = zuViele
         ? `Mehr als ${STICHWORT_MAX} Stichwörter – nicht geschrieben.`
@@ -325,6 +329,25 @@ export function dateiAendern(
     const r = await eineDatei(z, 'metadaten', tags, alteWerte(tags, ist))
     return { ergebnis: alsStatus(z, r), journal: r.journal }
   })
+}
+
+/**
+ * Ein Bild um 90° drehen (Betrachter, ein gewähltes Bild in der Galerie; 3.4): sofort wie die
+ * Schnellbewertung. Derselbe Schritt wie in der Mehrfachauswahl – die neue Ausrichtung entsteht
+ * aus der frisch gelesenen der Datei, nie aus dem, was die Oberfläche zeigt.
+ */
+export async function metaDrehen(id: number, drehen: Drehung): Promise<SchreibBericht<ImageInfo>> {
+  const { ergebnis: e, journal } = await dateiAendern(id, { drehen })
+  if (e.status === 'geschrieben' && journal !== undefined) {
+    return { geschrieben: env().details([id]), fehler: [], journal: [journal] }
+  }
+  // ein Bild allein: lieber sagen, was jetzt zu tun ist, als „übersprungen“
+  const grund =
+    e.status === 'konflikt' && e.grund === KONFLIKT
+      ? grundZu('GEAENDERT')
+      : (e.grund ?? grundZu('SCHREIBFEHLER'))
+  const name = e.name ?? repo.vorschauZeilen(env().db(), [id])[0]?.name ?? ''
+  return { geschrieben: [], fehler: [{ id, name, grund }], journal: [] }
 }
 
 /**
@@ -381,14 +404,18 @@ export function zeileZuruecknehmen(journal: number): Promise<DateiErgebnis | nul
 
 /**
  * Reicht der Platz für die Sicherungen dieser Bilder? null = ja (oder nicht messbar); sonst der
- * Hinweis. Gezählt wird, was eine Sicherung bekäme: beschreibbar, nicht „privat“, noch keine.
+ * Hinweis. Gezählt wird, was eine Sicherung bekäme: beschreibbar (mit `drehen`: drehbar), nicht
+ * „privat“, noch keine.
  */
-export async function platzFuerSicherungen(ids: readonly number[]): Promise<string | null> {
+export async function platzFuerSicherungen(
+  ids: readonly number[],
+  drehen = false
+): Promise<string | null> {
   const { db } = env()
   const vorhanden = repo.mitSicherung(db(), ids)
   const noetig = repo
     .vorschauZeilen(db(), ids)
-    .filter((z) => !verweigert(z) && z.mode !== 'privat' && !vorhanden.has(z.id))
+    .filter((z) => !verweigert(z, drehen) && z.mode !== 'privat' && !vorhanden.has(z.id))
     .reduce((s, z) => s + z.size, 0)
   if (!noetig) return null
   return platzHinweis(noetig, await freierPlatz(sicherungsOrdner()))

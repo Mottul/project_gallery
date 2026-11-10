@@ -1,6 +1,7 @@
 // Aufträge der Mehrfachauswahl im main mit echtem Index und nachgestelltem Bilddienst: je Datei nur,
 // was sich dort ändert, Stichwörter aus der eigenen Liste, Konflikt, Abbrechen, ein Auftrag zur Zeit,
-// Rückfrage, Platz für die Sicherungen, Rückgängig als ein Schritt, gemischte Werte lesen.
+// Rückfrage, Platz für die Sicherungen, Rückgängig als ein Schritt, gemischte Werte lesen. Drehen
+// (3.4): je Datei von ihrer eigenen Ausrichtung aus, nur JPEG und TIFF, ein Bild sofort.
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,7 +39,7 @@ vi.mock('./platz', async (orig) => ({
 
 const { oeffneIndex } = await import('../db')
 const repo = await import('../library/repo')
-const { schreibenEinrichten } = await import('./schreiben')
+const { metaDrehen, schreibenEinrichten } = await import('./schreiben')
 const m = await import('./mehrfach')
 
 type DB = ReturnType<typeof oeffneIndex>
@@ -72,7 +73,8 @@ function bild(rel: string, roh: Record<string, unknown>, ordnerId = folder): num
   return id
 }
 
-const schluessel = (t: string): string => t.replace(/^XMP-[^:]+:/, 'XMP:')
+/** Wie in der Ausgabe von -G0: XMP-Gruppe zusammengefasst, ohne das „#“ für Zahlen */
+const schluessel = (t: string): string => t.replace(/^XMP-[^:]+:/, 'XMP:').replace(/#$/, '')
 
 /** Wie ExifTool: Werte setzen, null entfernt den Tag */
 function anwenden(roh: Record<string, unknown>, tags: readonly TagWert[]): void {
@@ -422,6 +424,95 @@ describe('Lesen', () => {
     expect(r.ende?.werte?.anzahl).toBe(50)
     expect(r.ende?.dateien).toHaveLength(200)
     expect(r.ende?.dateien.every((d) => d.status === 'fehler')).toBe(true)
+  })
+})
+
+describe('Drehen (3.4)', () => {
+  const format = (id: number, f: string): void => {
+    db.prepare('UPDATE images SET format = ? WHERE id = ?').run(f, id)
+  }
+
+  it('jede Datei von ihrer eigenen Ausrichtung aus; PNG abgelehnt, ohne sie zu lesen; Rückgängig für alle', async () => {
+    const a = bild('a.jpg', {})
+    const b = bild('b.jpg', { 'EXIF:Orientation': 2, 'XMP:Orientation': 2 })
+    const t = bild('t.tif', { 'EXIF:Orientation': 1 })
+    format(t, 'tiff')
+    const p = bild('p.png', { 'EXIF:Orientation': 1 })
+    format(p, 'png')
+    const vorher = structuredClone([...dateien.values()])
+    const r = await schreiben([a, b, t, p], { drehen: 'rechts' })
+    expect(r.ende?.dateien.map((d) => [d.id, d.status])).toEqual([
+      [a, 'geschrieben'],
+      [b, 'geschrieben'],
+      [t, 'geschrieben'],
+      [p, 'abgelehnt']
+    ])
+    expect(r.ende?.dateien[3].grund).toBe(
+      'PNG-Dateien lassen sich nicht verlustfrei drehen – das geht nur bei JPEG und TIFF.'
+    )
+    expect(dienst.tagsLesen).toHaveBeenCalledTimes(3)
+    // ohne Ausrichtung gilt 1 → 6; gespiegelt (2) → 7, die XMP-Ausrichtung zieht mit; nie eine neue
+    expect(geschriebeneTags(0)).toEqual([{ tag: 'EXIF:Orientation#', wert: 6 }])
+    expect(geschriebeneTags(1)).toEqual([
+      { tag: 'EXIF:Orientation#', wert: 7 },
+      { tag: 'XMP-tiff:Orientation#', wert: 7 }
+    ])
+    expect(geschriebeneTags(2)).toEqual([{ tag: 'EXIF:Orientation#', wert: 6 }])
+    // Journal: der alte Wert je Tag – auch „gab es nicht“
+    const j = repo.journalHolen(db, r.ende?.journal[0] as number)
+    expect(j?.vorher).toEqual([{ tag: 'EXIF:Orientation#', wert: null }])
+    const u = await lauf((x) => m.rueckgaengigStarten(r.ende?.journal ?? [], x))
+    expect(u.ende?.dateien.map((d) => d.status)).toEqual([
+      'geschrieben',
+      'geschrieben',
+      'geschrieben'
+    ])
+    expect([...dateien.values()]).toEqual(vorher)
+  })
+
+  it('Rückfrage nennt Zahl und Richtung; Abbrechen startet nichts', async () => {
+    const ids = [bild('a.jpg', {}), bild('b.jpg', {})]
+    box.antwort = 1
+    const r = await schreiben(ids, { drehen: 'links' }, { rueckfrage: true })
+    expect(box.fragen).toEqual(['2 Bilder um 90° nach links drehen?'])
+    expect(r.start).toEqual({ abgebrochen: true })
+    expect(dienst.tagsLesen).not.toHaveBeenCalled()
+  })
+
+  it('Platz zählt nur, was auch gedreht wird', async () => {
+    const jpg = bild('a.jpg', {})
+    const png = bild('b.png', {})
+    format(png, 'png')
+    db.prepare('UPDATE images SET size = ?').run(GB)
+    // 1 GB Sicherung + 1 GB Reserve passen; für eine Bewertung bräuchte auch das PNG eine (3 GB)
+    platz.frei = 2.5 * GB
+    expect((await schreiben([jpg, png], { bewertung: 3 })).start).toHaveProperty('grund')
+    expect((await schreiben([jpg, png], { drehen: 'rechts' })).start).toHaveProperty('auftrag')
+  })
+
+  it('ein Bild sofort: Bericht mit Details und Journal; abgelehnt und Konflikt mit Grund', async () => {
+    const a = bild('a.jpg', { 'EXIF:Orientation': 8 })
+    const r = await metaDrehen(a, 'rechts')
+    expect(r.fehler).toEqual([])
+    expect(r.journal).toHaveLength(1)
+    expect(r.geschrieben.map((g) => g.id)).toEqual([a])
+    expect(geschriebeneTags(0)).toEqual([{ tag: 'EXIF:Orientation#', wert: 1 }])
+
+    const g = bild('g.gif', {})
+    format(g, 'gif')
+    const r2 = await metaDrehen(g, 'links')
+    expect(r2).toEqual({
+      geschrieben: [],
+      journal: [],
+      fehler: [
+        { id: g, name: 'g.gif', grund: expect.stringMatching(/^GIF-Dateien lassen sich nicht/) }
+      ]
+    })
+
+    dienst.schreiben.mockResolvedValueOnce({ ok: false, code: 'GEAENDERT' })
+    const r3 = await metaDrehen(a, 'links')
+    expect(r3.fehler[0].grund).toMatch(/von außen geändert.*noch einmal/)
+    expect(abgeglichen).toEqual([[folder, 'a.jpg']])
   })
 })
 

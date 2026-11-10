@@ -75,7 +75,11 @@ Zusätzlich gelten `/code-review` und der Skill `bildschutz`.
 
 - **Ausrichtung:** Wird ein Bild irgendwo ohne EXIF-Ausrichtung angezeigt oder berechnet
   (Canvas, Zuschneide-Koordinaten, Seitenverhältnis im Raster)? Breite/Höhe im Index sind die
-  **aufgerichteten** Maße – oder klar als Roh-Maße benannt.
+  **aufgerichteten** Maße – oder klar als Roh-Maße benannt. Wer sie je Format beachtet, ist gemessen
+  (Plan, „Metadaten bearbeiten“, 3.4): Chromium zeigt WebP ungedreht, in AVIF beachtet niemand die
+  EXIF-Ausrichtung (dort gilt `irot`) – eine Rechnung, die sie dort anwendet, weicht vom Betrachter ab.
+  Gedreht wird nur über die Drehung aus dem Renderer und die frisch gelesene Ausrichtung der Datei,
+  nie über einen Wert, den die Oberfläche zeigt.
 - **Farbraum:** Vorschaubild und Export in sRGB; ein P3-Testbild sieht im Raster wie im Betrachter aus.
 - **Metadaten:** Mehrfachauswahl schreibt nur Geändertes; Stichwörter hinzufügen/entfernen statt
   ersetzen; Datum ohne Zeitzone bleibt lokal (keine Verschiebung um die UTC-Differenz).

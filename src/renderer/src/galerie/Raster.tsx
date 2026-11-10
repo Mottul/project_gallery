@@ -7,18 +7,13 @@
 // Seitenverhältnis, ohne Text darunter, Name als Hinweis.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import {
-  auswahlAlle,
-  auswahlKlick,
-  auswahlLeeren,
-  auswahlRahmen,
-  ersteGewaehlte,
-  useAuswahl
-} from '@renderer/lib/auswahl'
+import { auswahlKlick, auswahlLeeren, auswahlRahmen, useAuswahl } from '@renderer/lib/auswahl'
 import { tagText, zahl } from '@renderer/lib/format'
+import { galerieTaste } from '@renderer/lib/tasten'
 import { cn } from '@renderer/lib/utils'
 import { blocksatzZeilen } from '@renderer/lib/blocksatz'
 import { ersteZeileAb, zeileFuer, zeilenBilden, zeilenOben, type Zeile } from '@renderer/lib/zeilen'
+import type { Drehung } from '@shared/ausrichtung'
 import type { Gruppe } from '@shared/gruppen'
 import type { ImageInfo } from '@shared/types'
 import { stufeFuer, Vorschaubild } from './Vorschaubild'
@@ -55,6 +50,7 @@ export function Raster({
   fokusId,
   onMetadaten,
   onSchnell,
+  onDrehen,
   onRueckgaengig
 }: {
   ids: number[]
@@ -77,6 +73,8 @@ export function Raster({
   onMetadaten?: () => void
   /** Tasten 0–5 und 6–9: Schnellbewertung der Auswahl (3.3) */
   onSchnell?: (taste: string) => void
+  /** Tasten R und L: die Auswahl um 90° drehen (3.4) */
+  onDrehen?: (d: Drehung) => void
   /** Strg+Z: den letzten Hinweis zurücknehmen */
   onRueckgaengig?: () => void
 }): JSX.Element {
@@ -237,27 +235,9 @@ export function Raster({
       tabIndex={0}
       className="relative min-h-0 flex-1 select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onMouseDown={rahmenStart}
-      onKeyDown={(e) => {
-        const strg = e.ctrlKey || e.metaKey
-        if (strg && e.key.toLowerCase() === 'a') {
-          e.preventDefault()
-          auswahlAlle(ids)
-        } else if (strg && e.key.toLowerCase() === 'z' && onRueckgaengig) {
-          e.preventDefault()
-          onRueckgaengig()
-        } else if (e.key === 'Escape') auswahlLeeren()
-        else if (e.key === 'Enter') {
-          const i = ersteGewaehlte(ids)
-          if (i >= 0) onOeffnen(i)
-        } else if (strg || e.altKey || e.repeat) return
-        else if (e.key.toLowerCase() === 'e' && onMetadaten) {
-          e.preventDefault()
-          onMetadaten()
-        } else if (/^[0-9]$/.test(e.key) && onSchnell) {
-          e.preventDefault()
-          onSchnell(e.key)
-        }
-      }}
+      onKeyDown={(e) =>
+        galerieTaste(e, { ids, onOeffnen, onMetadaten, onSchnell, onDrehen, onRueckgaengig })
+      }
     >
       <div className="relative w-full" style={{ height: virt.getTotalSize() }}>
         {items.map((v) => {

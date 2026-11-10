@@ -15,8 +15,10 @@
 //
 // Schnellbewertung (Phase 3.1; entschieden 30.10.2026): Tasten 0–5 und 6–9 schreiben sofort in die
 // Datei, „Rückgängig“ (auch Strg+Z) nimmt es zurück. Das Bearbeiten-Panel (3.2, Taste E) liest aus
-// der Datei; solange es Ungespeichertes hält, lässt der Betrachter nicht weiterblättern. Drehen
-// kommt mit 3.4.
+// der Datei; solange es Ungespeichertes hält, lässt der Betrachter nicht weiterblättern. Drehen (3.4;
+// entschieden 9.11.2026): R und L drehen um 90° nach rechts bzw. links, genauso sofort und mit
+// „Rückgängig“ – über die Ausrichtung in den Metadaten, die Bilddaten bleiben. Keine Knöpfe: Die
+// Werkzeugleiste bleibt, wie sie ist.
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowLeft,
@@ -49,6 +51,7 @@ import {
 import { zahl } from '@renderer/lib/format'
 import { cn, errorText } from '@renderer/lib/utils'
 import { ZOOM_SCHRITT, begrenzen, radFaktor } from '@renderer/lib/zoom'
+import { gedrehtText, tastenDrehung } from '@shared/ausrichtung'
 import { bildUrl } from '@shared/bild'
 import { farblabelText } from '@shared/bildFilter'
 import { kenBurnsBahn, kenBurnsFrames, type KenBurnsBahn } from '@shared/kenBurns'
@@ -98,6 +101,8 @@ interface Gezeigt {
   name: string
   w: number
   h: number
+  /** EXIF-Ausrichtung laut Index – ändert sie sich, wurde gedreht */
+  ausrichtung: number | null
 }
 
 const schluessel = (b: { id: number; mtime: number }): string => `${b.id}:${b.mtime}`
@@ -315,15 +320,20 @@ export function Betrachter({
   const geladen = useCallback(async (img: HTMLImageElement, b: ImageInfo): Promise<void> => {
     await img.decode().catch(() => {})
     if (zielRef.current !== schluessel(b)) return // inzwischen weitergeblättert
-    setVorher(ueberblendenRef.current ? gezeigtRef.current : null)
-    // dasselbe Bild in neuer Fassung (gerade bewertet): Der Ausschnitt bleibt
-    if (gezeigtRef.current?.id !== b.id) setZoom({ art: 'anpassen' })
+    const voriges = gezeigtRef.current
+    setVorher(ueberblendenRef.current ? voriges : null)
+    // dasselbe Bild in neuer Fassung (gerade bewertet): Der Ausschnitt bleibt – gedreht passt er
+    // nicht mehr zum Bild
+    if (voriges?.id !== b.id || voriges.ausrichtung !== b.orientation) {
+      setZoom({ art: 'anpassen' })
+    }
     setGezeigt({
       id: b.id,
       mtime: b.mtime,
       name: b.name,
       w: img.naturalWidth,
-      h: img.naturalHeight
+      h: img.naturalHeight,
+      ausrichtung: b.orientation
     })
   }, [])
 
@@ -529,20 +539,28 @@ export function Betrachter({
     }
   }, [id, gesperrt])
 
-  const aendern = useCallback(async (a: MetaAenderung, text: string): Promise<void> => {
-    const kennung = idRef.current
-    if (kennung === null) return
-    try {
-      const r = await api.meta.write([kennung], a)
-      listeRef.current.details.setzen(r.geschrieben)
-      const f = r.fehler[0]
-      setHinweis(f ? f.grund : null)
-      setRueck(f ? null : { text, journal: r.journal })
-    } catch (err) {
-      setHinweis(errorText(err))
-      setRueck(null)
-    }
-  }, [])
+  /** Sofort in die Datei des gezeigten Bildes (Schnellbewertung, Drehen), danach „Rückgängig“ */
+  const sofort = useCallback(
+    async (schreiben: (id: number) => Promise<SchreibBericht<ImageInfo>>, text: string) => {
+      const kennung = idRef.current
+      if (kennung === null) return
+      try {
+        const r = await schreiben(kennung)
+        listeRef.current.details.setzen(r.geschrieben)
+        const f = r.fehler[0]
+        setHinweis(f ? f.grund : null)
+        setRueck(f ? null : { text, journal: r.journal })
+      } catch (err) {
+        setHinweis(errorText(err))
+        setRueck(null)
+      }
+    },
+    []
+  )
+  const aendern = useCallback(
+    (a: MetaAenderung, text: string) => sofort((id) => api.meta.write([id], a), text),
+    [sofort]
+  )
 
   const rueckgaengig = useCallback(async (journal: number[]): Promise<void> => {
     setRueck(null)
@@ -630,6 +648,13 @@ export function Betrachter({
         )
         return
       }
+      const drehung = tastenDrehung(e.key)
+      if (drehung) {
+        e.preventDefault()
+        // gehalten zählt sie einmal: Jede Drehung schreibt in die Datei
+        if (!e.repeat) void sofort((id) => api.meta.rotate(id, drehung), gedrehtText(drehung))
+        return
+      }
       const weiter: Record<string, () => void> = {
         ArrowRight: () => gehe(index + 1),
         ArrowLeft: () => gehe(index - 1),
@@ -662,6 +687,7 @@ export function Betrachter({
     papierkorb,
     schliessen,
     aendern,
+    sofort,
     rueckgaengig,
     rueck,
     bild?.colorLabel,

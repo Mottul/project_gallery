@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { gedreht } from '@shared/ausrichtung'
 import { grundfelderAus } from '@shared/grundfelder'
 import {
   abweichend,
@@ -28,6 +29,7 @@ import {
 } from '@shared/metaFields'
 import { aenderungFuer } from '@shared/metaMehrfach'
 import { zwischenName } from '@shared/scanRegeln'
+import { ausrichtungsPixel, QUADRANTEN, type Rgb } from '../../../../scripts/testbilder.mjs'
 import { ExifToolPool, leseTags } from '../exiftool/exiftool'
 import type { SchreibErgebnis } from './protokoll'
 import { bildKennung, schreibe } from './schreiben'
@@ -154,7 +156,10 @@ describe.skipIf(!existsSync(BIN))('Schreibweg (Labor)', () => {
         [p],
         WERTE_TAGS.map((t) => `-${t.tag}`)
       )
-      expect(werteAus(r.get(p) as Record<string, unknown>)).toEqual(VOLL)
+      expect(werteAus(r.get(p) as Record<string, unknown>)).toEqual({
+        ...VOLL,
+        ausrichtung: { wert: 1, xmp: false }
+      })
     }
   )
 
@@ -491,5 +496,111 @@ describe.skipIf(!existsSync(BIN))('Schreibweg (Labor)', () => {
       const p = await neu('jpeg', name)
       expect(await schreiben(p, { bewertung: 2 })).toMatchObject({ ok: true })
     }
+  })
+
+  // ── Drehen (3.4): die Ausrichtung durch denselben Weg, Lage wie sharp und Chromium sie zeigen ──
+  const { obenLinks: R, obenRechts: G, untenLinks: B, untenRechts: Y } = QUADRANTEN
+  const LAGEN: Record<string, Rgb[]> = {
+    aufrecht: [R, G, B, Y],
+    rechts: [B, R, Y, G],
+    links: [G, Y, R, B]
+  }
+  /** Wie das Vierfarb-Motiv aufgerichtet liegt (sharp wie im Bilddienst: rotate() ohne Winkel) */
+  async function lage(p: string): Promise<string> {
+    const { data, info } = await sharp(p).rotate().raw().toBuffer({ resolveWithObject: true })
+    const { width: w, height: h, channels: k } = info
+    const px = (x: number, y: number): number[] => {
+      const o = (Math.floor(y) * w + Math.floor(x)) * k
+      return [data[o], data[o + 1], data[o + 2]]
+    }
+    const ecken = [px(w / 4, h / 4), px((3 * w) / 4, h / 4), px(w / 4, (3 * h) / 4)]
+    ecken.push(px((3 * w) / 4, (3 * h) / 4))
+    for (const [name, soll] of Object.entries(LAGEN)) {
+      const hoch = name !== 'aufrecht'
+      const passt = soll.every((c, i) => c.every((v, j) => Math.abs(v - ecken[i][j]) <= 40))
+      if (hoch === h > w && passt) return name
+    }
+    return `? ${w}×${h}`
+  }
+  /** Motiv, das mit Ausrichtung n aufrecht erscheint (wie eine gedrehte Kamera es speichert) */
+  async function gespeichert(format: 'jpeg' | 'tiff', n: number, extra: string[] = []) {
+    const p = join(dir, `dreh-${++nr}.${ENDUNG[format]}`)
+    const s = sharp(await ausrichtungsPixel(n))
+    await (format === 'tiff' ? s.tiff() : s.jpeg({ quality: 95 })).toFile(p)
+    const r = await pool.ausfuehren(['-overwrite_original', `-EXIF:Orientation#=${n}`, ...extra, p])
+    expect(r.ausgabe).toMatch(/1 image files updated/)
+    return p
+  }
+  const werteVon = async (p: string): Promise<Record<string, unknown>> =>
+    (
+      await leseTags(
+        pool,
+        [p],
+        WERTE_TAGS.map((t) => `-${t.tag}`)
+      )
+    ).get(p) as Record<string, unknown>
+
+  it.each(['jpeg', 'tiff'] as const)(
+    '%s: alle acht Ausrichtungen drehen richtig weiter, Bilddaten gleich, Maße getauscht, Rückgängig',
+    async (format) => {
+      for (let n = 1; n <= 8; n++) {
+        const p = await gespeichert(format, n)
+        expect(await lage(p), `${n} vorher`).toBe('aufrecht')
+        const kennung = await bildKennung(pool, p)
+        for (const d of ['rechts', 'links'] as const) {
+          const ist = await werteVon(p)
+          const a = aenderungFuer(werteAus(ist), { drehen: d }) as MetaAenderung
+          expect(a.ausrichtung, `${n} ${d}`).toEqual({ wert: gedreht(n, d), xmp: false })
+          const r = await schreiben(p, a, format)
+          expect(r, `${n} ${d}`).toMatchObject({ ok: true })
+          expect(await lage(p), `${n} ${d}`).toBe(d)
+          expect(await bildKennung(pool, p), `${n} ${d}: Bilddaten`).toBe(kennung)
+          if (r.ok) {
+            const g = grundfelderAus(r.roh, { btime: null, mtime: r.mtime })
+            expect([g.breite, g.hoehe, g.ausrichtung], `${n} ${d}: Index`).toEqual([
+              200,
+              300,
+              gedreht(n, d)
+            ])
+          }
+          // Rückgängig: die alten Werte über denselben Weg
+          const tags = alteWerte(tagsFuer(a, format), ist)
+          const u = await schreibe(
+            { datei: datei(p), tags, sicherung: null, zwischen: zwischenName(p, ++nr) },
+            pool
+          )
+          expect(u, `${n} ${d}: Rückgängig`).toMatchObject({ ok: true })
+          expect(await lage(p), `${n} ${d}: Rückgängig`).toBe('aufrecht')
+        }
+      }
+      expect(reste()).toEqual([])
+    },
+    120_000
+  )
+
+  it('eine vorhandene XMP-Ausrichtung zieht mit, fehlt sie, entsteht keine', async () => {
+    const mit = await gespeichert('jpeg', 6, ['-XMP-tiff:Orientation#=6'])
+    const a = aenderungFuer(werteAus(await werteVon(mit)), { drehen: 'rechts' }) as MetaAenderung
+    expect(a.ausrichtung).toEqual({ wert: 3, xmp: true })
+    expect(await schreiben(mit, a)).toMatchObject({ ok: true })
+    const nach = await werteVon(mit)
+    expect([nach['EXIF:Orientation'], nach['XMP:Orientation']]).toEqual([3, 3])
+
+    const ohne = await gespeichert('jpeg', 6)
+    const b = aenderungFuer(werteAus(await werteVon(ohne)), { drehen: 'rechts' }) as MetaAenderung
+    expect(await schreiben(ohne, b)).toMatchObject({ ok: true })
+    const r = await pool.ausfuehren(['-json', '-G0', '-a', '-XMP:all', ohne])
+    expect(JSON.parse(r.ausgabe)[0]).not.toHaveProperty('XMP:Orientation')
+  })
+
+  it('gemessen: AVIF beachtet die EXIF-Ausrichtung nicht (sharp wie Chromium) – darum nicht drehbar', async () => {
+    const p = join(dir, `dreh-${++nr}.avif`)
+    await sharp(await ausrichtungsPixel(1))
+      .avif({ lossless: true })
+      .toFile(p)
+    const r = await pool.ausfuehren(['-overwrite_original', '-EXIF:Orientation#=6', p])
+    expect(r.ausgabe).toMatch(/1 image files updated/)
+    expect(await lage(p)).toBe('aufrecht')
+    expect(tagsFuer({ ausrichtung: { wert: 6, xmp: false } }, 'avif')).toEqual([])
   })
 })

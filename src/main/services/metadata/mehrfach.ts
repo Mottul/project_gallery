@@ -10,6 +10,7 @@
 import { dialog, type BrowserWindow } from 'electron'
 import type { MetaWerte } from '@shared/metaFields'
 import {
+  rueckfrageKasten,
   rueckfrageText,
   zusammenfassen,
   type AuftragArt,
@@ -168,7 +169,8 @@ export function lesenStarten(idsRoh: readonly number[], melden: Melden): Auftrag
 
 /**
  * Eine Änderung in alle diese Bilder schreiben. Mit `rueckfrage` fragt der main erst (Schnellbewertung
- * im Raster), mit `nochmal` gleicht er die Dateien vorher ab („Neu lesen und erneut versuchen“).
+ * und Drehen in Raster und Liste), mit `nochmal` gleicht er die Dateien vorher ab („Neu lesen und
+ * erneut versuchen“).
  */
 export async function schreibenStarten(
   fenster: BrowserWindow | null,
@@ -181,14 +183,13 @@ export async function schreibenStarten(
   if (!ids.length) return { grund: 'Keine Bilder ausgewählt.' }
   if (laufend) return { grund: BESCHAEFTIGT }
   if (opt.rueckfrage) {
+    const { titel, detail } = rueckfrageKasten(m)
     const box = {
       type: 'question' as const,
-      title: 'Metadaten schreiben',
+      title: titel,
       message: rueckfrageText(m, ids.length),
-      detail:
-        'Vorher bekommt jede Datei eine Sicherung (außer im Ordner „privat“). ' +
-        '„Rückgängig“ nimmt danach alle auf einmal zurück.',
-      buttons: ['Schreiben', 'Abbrechen'],
+      detail,
+      buttons: [m.drehen ? 'Drehen' : 'Schreiben', 'Abbrechen'],
       defaultId: 0,
       cancelId: 1,
       noLink: true
@@ -199,7 +200,7 @@ export async function schreibenStarten(
     if (response !== 0) return { abgebrochen: true }
   }
   // alle Sicherungen zusammen müssen Platz haben, nicht nur die erste (Review-Checkliste)
-  const platz = await platzFuerSicherungen(ids)
+  const platz = await platzFuerSicherungen(ids, m.drehen !== undefined)
   if (platz) return { grund: platz }
   // nach den Rückfragen gilt der Stand von jetzt: Ein anderer Auftrag kann inzwischen laufen
   return starten('schreiben', ids.length, melden, async (lauf, f, s) => {

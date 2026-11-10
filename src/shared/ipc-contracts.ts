@@ -2,6 +2,7 @@
 // bereitstellt. Einzige Quelle für main (Handler) und renderer (Aufruf); neue Fläche nach Skill
 // ipc-kanal (Channel + GalerieApi-Methode + Preload + Handler). Muster aus der Mottulbox.
 
+import type { Drehung } from './ausrichtung'
 import type { BildFilter, Facetten } from './bildFilter'
 import type {
   AnsichtSpeichernErgebnis,
@@ -54,6 +55,7 @@ export const Channels = {
 
   metaRead: 'meta:read',
   metaWrite: 'meta:write',
+  metaRotate: 'meta:rotate',
   metaUndo: 'meta:undo',
   metaReadMany: 'meta:readMany',
   metaWriteMany: 'meta:writeMany',
@@ -138,6 +140,12 @@ export interface GalerieApi {
     read(id: number): Promise<{ werte: MetaWerte } | { grund: string }>
     /** Felder in die Dateien schreiben – je Datei für sich, Ablauf im Skill metadaten-schreiben */
     write(ids: number[], aenderung: MetaAenderung): Promise<SchreibBericht<ImageInfo>>
+    /**
+     * Ein Bild um 90° drehen (3.4) – über die Ausrichtung, sofort wie die Schnellbewertung. Nur die
+     * Richtung: Die neue Ausrichtung bildet der main aus der Datei. Viele Bilder: `writeMany` mit
+     * `{ drehen }`.
+     */
+    rotate(id: number, richtung: Drehung): Promise<SchreibBericht<ImageInfo>>
     /** Einen Auftrag zurücknehmen (Kennungen aus `journal` des Berichts) */
     undo(journal: number[]): Promise<SchreibBericht<ImageInfo>>
     // Mehrfachauswahl (3.3): Aufträge über viele Bilder. Der Start antwortet sofort (Kennung oder

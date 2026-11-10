@@ -1,7 +1,7 @@
 # Plan: Galeria Beata – Bildbetrachter und -bearbeiter für Windows
 
-Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 9. November 2026: Phase 0 bis 2 sind
-umgesetzt, in Phase 3 die Teilschritte 3.1 bis 3.3
+Arbeitstitel „Galeria Beata“ (Repo `project_gallery`). Stand 10. November 2026: Phase 0 bis 2 sind
+umgesetzt, in Phase 3 die Teilschritte 3.1 bis 3.4
 ([Phase 3](#phase-3--metadaten-bearbeiten)). Dieser Plan ist die Grundlage für die
 Umsetzung: vor jeder Phase lesen, offene Fragen
 klären, nach der Umsetzung Erledigtes in die Doku überführen. Gebaut wird lokal auf dem
@@ -302,8 +302,8 @@ kommen mit Phase 1 dazu).
 - Info-Panel (seit 2.1): Titel, Beschreibung, Bewertung, Farblabel, Stichwörter, Aufnahme mit
   Quelle des Datums, Kamera, Objektiv, Belichtung, Standort (Koordinaten; Ortsname ab 2.2),
   Datei, „alle Felder“ (auf Abruf frisch aus der Datei, mit Suche); Histogramm später.
-- Schnell bewerten (Tasten 0–5), Farblabel (6–9), drehen (verlustfrei, siehe Stapel), löschen
-  (Papierkorb).
+- Schnell bewerten (Tasten 0–5), Farblabel (6–9), drehen (R/L, verlustfrei über die Ausrichtung,
+  seit 3.4), löschen (Papierkorb).
 - Vorladen und Dekodieren der Nachbarbilder; Chromium nimmt das vorgeladene Bild für dieselbe
   Adresse wieder, obwohl `bild://` mit `no-store` antwortet (gemessen, E2E `betrachter`).
   EXIF-Ausrichtung beachtet Chromium selbst, sharp bei Vorschaubildern.
@@ -416,6 +416,35 @@ kommen in allen sechs Formaten so heraus, wie sie hineingingen (`schreiben.lab.t
   nimmt den ganzen Auftrag in einem Schritt zurück. Vor dem Schreiben prüft der main den Platz für die
   Sicherungen aller Dateien zusammen (1 GB bleibt frei); schreibt beim Schließen des Fensters noch ein
   Auftrag, fragt er und hält nach der laufenden Datei an.
+- **Drehen** (seit 3.4, entschieden 9.11.2026): R und L drehen um 90° nach rechts bzw. links – im
+  Betrachter sofort mit „Rückgängig“ (auch Strg+Z), in Raster und Liste für die Auswahl wie die
+  Schnellbewertung (ab zwei Bildern Rückfrage im main, Fortschritt mit Abbrechen, Rückgängig für
+  alle); keine Knöpfe. Geändert wird nur die EXIF-Ausrichtung, über denselben Schreibweg: Der
+  Renderer schickt die Richtung, der main liest die Ausrichtung der Datei frisch und dreht von dort
+  weiter (`shared/ausrichtung.ts`: erst spiegeln, dann drehen – gespiegelte bleiben gespiegelt). Die
+  Nachprüfung verlangt dieselben Bilddaten; Index, Maße (Blocksatz, Filter hoch/quer), Vorschaubild
+  und Anzeige folgen. Eine vorhandene XMP-Ausrichtung (`tiff:Orientation`) zieht mit – Windows nimmt
+  sie, wenn EXIF fehlt –, eine neue entsteht nicht. ExifTool schreibt die Zahl nur mit `#`
+  (`Orientation#=6`); ohne lehnt es sie ab und kopiert die Datei nur (gemessen).
+
+  Gemessen mit `scripts/labor/ausrichtung.mjs` (9.11.2026; ExifTool 13.59, sharp 0.35.5/libvips 8.18.7,
+  Chromium der gebauten App, Windows-Shell): Ausrichtung 6 auf das aufrechte Vierfarb-Motiv geschrieben,
+  Bilddaten jeweils gleich.
+
+  | Format | ExifTool schreibt | sharp (Vorschaubild) | Chromium (Betrachter) | Windows (Explorer) | in 3.4 |
+  |---|---|---|---|---|---|
+  | JPEG | ja (IFD0) | dreht | dreht | dreht, Eigenschaft 6 | drehbar |
+  | TIFF | ja (IFD0) | dreht (auch die Anzeige-Umrechnung) | – (Umrechnung) | Eigenschaft 6, Vorschau ungedreht | drehbar |
+  | PNG | ja (eXIf) | dreht | dreht | gar nicht | nicht drehbar |
+  | WebP | ja | dreht | **ungedreht** | Eigenschaft 6, Vorschau ungedreht | nicht drehbar |
+  | AVIF | ja (EXIF) | ungedreht | ungedreht | ungedreht | nicht drehbar |
+  | GIF, BMP | nein (kein EXIF) | – | – | – | nicht drehbar |
+
+  AVIF dreht über `irot`/`imir` (ffmpeg-Datei mit `irot`: sharp, Chromium und Windows drehen) – das kann
+  ExifTool nicht schreiben. Was nicht drehbar ist, lehnt der main mit „PNG-Dateien lassen sich nicht
+  verlustfrei drehen – das geht nur bei JPEG und TIFF.“ ab, ohne die Datei zu lesen; pixelweise gedreht
+  wird erst mit der Stapelverarbeitung bzw. dem Editor. Die XMP-Ausrichtung beachten sharp und Chromium
+  nicht.
 - Regeln im Skill [`metadaten-schreiben`](../.claude/skills/metadaten-schreiben/SKILL.md).
 
 ### Stapelverarbeitung
@@ -730,8 +759,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 - Bearbeiten-Panel einzeln/mehrfach, Felder aus `shared/metaFields.ts`.
 - Schreiben mit Konfliktprüfung, Journal/Rückgängig, Sicherung, Nachprüfung, XMP-Sidecars.
 - Schnellbewertung im Betrachter.
-- **Drehen beim Bearbeiten** (Wunsch 29.10.2026): verlustfrei über die EXIF-Ausrichtung, im
-  Betrachter (Tasten/Knopf) und für eine Auswahl – über denselben Schreibweg wie die Metadaten
+- **Drehen beim Bearbeiten** (Wunsch 29.10.2026, 3.4 ✅): verlustfrei über die EXIF-Ausrichtung, im
+  Betrachter (Tasten R und L) und für eine Auswahl – über denselben Schreibweg wie die Metadaten
   (Sicherung, Journal, Nachprüfung: Pixel unverändert); Vorschaubild und Maße danach neu.
 - **Abnahme:** E2E `metadaten` (Werte stehen danach in der Datei, Pixeldaten unverändert,
   Rückgängig stellt den alten Stand her); Checkliste von Hand: Explorer und digiKam zeigen Titel,
@@ -743,8 +772,8 @@ sind vorläufig und werden in Phase 0 an Messungen geprüft.
 |---|---|---|
 | 3.1 ✅ | **Schreibweg und Schnellbewertung:** Labor; `shared/metaFields.ts` (Felder Bewertung, Farblabel, Titel, Beschreibung, Zuordnung je Format, Prüfung, Nachprüfung), `exiftool/args.ts` (jeder Wert als `#[CSTR]`, nur Tags aus der Zuordnung, nur absolute Pfade), `bilddienst/schreiben.ts` (Ablauf oben), `metadata/schreiben.ts` (Freigabe, Journal, Sicherung, Rückgängig, Aufräumen nach einem Absturz), Migration 8 (`journal`, `sicherungen`), `meta.write`/`meta.undo`; im Betrachter Tasten 0–5 und 6–9, Hinweis mit „Rückgängig“ (auch Strg+Z), Sterne neben der Position. Nach dem Schreiben entsteht das Vorschaubild neu, weil der Cache an Größe und Zeit hängt | `metadaten` (13 Schritte: Werte von ExifTool unabhängig nachgelesen, Pixel gleich, Rückgängig, Sicherung bytegleich und nur einmal, von außen geändert, schreibgeschützt, BMP, „privat“, „nur lesen“, Einschleusen per Zeilenumbruch, Log ohne Werte, keine Nachbardatei; Gegenproben rot: Sicherung bei jedem Schreiben, „nur lesen“ übergangen, ohne Prüfung vor dem Ersetzen); Labor `schreiben.lab.test.ts` (sechs Formate, Emoji, IPTC, Rückgängig mit abweichenden Tags, Kennung der Bilddaten); Unit `metaFields.test.ts`, `args.test.ts`, `metadata/schreiben.test.ts`, `db.test.ts` (Migration 7 → 8) |
 | 3.2 ✅ | **Bearbeiten-Panel** für ein Bild, im Betrachter (Taste E oder Knopf im Info-Panel; die Werkzeugleiste bleibt): alle Felder, auch Stichwörter, Datum, Standort, Ort, Urheber, Copyright (`galerie/MetaFormular.tsx`, Rechnung rein in `lib/metaFormular.ts`). Gelesen wird frisch aus der Datei (`meta.read`, `werteAus`), nicht aus dem Index – der kennt Urheber und Copyright nicht und fasst Zeilen zusammen. Geschrieben wird nur Geändertes, erst auf Knopfdruck; Rückgängig wie bei der Bewertung. Ungespeichertes hält Blättern und Schließen auf. Ändert sich die Datei beim Tippen: Rückfrage („Neu laden“ / „Eingaben behalten“), ohne Eingaben liest das Panel still neu; wer währenddessen tippt, behält die Eingabe (das Ergebnis wird verworfen, die Rückfrage bleibt) | `metadaten` (21 Schritte, neu: Werte aus der Datei, Ziffern im Text lösen keine Tasten aus, nur Geändertes geschrieben, Rückgängig über alle Felder, Standort entfernen ohne GPS-Rest, Datum und Standort setzen, Index und Suche folgen, Ungespeichertes, Änderung beim Tippen, Tippen während des stillen Neulesens (Antwort von `meta:read` im Test angehalten), „nur lesen“; Gegenproben rot: Tasten im Text, Ungespeichertes hält nicht auf, Neuladen über Eingaben, Ergebnis des Neulesens über Getipptes, GPS-Block nur teilweise); Labor: alle Felder in allen sechs Formaten hin und zurück, auch im Index; Unit `metaFields.test.ts`, `metaFormular.test.ts`, `args.test.ts` |
-| 3.3 ✅ | **Mehrfachauswahl** (entschieden 9.11.2026, siehe unten): eigene Ansicht „Metadaten bearbeiten“ (`galerie/MetaMehrfach.tsx`; Knopf „Metadaten“ in der Werkzeugleiste, Taste E in Raster und Liste) – links die gewählten Bilder, fest, mit Status je Datei; rechts die Felder mit ‹verschieden› (leer lassen behält, „Bei allen entfernen“), Stichwörter als Chips mit n/N (Kreuz = bei allen weg, „+“ = bei allen dazu), Bewertung, Farblabel, Datum (Zeitzone bleibt je Datei), Standort samt „Standort entfernen“, Ort, Urheber, Copyright; „N Felder geändert“, „In N Dateien schreiben“, Bericht mit Konflikten, „Neu lesen und erneut versuchen“ und „Rückgängig“ (Rechnung in `lib/mehrfachFormular.ts`). Die Änderung ist nur Felder plus Stichwörter dazu/weg (`shared/metaMehrfach.ts`); der main liest jede Datei frisch und bildet ihre eigene Änderung (`aenderungFuer`), Unberührtes bleibt ohne Sicherung und Änderungsdatum. Aufträge in `metadata/mehrfach.ts`: einer zur Zeit, der Start antwortet sofort, Fortschritt und Bericht als Ereignis `meta:job`, je Datei ein Schritt der Warteschlange, Abbrechen nach der laufenden Datei, Platz für alle Sicherungen vorab (`platz.ts`), Rückfrage beim Schließen während eines schreibenden Auftrags; die gemischten Werte liest der Bilddienst in Teilen (`tags-lesen-viele`). Ein Konflikt gleicht nur die Datei ab (Teil-Abgleich statt des ganzen Ordners, auch im Panel). Schnellbewertung im Raster (Tasten 0–5, 6–9): ein Bild sofort, ab zwei Rückfrage im main mit Anzahl, Fortschritt mit Abbrechen, „Rückgängig“ für alle (`galerie/Rasterhinweis.tsx`); Farblabel-Farben als Tokens. Offen: Schnellbewertung auch in der Liste (Vorschlag unten) | `metadaten` (30 Schritte, neu 10: gemischte Werte aus den Dateien; Stichwörter dazu/weg je Datei in XMP, IPTC und XP mit ExifTool unabhängig nachgelesen – „urlaub“ klein, „Meer“ nur in IPTC –, Pixel gleich, je Datei eine Sicherung, Suche folgt; Rückgängig als ein Schritt; Unberührtes bytegleich und ohne Sicherung; Konflikt per Hardlink mit „erneut versuchen“; Abbrechen nach der laufenden Datei; „nur lesen“ und „privat“ in der Auswahl (zweiter Ordner); Schnellbewertung im Raster mit Rückfrage; Ablehnungen im main; Log ohne Stichwörter; sechs Gegenproben rot: Stichwörter ohne die eigene Liste der Datei, Unberührtes trotzdem geschrieben, Abbrechen übergangen, „nur lesen“ übergangen, „privat“ mit Sicherung, Schnellbewertung ohne Rückfrage); Labor `schreiben.lab.test.ts` (Stichwörter dazu/weg in allen sechs Formaten; gemessen: ExifTools `-=` achtet auf Groß/Klein, `+=` legt Doppelte an); Unit `metaMehrfach.test.ts`, `mehrfachFormular.test.ts`, `mehrfach.test.ts` (Gegenproben rot: Abbrechen übergangen, Stichwörter ohne eigene Liste), `platz.test.ts`, `metaFields.test.ts` |
-| 3.4 | **Verlustfreies Drehen** über die EXIF-Ausrichtung, im Betrachter und für eine Auswahl | |
+| 3.3 ✅ | **Mehrfachauswahl** (entschieden 9.11.2026, siehe unten): eigene Ansicht „Metadaten bearbeiten“ (`galerie/MetaMehrfach.tsx`; Knopf „Metadaten“ in der Werkzeugleiste, Taste E in Raster und Liste) – links die gewählten Bilder, fest, mit Status je Datei; rechts die Felder mit ‹verschieden› (leer lassen behält, „Bei allen entfernen“), Stichwörter als Chips mit n/N (Kreuz = bei allen weg, „+“ = bei allen dazu), Bewertung, Farblabel, Datum (Zeitzone bleibt je Datei), Standort samt „Standort entfernen“, Ort, Urheber, Copyright; „N Felder geändert“, „In N Dateien schreiben“, Bericht mit Konflikten, „Neu lesen und erneut versuchen“ und „Rückgängig“ (Rechnung in `lib/mehrfachFormular.ts`). Die Änderung ist nur Felder plus Stichwörter dazu/weg (`shared/metaMehrfach.ts`); der main liest jede Datei frisch und bildet ihre eigene Änderung (`aenderungFuer`), Unberührtes bleibt ohne Sicherung und Änderungsdatum. Aufträge in `metadata/mehrfach.ts`: einer zur Zeit, der Start antwortet sofort, Fortschritt und Bericht als Ereignis `meta:job`, je Datei ein Schritt der Warteschlange, Abbrechen nach der laufenden Datei, Platz für alle Sicherungen vorab (`platz.ts`), Rückfrage beim Schließen während eines schreibenden Auftrags; die gemischten Werte liest der Bilddienst in Teilen (`tags-lesen-viele`). Ein Konflikt gleicht nur die Datei ab (Teil-Abgleich statt des ganzen Ordners, auch im Panel). Schnellbewertung im Raster (Tasten 0–5, 6–9): ein Bild sofort, ab zwei Rückfrage im main mit Anzahl, Fortschritt mit Abbrechen, „Rückgängig“ für alle (`galerie/Rasterhinweis.tsx`); Farblabel-Farben als Tokens. Schnellbewertung auch in der Liste: seit 3.4 (entschieden 9.11.2026) | `metadaten` (30 Schritte, neu 10: gemischte Werte aus den Dateien; Stichwörter dazu/weg je Datei in XMP, IPTC und XP mit ExifTool unabhängig nachgelesen – „urlaub“ klein, „Meer“ nur in IPTC –, Pixel gleich, je Datei eine Sicherung, Suche folgt; Rückgängig als ein Schritt; Unberührtes bytegleich und ohne Sicherung; Konflikt per Hardlink mit „erneut versuchen“; Abbrechen nach der laufenden Datei; „nur lesen“ und „privat“ in der Auswahl (zweiter Ordner); Schnellbewertung im Raster mit Rückfrage; Ablehnungen im main; Log ohne Stichwörter; sechs Gegenproben rot: Stichwörter ohne die eigene Liste der Datei, Unberührtes trotzdem geschrieben, Abbrechen übergangen, „nur lesen“ übergangen, „privat“ mit Sicherung, Schnellbewertung ohne Rückfrage); Labor `schreiben.lab.test.ts` (Stichwörter dazu/weg in allen sechs Formaten; gemessen: ExifTools `-=` achtet auf Groß/Klein, `+=` legt Doppelte an); Unit `metaMehrfach.test.ts`, `mehrfachFormular.test.ts`, `mehrfach.test.ts` (Gegenproben rot: Abbrechen übergangen, Stichwörter ohne eigene Liste), `platz.test.ts`, `metaFields.test.ts` |
+| 3.4 ✅ | **Verlustfreies Drehen** über die EXIF-Ausrichtung (entschieden 9.11.2026, siehe unten): R und L drehen um 90° – im Betrachter sofort mit Hinweis und „Rückgängig“ (auch Strg+Z), in Raster und Liste für die Auswahl wie die Schnellbewertung (ein Bild sofort, ab zwei Rückfrage im main mit Anzahl, Fortschritt mit Abbrechen, Rückgängig für alle); keine Knöpfe. Labor `scripts/labor/ausrichtung.mjs` (Tabelle unter [Metadaten bearbeiten](#metadaten-bearbeiten): drehbar nur JPEG und TIFF; ExifTool schreibt die Zahl nur mit `#`). `shared/ausrichtung.ts` (Rechnung als Spiegeln plus Viertel, die Spiegelung bleibt; drehbare Formate; Texte); Feld `ausrichtung` in `metaFields.ts` – nie vom Renderer, im main gebildete Änderungen prüft `pruefeAbgeleitet`, eine vorhandene XMP-Ausrichtung zieht mit; `drehen` in der Mehrfach-Änderung (`aenderungFuer` dreht jede Datei von ihrer frisch gelesenen Ausrichtung weiter); `meta.rotate` → `metaDrehen` für ein Bild, viele über `writeMany` mit Rückfrage („12 Bilder um 90° nach rechts drehen?“); Platz zählt nur Drehbare; der Betrachter setzt den Zoom nach dem Drehen auf „Anpassen“; Tasten von Raster und Liste gemeinsam in `lib/tasten.ts` – damit **Schnellbewertung auch in der Liste**. Gefunden: Ein stehengebliebenes Auftragsergebnis verdeckte den Hinweis eines neuen Einzelbilds (auch die Schnellbewertung aus 3.3) – jetzt ersetzt der neue Hinweis das alte Ergebnis | `metadaten` (38 Schritte, neu 8: R im Betrachter – EXIF und XMP 8 → 1, Pixel gleich, Index 200 × 300, Anzeige, `bild://` und Vorschaubild per Lage des Vierfarb-Motivs, Zoom zurück, eine Sicherung bytegleich, beim zweiten Drehen keine weitere; Rückgängig und Strg+Z; gespiegelt 5 → 4 und 2 → 7; PNG, WebP, AVIF, GIF, BMP und PNG mit `.jpg` mit Hinweis bytegleich, TIFF dreht samt Anzeige-Umrechnung; Galerie: ein Bild sofort, vier mit Rückfrage und abgelehntem GIF, Einzelbild nach stehengebliebenem Ergebnis, Abbrechen bei acht, Rückgängig für alle; Liste: Bewertung, Farblabel und Drehen mit Rückfrage; „nur lesen“, „privat“ ohne Sicherung; Ablehnungen im main – Winkel, fremde Richtung, Ausrichtung als Wert; Gegenproben rot: XMP zieht nicht mit, Drehbar-Prüfung fehlt, Liste ohne Tasten, Galerie ohne Rückfrage, Zoom bleibt, Drehtabelle ohne Spiegelung, Einzelbild-Hinweis verdeckt); Labor `schreiben.lab.test.ts` (Drehen in JPEG und TIFF für alle acht Ausrichtungen durch den Schreibweg, Bilddaten gleich, Maße im Index getauscht, Rückgängig; XMP zieht mit, ohne entsteht keine; AVIF beachtet die EXIF-Ausrichtung nicht); Unit `ausrichtung.test.ts` (jede Ausrichtung gegen Matrizen aus der EXIF-Norm), `metaFields.test.ts`, `metaMehrfach.test.ts`, `mehrfach.test.ts` (je Datei die eigene Ausrichtung, PNG ungelesen abgelehnt, Platz nur für Drehbare, `metaDrehen`), `args.test.ts`, `eingaben.test.ts` – die verdorbene Drehtabelle machte auch hier 12 Tests rot |
 | 3.5 | **Sidecars und Abnahme:** XMP-Sidecar für schreibgeschützte Dateien und BMP, Einstellungen (Sicherung, Dateidatum), Sandbox, Prüfung von Hand in Explorer und digiKam | |
 
 ### Phase 4 – Stapelverarbeitung
@@ -898,12 +927,34 @@ Ablauf des Video-Generators der Mottulbox (`docs/PLAN-VIDEO-GENERATOR.md` dort: 
 - **Schnellbewertung im Raster:** Tasten 0–5 (Sterne) und 6–9 (Farblabel) gelten für alle
   ausgewählten Bilder. Ein Bild: sofort wie im Betrachter. Ab 2 Bildern: kurze Rückfrage mit Anzahl
   („3 Sterne für 12 Bilder schreiben?“), dann Fortschritt mit Abbrechen. Rückgängig nimmt alle auf
-  einmal zurück. Ob die Liste (gleiche Auswahl) dasselbe tut, ist offen (unten).
+  einmal zurück. Die Liste tut seit 3.4 dasselbe (unten).
+
+**Entschieden (9. November 2026), Drehen (3.4):**
+
+- **Im Betrachter:** Taste R dreht um 90° nach rechts (im Uhrzeigersinn), L um 90° nach links. Keine
+  Knöpfe – die Werkzeugleiste des Betrachters bleibt, wie sie ist. Geschrieben wird sofort wie bei der
+  Schnellbewertung, mit Hinweis und „Rückgängig“ (auch Strg+Z).
+- **Für eine Auswahl in der Galerie** (Raster und Liste): R und L wie die Schnellbewertung aus 3.3 –
+  ein Bild sofort; ab 2 Bildern Rückfrage im main mit Anzahl („12 Bilder um 90° nach rechts
+  drehen?“), dann Fortschritt mit Abbrechen; Rückgängig nimmt alle auf einmal zurück. Kein eigener
+  Knopf.
+- **Schnellbewertung auch in der Liste:** 0–5 und 6–9 genau wie im Raster (gleiche Rückfrage, gleiches
+  Rückgängig) – die offene Frage aus 3.3 ist damit geschlossen.
+- **Nach dem Labor (Umsetzung 3.4):** drehbar sind JPEG und TIFF, deren Ausrichtung die App und Windows
+  beachten; PNG, WebP, AVIF, GIF und BMP lehnt die App mit klarer Meldung ab (Tabelle unter
+  [Metadaten bearbeiten](#metadaten-bearbeiten)). Eine vorhandene XMP-Ausrichtung zieht mit.
 
 **Noch offen:**
 
-- **Schnellbewertung auch in der Liste?** Vorschlag aus 3.3: ja, mit derselben Auswahl und denselben
-  Tasten wie im Raster (bisher dort nur Taste E). Entscheidung durch den Nutzer.
+- **PNG drehen?** Die App und Chromium zeigen eine EXIF-Ausrichtung in PNG richtig, Windows (Explorer,
+  wohl auch „Fotos“) ignoriert sie ganz – gedreht sähe das Bild nur in der Galerie gedreht aus. Vorschlag:
+  in 3.4 nicht drehen; für PNG kommt das pixelweise (dort verlustfreie) Drehen mit der
+  Stapelverarbeitung. Freigeben wäre ein Eintrag in `shared/ausrichtung.ts`. Entscheidung durch den
+  Nutzer.
+- **WebP und AVIF mit EXIF-Ausrichtung aus anderen Programmen** zeigt die App uneinheitlich (Labor 3.4):
+  WebP dreht sharp im Vorschaubild, Chromium im Betrachter nicht; bei AVIF tauscht der Index die Maße
+  nach der EXIF-Ausrichtung, die niemand beachtet. Vorschlag: Ausrichtung dort für Vorschaubild und Maße
+  nicht anwenden (eigener kleiner PR).
 
 ## Skills
 

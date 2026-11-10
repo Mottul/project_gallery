@@ -50,6 +50,14 @@ Scratchpad oder im Temp-Ordner des Tests, nie im Repository. Absichtlich unbeque
   lesen die fertigen Binaries nicht (ffmpeg wandelt es in PNG). Dateien vorher selbst in den
   Speicher lesen: Sperren und Rechte kommen dann mit Code (`EBUSY`, `EACCES`) statt als
   sharp-Fehler, der wie „defekt“ aussähe.
+- **EXIF-Ausrichtung je Format (gemessen 9.11.2026, `scripts/labor/ausrichtung.mjs`):** ExifTool
+  schreibt `Orientation` nur als Zahl mit `#` (`-EXIF:Orientation#=6`), ohne lehnt es ab („not in
+  PrintConv“) und kopiert die Datei nur. JPEG beachten sharp, Chromium und Explorer; TIFF sharp und
+  Windows (Eigenschaft), die Explorer-Vorschau nicht; PNG (eXIf) sharp und Chromium, Windows gar
+  nicht; WebP sharp, **Chromium nicht**; AVIF niemand – dort gilt `irot`, das alle beachten, aber
+  ExifTool nicht schreibt. Die XMP-Ausrichtung beachten sharp und Chromium nicht, Windows nur ohne
+  EXIF. Was Windows zeigt, misst das Skript über die Shell: Vorschaubild per
+  `IShellItemImageFactory` (C# in PowerShell), Eigenschaft `System.Photo.Orientation`.
 - **Metadaten beim Export:** sharp entfernt sie ab Werk; `keepExif`/`withMetadata` nur mit
   Absicht und danach per ExifTool prüfen, dass kein GPS übrig ist (Schicht E im `bildschutz`).
 - **Pixel vergleichen statt ansehen:** `.raw()` → sha256 (gleich/ungleich) oder PSNR gegen eine

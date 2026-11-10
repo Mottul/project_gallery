@@ -6,6 +6,9 @@
 // Mehrfachauswahl (3.3): Ansicht „Metadaten bearbeiten“ mit gemischten Werten, Stichwörter dazu/weg
 // je Datei aus ihrer eigenen Liste, nur Geändertes, Konflikt mit „erneut versuchen“, Abbrechen,
 // Rückgängig als ein Schritt, „nur lesen“ und „privat“ in der Auswahl, Schnellbewertung im Raster.
+// Drehen (3.4): R und L im Betrachter und für eine Auswahl in Raster und Liste – EXIF-Ausrichtung
+// (auch gespiegelte weitergedreht, eine XMP-Ausrichtung zieht mit), Pixel gleich, Maße, Anzeige und
+// Vorschaubild folgen; nicht drehbare Formate abgelehnt; Schnellbewertung auch in der Liste.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -25,7 +28,7 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import sharp from 'sharp'
-import { werkzeug } from '../scripts/testbilder.mjs'
+import { QUADRANTEN, werkzeug } from '../scripts/testbilder.mjs'
 import {
   erwarteteBilder,
   kachel,
@@ -278,6 +281,64 @@ const fragen = (antworten) =>
     }
   }, antworten)
 const gestellt = () => app.evaluate(() => globalThis.__fragen)
+
+// ── Drehen (3.4) ──────────────────────────────────────────────────────────────────────────────
+// ausrichtung-8.jpg bekommt eine XMP-Ausrichtung dazu (wie nach Lightroom oder Photoshop), bevor die
+// App den Ordner liest – sie muss beim Drehen mitziehen
+vonAussen(pfadVon('ausrichtung-8.jpg'), ['-XMP-tiff:Orientation#=8'])
+
+/** EXIF- und XMP-Ausrichtung, unabhängig von der App gelesen */
+function ausrichtungVon(p) {
+  const t = alleTags(p)
+  return { exif: t['EXIF:Orientation'] ?? null, xmp: t['XMP:Orientation'] ?? null }
+}
+const { obenLinks: ROT, obenRechts: GRUEN, untenLinks: BLAU, untenRechts: GELB } = QUADRANTEN
+/** Ecken des Vierfarb-Motivs (oben links, oben rechts, unten links, unten rechts) je Lage */
+const LAGEN = {
+  aufrecht: [ROT, GRUEN, BLAU, GELB],
+  rechts: [BLAU, ROT, GELB, GRUEN],
+  kopf: [GELB, BLAU, GRUEN, ROT],
+  links: [GRUEN, GELB, ROT, BLAU]
+}
+/** Wie das Motiv aufgerichtet liegt – sharp richtet wie Chromium auf (Labor 3.4) */
+async function lage(daten) {
+  const { data, info } = await sharp(daten).rotate().raw().toBuffer({ resolveWithObject: true })
+  const { width: w, height: h, channels: k } = info
+  const px = (x, y) => {
+    const o = (Math.floor(y) * w + Math.floor(x)) * k
+    return [data[o], data[o + 1], data[o + 2]]
+  }
+  const ecken = [
+    px(w / 4, h / 4),
+    px((3 * w) / 4, h / 4),
+    px(w / 4, (3 * h) / 4),
+    px((3 * w) / 4, (3 * h) / 4)
+  ]
+  const nah = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 40)
+  for (const [name, soll] of Object.entries(LAGEN)) {
+    const hoch = name === 'rechts' || name === 'links'
+    if (hoch === h > w && soll.every((c, i) => nah(ecken[i], c))) return name
+  }
+  return `? ${w}×${h} ${JSON.stringify(ecken)}`
+}
+/** Über ein eigenes Protokoll im main holen: net.fetch geht durch denselben Handler wie die Seite */
+async function holen(url) {
+  const r = await app.evaluate(async ({ net }, u) => {
+    const a = await net.fetch(u)
+    return { status: a.status, daten: Buffer.from(await a.arrayBuffer()).toString('base64') }
+  }, url)
+  return { status: r.status, daten: Buffer.from(r.daten, 'base64') }
+}
+/** Maße des gezeigten Originals im Betrachter (die neue Ebene ist unsichtbar, bis sie dekodiert ist) */
+const gezeigt = async (name) => {
+  const img = betrachter().locator(`img[alt="${name}"]:not(.invisible)`)
+  return (await img.count()) === 1
+    ? img.evaluate((el) => `${el.naturalWidth}×${el.naturalHeight}`)
+    : `${await img.count()} Ebenen`
+}
+const zeigt = (name, masse) => waitFor(async () => (await gezeigt(name)) === masse, 10_000)
+/** Hinweis der Galerie (abgelehnt, Fehler) */
+const galerieWarnung = () => page.getByRole('main').getByRole('alert')
 
 try {
   await runSteps('Metadaten schreiben', [
@@ -1103,6 +1164,391 @@ try {
           .getByText('Rückgängig gemacht: 3 Dateien')
           .waitFor({ timeout: 20_000 })
         for (const p of pfade) assert.equal(tags(p)['XMP:Label'], undefined, p)
+      }
+    ],
+    [
+      'Drehen im Betrachter: R schreibt die Ausrichtung sofort (XMP zieht mit); Pixel gleich, Maße, Anzeige, Vorschaubild und Sicherung',
+      async () => {
+        const name = 'ausrichtung-8.jpg'
+        const p = pfadVon(name)
+        const vorherPixel = await pixel(p)
+        const vorherInhalt = inhalt(p)
+        assert.deepEqual(ausrichtungVon(p), { exif: 8, xmp: 8 })
+        const gesichert = () => sicherungen().filter((n) => n.endsWith(`-${name}`))
+        assert.deepEqual(gesichert(), [], 'Testbild hatte schon eine Sicherung')
+        await oeffnen(name)
+        assert.ok(await zeigt(name, '300×200'), `Betrachter zeigt ${await gezeigt(name)}`)
+        // vergrößert: Gedreht passt der Ausschnitt nicht mehr – zurück auf „Anpassen“
+        await betrachter().getByRole('button', { name: '100 %', exact: true }).click()
+        await page.keyboard.press('r')
+        await rueckmeldung().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+        assert.deepEqual(ausrichtungVon(p), { exif: 1, xmp: 1 })
+        assert.equal(await pixel(p), vorherPixel, 'Pixel geändert')
+        const b = await kennung(name)
+        assert.deepEqual([b.width, b.height, b.orientation], [200, 300, 1], 'Index folgt nicht')
+        assert.ok(await zeigt(name, '200×300'), `Betrachter zeigt ${await gezeigt(name)}`)
+        const anpassen = betrachter().getByRole('button', { name: 'Anpassen', exact: true })
+        assert.equal(await anpassen.getAttribute('aria-pressed'), 'true', 'Zoom blieb vergrößert')
+        assert.equal(await lage((await holen(`bild://id/${b.id}`)).daten), 'rechts')
+        const v = await holen(`thumb://id/${b.id}/256`)
+        assert.equal(v.status, 200, 'kein Vorschaubild nach dem Drehen')
+        assert.equal(await lage(v.daten), 'rechts', 'Vorschaubild nicht neu')
+        // Sicherung: eine, bytegleich mit dem Stand vor dem Drehen
+        assert.equal(gesichert().length, 1)
+        assert.equal(inhalt(join(SICHERUNGEN, gesichert()[0])), vorherInhalt)
+        assert.deepEqual(reste(), [], 'Nachbardatei liegen geblieben')
+        // L dreht zurück – ein zweites Schreiben, aber keine zweite Sicherung
+        await page.keyboard.press('l')
+        await rueckmeldung().getByText('Um 90° nach links gedreht').waitFor({ timeout: 10_000 })
+        assert.deepEqual(ausrichtungVon(p), { exif: 8, xmp: 8 })
+        assert.ok(await zeigt(name, '300×200'))
+        assert.equal(gesichert().length, 1, 'zweite Sicherung')
+      }
+    ],
+    [
+      'Drehen: Rückgängig und Strg+Z; gespiegelte Ausrichtungen drehen richtig weiter',
+      async () => {
+        const name = 'ausrichtung-8.jpg'
+        const p = pfadVon(name)
+        const vorherPixel = await pixel(p)
+        await oeffnen(name)
+        await page.keyboard.press('l')
+        await rueckmeldung().getByText('Um 90° nach links gedreht').waitFor({ timeout: 10_000 })
+        assert.deepEqual(ausrichtungVon(p), { exif: 3, xmp: 3 })
+        await rueckmeldung().getByRole('button', { name: 'Rückgängig' }).click()
+        assert.ok(await waitFor(async () => ausrichtungVon(p).exif === 8, 5_000), 'nicht zurück')
+        assert.deepEqual(ausrichtungVon(p), { exif: 8, xmp: 8 })
+        assert.ok(await zeigt(name, '300×200'))
+        await page.keyboard.press('r')
+        await rueckmeldung().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+        await page.keyboard.press('Control+z')
+        assert.ok(
+          await waitFor(async () => ausrichtungVon(p).exif === 8, 5_000),
+          'Strg+Z wirkt nicht'
+        )
+        assert.deepEqual(ausrichtungVon(p), { exif: 8, xmp: 8 })
+        assert.equal(await pixel(p), vorherPixel)
+        // gespiegelt: transponiert (5) nach links → 4, waagerecht gespiegelt (2) nach rechts → 7
+        for (const [n, taste, neu, soll] of [
+          [5, 'l', 4, 'links'],
+          [2, 'r', 7, 'rechts']
+        ]) {
+          const datei = `ausrichtung-${n}.jpg`
+          const q = pfadVon(datei)
+          const pix = await pixel(q)
+          await oeffnen(datei)
+          await page.keyboard.press(taste)
+          await rueckmeldung().getByText(`Um 90° nach ${soll} gedreht`).waitFor({ timeout: 10_000 })
+          assert.equal(ausrichtungVon(q).exif, neu, datei)
+          assert.equal(await pixel(q), pix, datei)
+          const b = await kennung(datei)
+          assert.equal(await lage((await holen(`bild://id/${b.id}`)).daten), soll, datei)
+          assert.ok(await zeigt(datei, '200×300'), `${datei}: ${await gezeigt(datei)}`)
+          await page.keyboard.press('Control+z')
+          assert.ok(await waitFor(async () => ausrichtungVon(q).exif === n, 5_000), datei)
+        }
+        assert.deepEqual(reste(), [])
+      }
+    ],
+    [
+      'Nicht drehbar: PNG, WebP, AVIF, GIF, BMP, PNG mit .jpg-Endung – Hinweis, Datei unverändert; TIFF dreht',
+      async () => {
+        for (const [name, typ] of [
+          ['16bit.png', 'PNG'],
+          ['bild.webp', 'WEBP'],
+          ['bild.avif', 'AVIF'],
+          ['bild.gif', 'GIF'],
+          ['bild.bmp', 'BMP'],
+          ['png-als.jpg', 'PNG']
+        ]) {
+          const p = pfadVon(name)
+          const vorher = inhalt(p)
+          await oeffnen(name)
+          await page.keyboard.press('r')
+          await warnung()
+            .getByText(
+              `${typ}-Dateien lassen sich nicht verlustfrei drehen – das geht nur bei JPEG und TIFF.`
+            )
+            .waitFor({ timeout: 5_000 })
+          assert.equal(inhalt(p), vorher, `${name} geändert`)
+        }
+        // TIFF zeigt die App als Umrechnung aus sharp – sie folgt der Ausrichtung
+        const p = pfadVon('bild.tif')
+        const pix = await pixel(p)
+        await oeffnen('bild.tif')
+        assert.ok(await zeigt('bild.tif', '400×300'), await gezeigt('bild.tif'))
+        await page.keyboard.press('r')
+        await rueckmeldung().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+        assert.equal(ausrichtungVon(p).exif, 6)
+        assert.equal(await pixel(p), pix, 'Pixel geändert')
+        assert.ok(await zeigt('bild.tif', '300×400'), await gezeigt('bild.tif'))
+        await page.keyboard.press('Control+z')
+        assert.ok(await waitFor(async () => ausrichtungVon(p).exif === 1, 5_000), 'nicht zurück')
+        assert.deepEqual(reste(), [])
+      }
+    ],
+    [
+      'Drehen in der Galerie: ein Bild sofort; ab zwei Rückfrage im main, GIF abgelehnt, Rückgängig für alle',
+      async () => {
+        await page.keyboard.press('Escape')
+        await waitFor(async () => (await betrachter().count()) === 0, 3_000)
+        const p1 = pfadVon('ausrichtung-1.jpg')
+        await waehlen(['ausrichtung-1.jpg'])
+        await page.keyboard.press('r')
+        await rasterHinweis().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+        assert.equal(ausrichtungVon(p1).exif, 6)
+        await page.keyboard.press('Control+z')
+        assert.ok(await waitFor(async () => ausrichtungVon(p1).exif === 1, 5_000), 'Strg+Z')
+        // drei JPEG und ein GIF: Rückfrage mit der Zahl; „Abbrechen“ dreht nichts
+        const namen = ['ausrichtung-1.jpg', 'ausrichtung-3.jpg', 'ausrichtung-7.jpg', 'bild.gif']
+        const vorher = namen.map((n) => inhalt(pfadVon(n)))
+        await fragen([1, 0])
+        await waehlen(namen)
+        await page.keyboard.press('l')
+        await waitFor(async () => (await gestellt()).length === 1, 5_000)
+        assert.deepEqual(await gestellt(), ['4 Bilder um 90° nach links drehen?'])
+        assert.deepEqual(
+          namen.map((n) => inhalt(pfadVon(n))),
+          vorher,
+          'nach „Abbrechen“ gedreht'
+        )
+        await page.keyboard.press('l')
+        await rasterHinweis()
+          .getByText(
+            'Drehung um 90° nach links: 3 Dateien geschrieben · bild.gif: GIF-Dateien lassen sich nicht verlustfrei drehen – das geht nur bei JPEG und TIFF.'
+          )
+          .waitFor({ timeout: 20_000 })
+        assert.deepEqual(
+          namen.slice(0, 3).map((n) => ausrichtungVon(pfadVon(n)).exif),
+          [8, 6, 2]
+        )
+        assert.equal(inhalt(pfadVon('bild.gif')), vorher[3], 'GIF geändert')
+        await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+        await rasterHinweis()
+          .getByText('Rückgängig gemacht: 3 Dateien')
+          .waitFor({ timeout: 20_000 })
+        assert.deepEqual(
+          namen.slice(0, 3).map((n) => ausrichtungVon(pfadVon(n)).exif),
+          [1, 3, 7]
+        )
+        // ein Ergebnis mit Problem bleibt stehen – ein neues Einzelbild zeigt trotzdem seinen Hinweis,
+        // und Strg+Z nimmt genau das zurück, was er nennt
+        await fragen([0])
+        await waehlen(['ausrichtung-3.jpg', 'bild.gif'])
+        await page.keyboard.press('r')
+        await rasterHinweis()
+          .getByText(/^Drehung um 90° nach rechts: 1 Datei geschrieben · bild\.gif/)
+          .waitFor({ timeout: 20_000 })
+        await waehlen(['ausrichtung-1.jpg'])
+        await page.keyboard.press('r')
+        await rasterHinweis().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+        await page.keyboard.press('Control+z')
+        assert.ok(await waitFor(async () => ausrichtungVon(p1).exif === 1, 5_000), 'Strg+Z')
+        assert.equal(ausrichtungVon(pfadVon('ausrichtung-3.jpg')).exif, 8)
+        await waehlen(['ausrichtung-3.jpg'])
+        await page.keyboard.press('l')
+        await rasterHinweis().getByText('Um 90° nach links gedreht').waitFor({ timeout: 10_000 })
+        assert.equal(ausrichtungVon(pfadVon('ausrichtung-3.jpg')).exif, 3)
+      }
+    ],
+    [
+      'Drehen in der Galerie: Abbrechen hält nach der laufenden Datei an; Rückgängig nimmt das Gedrehte zurück',
+      async () => {
+        await page
+          .getByRole('tree', { name: 'Ordner' })
+          .getByRole('button', { name: 'ausrichtung', exact: true })
+          .click()
+        await (await kachel(page, 'ausrichtung-1.jpg')).click()
+        await page.keyboard.press('Control+a')
+        const namen = Array.from({ length: 8 }, (_, i) => `ausrichtung-${i + 1}.jpg`)
+        const vorher = new Map(namen.map((n) => [n, ausrichtungVon(pfadVon(n)).exif]))
+        await fragen([0])
+        await page.keyboard.press('r')
+        // anhalten, sobald die erste Datei fertig ist
+        await page
+          .getByRole('main')
+          .getByText(/Schreibt „Drehung um 90° nach rechts“ … [1-7] von 8/)
+          .waitFor({ timeout: 20_000 })
+        await page.getByRole('main').getByRole('button', { name: 'Abbrechen', exact: true }).click()
+        await rasterHinweis()
+          .getByText(/abgebrochen – der Rest ist unverändert/)
+          .waitFor({ timeout: 20_000 })
+        assert.deepEqual(await gestellt(), ['8 Bilder um 90° nach rechts drehen?'])
+        const gedreht = namen.filter((n) => ausrichtungVon(pfadVon(n)).exif !== vorher.get(n))
+        assert.ok(gedreht.length >= 1 && gedreht.length < 8, `${gedreht.length} von 8`)
+        await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+        await rasterHinweis()
+          .getByText(/^Rückgängig gemacht/)
+          .waitFor({ timeout: 20_000 })
+        for (const n of namen) assert.equal(ausrichtungVon(pfadVon(n)).exif, vorher.get(n), n)
+        assert.deepEqual(reste(), [])
+      }
+    ],
+    [
+      'Liste: Schnellbewertung, Farblabel und Drehen wie im Raster – ein Bild sofort, ab zwei mit Rückfrage, Rückgängig',
+      async () => {
+        await page
+          .getByRole('tree', { name: 'Ordner' })
+          .getByRole('button', { name: 'namen', exact: true })
+          .click()
+        const ansichtArt = (n) =>
+          page.getByRole('group', { name: 'Ansicht' }).getByRole('button', { name: n })
+        await ansichtArt('Liste').click()
+        try {
+          const grid = page.getByRole('grid', { name: 'Bilder' })
+          const zeile = (n) =>
+            grid
+              .getByRole('row')
+              .filter({ has: page.getByRole('gridcell', { name: n, exact: true }) })
+          const zeilenWaehlen = async (namen) => {
+            for (const [i, n] of namen.entries()) {
+              await zeile(n).click(i ? { modifiers: ['Control'] } : {})
+            }
+          }
+          const [p1, p3] = [M1, M3].map(pfadVon)
+          // ein Bild: sofort, mit „Rückgängig“ über Strg+Z
+          await zeilenWaehlen([M3])
+          await page.keyboard.press('3')
+          await rasterHinweis().getByText('3 Sterne gespeichert').waitFor({ timeout: 10_000 })
+          assert.equal(tags(p3)['XMP:Rating'], 3)
+          await page.keyboard.press('Control+z')
+          assert.ok(await waitFor(async () => tags(p3)['XMP:Rating'] === undefined, 5_000))
+          // zwei: Rückfrage im main, dann für beide; „Rückgängig“ nimmt beide zurück
+          await fragen([0, 0, 0])
+          await zeilenWaehlen([M1, M3])
+          await page.keyboard.press('1')
+          await rasterHinweis()
+            .getByText('1 Stern: 2 Dateien geschrieben')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([tags(p1)['XMP:Rating'], tags(p3)['XMP:Rating']], [1, 1])
+          await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+          await rasterHinweis()
+            .getByText('Rückgängig gemacht: 2 Dateien')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([tags(p1)['XMP:Rating'], tags(p3)['XMP:Rating']], [4, undefined])
+          await zeilenWaehlen([M1, M3])
+          await page.keyboard.press('8')
+          await rasterHinweis()
+            .getByText('Farblabel Grün: 2 Dateien geschrieben')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([tags(p1)['XMP:Label'], tags(p3)['XMP:Label']], ['Green', 'Green'])
+          await page.keyboard.press('Control+z')
+          await rasterHinweis()
+            .getByText('Rückgängig gemacht: 2 Dateien')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([tags(p1)['XMP:Label'], tags(p3)['XMP:Label']], [undefined, undefined])
+          await zeilenWaehlen([M1, M3])
+          await page.keyboard.press('r')
+          await rasterHinweis()
+            .getByText('Drehung um 90° nach rechts: 2 Dateien geschrieben')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([ausrichtungVon(p1).exif, ausrichtungVon(p3).exif], [6, 6])
+          await rasterHinweis().getByRole('button', { name: 'Rückgängig' }).click()
+          await rasterHinweis()
+            .getByText('Rückgängig gemacht: 2 Dateien')
+            .waitFor({ timeout: 20_000 })
+          assert.deepEqual([ausrichtungVon(p1).exif, ausrichtungVon(p3).exif], [null, null])
+          assert.deepEqual(await gestellt(), [
+            '1 Stern für 2 Bilder schreiben?',
+            'Farblabel Grün für 2 Bilder schreiben?',
+            '2 Bilder um 90° nach rechts drehen?'
+          ])
+        } finally {
+          await ansichtArt('Kacheln').click()
+        }
+      }
+    ],
+    [
+      'Drehen: „nur lesen“ abgelehnt, „privat“ ohne Sicherung – Rückgängig über das Journal',
+      async () => {
+        const zweit = mkdtempSync(join(tmpdir(), 'galeria-zweit-'))
+        const z6 = join(zweit, 'zweit-6.jpg')
+        copyFileSync(pfadVon('ausrichtung-6.jpg'), z6)
+        await stubOrdnerDialog(app, zweit)
+        await page.evaluate(() => window.api.library.addFolder())
+        const z = await waitFor(async () => {
+          const s = await zustand()
+          const o = s.folders.find((f) => f.name === basename(zweit))
+          return o?.status === 'bereit' && o.count === 1 && s.metaPending === 0 ? o : null
+        }, 30_000)
+        assert.ok(z, 'zweiter Ordner nicht eingelesen')
+        try {
+          await page.evaluate((id) => window.api.library.setFolderMode(id, 'nur-lesen'), z.id)
+          const vorher = inhalt(z6)
+          await waehlen(['zweit-6.jpg'])
+          await page.keyboard.press('r')
+          await galerieWarnung()
+            .getByText('Der Ordner steht auf „nur lesen“.')
+            .waitFor({ timeout: 5_000 })
+          assert.equal(inhalt(z6), vorher, '„nur lesen“ gedreht')
+
+          await page.evaluate((id) => window.api.library.setFolderMode(id, 'privat'), z.id)
+          await waehlen(['zweit-6.jpg'])
+          await page.keyboard.press('r')
+          await rasterHinweis().getByText('Um 90° nach rechts gedreht').waitFor({ timeout: 10_000 })
+          assert.equal(ausrichtungVon(z6).exif, 3)
+          assert.deepEqual(
+            sicherungen().filter((n) => n.includes('zweit-')),
+            [],
+            '„privat“ legte eine Sicherung an'
+          )
+          await page.keyboard.press('Control+z')
+          assert.ok(
+            await waitFor(async () => ausrichtungVon(z6).exif === 6, 5_000),
+            'Rückgängig ohne Sicherung geht nicht'
+          )
+          assert.deepEqual(
+            readdirSync(zweit).filter((n) => n.includes('galerie-tmp')),
+            [],
+            'Nachbardatei im zweiten Ordner'
+          )
+        } finally {
+          // erst entfernen, wenn das neue Vorschaubild steht (sonst 404 in der Seite)
+          await waitFor(async () => (await zustand()).thumbPending === 0, 15_000)
+          await stubConfirm(app, true)
+          await page.evaluate((id) => window.api.library.removeFolder(id), z.id)
+          rmSync(zweit, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+        }
+      }
+    ],
+    [
+      'Drehen im main abgelehnt: Winkel, unbekannte Richtung, Kennung; eine Ausrichtung nie als Wert',
+      async () => {
+        const b = await kennung('ausrichtung-6.jpg')
+        const p = pfadVon('ausrichtung-6.jpg')
+        const vorher = inhalt(p)
+        const drehenRoh = (id, r) =>
+          page.evaluate(
+            ([i, x]) =>
+              window.api.meta.rotate(i, x).then(
+                (v) => v,
+                (e) => ({ abgelehnt: String(e.message) })
+              ),
+            [id, r]
+          )
+        for (const r of [90, -90, 'oben', 'RECHTS', null, { richtung: 'rechts' }]) {
+          const a = await drehenRoh(b.id, r)
+          assert.match(a.abgelehnt ?? '', /Ungültige Drehung/, JSON.stringify(r))
+        }
+        for (const id of [0, -1, 1.5, '1', null]) {
+          const a = await drehenRoh(id, 'rechts')
+          assert.match(a.abgelehnt ?? '', /Ungültige Kennung/, JSON.stringify(id))
+        }
+        const wert = { ausrichtung: { wert: 6, xmp: false } }
+        assert.match((await schreibenRoh([b.id], wert)).abgelehnt ?? '', /Ungültige Änderung/)
+        const vieleRoh = (a) =>
+          page.evaluate(
+            ([i, x]) =>
+              window.api.meta.writeMany(i, x).then(
+                (v) => v,
+                (e) => ({ abgelehnt: String(e.message) })
+              ),
+            [[b.id], a]
+          )
+        for (const a of [{ drehen: 90 }, { drehen: 'oben' }, wert]) {
+          assert.match((await vieleRoh(a)).abgelehnt ?? '', /Ungültige Änderung/, JSON.stringify(a))
+        }
+        assert.equal(inhalt(p), vorher, 'trotz Ablehnung geändert')
       }
     ],
     [

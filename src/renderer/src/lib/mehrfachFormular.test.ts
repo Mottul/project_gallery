@@ -24,7 +24,8 @@ const LEER: MetaWerte = {
   land: null,
   ortsteil: null,
   urheber: null,
-  copyright: null
+  copyright: null,
+  ausrichtung: { wert: 1, xmp: false }
 }
 const ORT = { breite: 42.640278, laenge: 18.108333 }
 const A: MetaWerte = {
